@@ -19,10 +19,25 @@ import {
   caseSummaryHeader,
   reminderRulePhrase,
   calendarEventTitle,
-  DEADLINE_CAPTION,
-  DEADLINE_CAPTION_COURT,
 } from '../core/export/links.js';
-import { applyDateEdit, dateFieldError, isoToRu, ruToISO } from '../core/ui/date-field.js';
+import { dateFieldError, isoToRu, ruToISO } from '../core/ui/date-field.js';
+import {
+  attachDateMask,
+  beginReveal,
+  captureFocus,
+  collapsedWarning,
+  commitDateInput as commitDateField,
+  commitReveal,
+  copyTerms as copyToClipboard,
+  downloadICS as downloadICSFile,
+  el,
+  printTerms,
+  renderEvent,
+  renderTermCard,
+  restoreFocus,
+  reveal,
+  updateExportButtons,
+} from '../core/ui/render.js';
 import { SITUATIONS, DEFAULT_SITUATION } from '../src/situations.js';
 import { situationById } from '../core/view/situations.js';
 
@@ -280,35 +295,7 @@ function askFor(id) {
   return label.charAt(0).toLowerCase() + label.slice(1);
 }
 
-function pluralDays(n) {
-  const t = n % 10, h = n % 100;
-  if (t === 1 && h !== 11) return 'день';
-  if (t >= 2 && t <= 4 && !(h >= 12 && h <= 14)) return 'дня';
-  return 'дней';
-}
-
-// Автоформатирование ввода: цифры → ДД.ММ.ГГГГ.
-//
-// Расчёт обновляется по каждому вводу (событие input), а не по уходу с поля:
-// карточки появляются сразу, как только дата набрана полностью. Неполный и
-// некорректный ввод трактуется как отсутствие значения — отрисовка от него не
-// ломается.
-//
-// Слушаем только input. change здесь вреден: он срабатывает на уходе с поля, а
-// перерисовка пересобирает карточки — поле, в которое пользователь только что
-// кликнул, уничтожалось бы вместе с фокусом. Вставку мышью и автозаполнение
-// input покрывает сам.
-function attachDateMask(input, onCommit) {
-  input.addEventListener('input', (event) => {
-    const before = input.value;
-    const next = applyDateEdit(before, input.selectionStart ?? before.length, event.inputType ?? '');
-    if (next.value !== before) {
-      input.value = next.value;
-      input.setSelectionRange(next.caret, next.caret);
-    }
-    onCommit(input, { raw: next.value, iso: ruToISO(next.value) });
-  });
-}
+// Маска ввода и общая фиксация даты живут в core/ui/render.js.
 
 // Сырой текст полей дат. Расчёт идёт по каждому вводу, а render() пересобирает
 // поля заново — недобранная дата в state.inputs не попадает, поэтому её нужно
@@ -323,182 +310,35 @@ function dateFieldValue(id) {
   return state.inputs[id] ? isoToRu(state.inputs[id]) : '';
 }
 
-// Общая фиксация ввода даты: в state попадает только полная существующая дата,
-// всё остальное — как отсутствие значения.
-function commitDateInput(id, input, errorEl, { raw, iso }) {
-  if (raw === '') rawDates.delete(id);
-  else rawDates.set(id, raw);
-  const error = dateFieldError(raw);
-  errorEl.textContent = error;
-  input.classList.toggle('invalid', error !== '');
-  if (iso == null) delete state.inputs[id];
-  else state.inputs[id] = iso;
-  render();
-}
-
-// --- Утилиты DOM ------------------------------------------------------------
-
-function el(tag, cls, text) {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (text != null) n.textContent = text;
-  return n;
+// Общая фиксация ввода даты: сама механика в core/ui/render.js, здесь — только
+// привязка к состоянию приложения (сырые тексты полей, state.inputs, render).
+function commitDateInput(id, input, errorEl, parsed) {
+  commitDateField(id, input, errorEl, parsed, {
+    rawDates,
+    inputs: state.inputs,
+    onChange: render,
+  });
 }
 
 // --- Рендер карточек --------------------------------------------------------
 
-function renderDetails(details) {
-  // Нативный <details>/<summary>: свёрнут по умолчанию, раскрывается по клику.
-  const wrap = el('details', 'more');
-  wrap.appendChild(el('summary', null, 'Подробнее'));
-  const dl = el('dl');
-  if (details.logic) {
-    dl.appendChild(el('dt', null, 'Логика исчисления'));
-    dl.appendChild(el('dd', null, details.logic));
-  }
-  if (details.calculation && details.calculation.length) {
-    dl.appendChild(el('dt', null, 'Нормы расчёта'));
-    const dd = el('dd');
-    details.calculation.forEach((c, i) => {
-      if (i) dd.appendChild(document.createTextNode(', '));
-      const code = el('code', null, c);
-      dd.appendChild(code);
-    });
-    dl.appendChild(dd);
-  }
-  if (details.midnight_rule) {
-    dl.appendChild(el('dt', null, 'Отсечка 24:00 / почта'));
-    dl.appendChild(el('dd', null, details.midnight_rule));
-  }
-  wrap.appendChild(dl);
-  return wrap;
-}
-
-function renderTermCard(card, opts = {}) {
-  // Три уровня различаются по признакам модели, а не по спискам узлов:
-  // informational: true — срок суда, kind: 'event' — событие (см. renderEvent).
-  if (card.informational) return renderInfoTermCard(card);
-
-  const c = el('div', 'card');
-  c.appendChild(el('div', 'kicker', 'Срок'));
-  const h = el('h2', null, card.title);
-  if (opts.conditionBadge) {
-    const b = el('span', 'badge assume', 'при отсутствии обжалования');
-    h.appendChild(b);
-  }
-  if (card.unit === 'working_day') {
-    h.appendChild(el('span', 'badge wd', 'рабочие дни'));
-  }
-  if (card.informational) {
-    h.appendChild(el('span', 'badge info', 'справочно'));
-  }
-  c.appendChild(h);
-
-  // Что означает дата: без подписи «13.08.2026» читается неоднозначно — как
-  // дата вступления в силу или как начало течения срока.
-  if (card.status !== 'not_applicable') {
-    c.appendChild(el('div', 'deadline-caption', DEADLINE_CAPTION));
-  }
-
-  if (card.status === 'missed') {
-    c.appendChild(el('div', 'deadline missed', isoToRu(card.deadline)));
-    c.appendChild(el('div', 'norm', card.norm));
-    const days = card.overdue.days;
-    c.appendChild(
-      el('div', 'miss', `Срок пропущен на ${days} ${pluralDays(days)}. Восстановление — ${card.overdue.norm}.`),
-    );
-  } else if (card.status === 'expired') {
-    // Дедлайн прошёл, а даты подачи нет: факт пропуска не установлен, известно
-    // только, что срок истёк. Формулировка поэтому мягче, чем у 'missed'.
-    c.appendChild(el('div', 'deadline expired', isoToRu(card.deadline)));
-    c.appendChild(el('div', 'norm', card.norm));
-    const days = card.expired.days; // строгое сравнение — всегда не меньше 1
-    c.appendChild(
-      el(
-        'div',
-        'expired-note',
-        `Срок истёк ${days} ${pluralDays(days)} назад. Дата подачи не введена — ` +
-          'пропуск не подтверждён.',
-      ),
-    );
-  } else if (card.status === 'not_applicable') {
-    // Срока не возникает вовсе — вместо даты прочерк и причина, как у события
-    // вступления в силу в том же состоянии.
-    c.appendChild(el('div', 'deadline', '—'));
-    if (card.message) c.appendChild(el('div', 'warn', card.message));
-    c.appendChild(el('div', 'norm', card.norm));
-  } else {
-    c.appendChild(el('div', 'deadline', isoToRu(card.deadline)));
-    c.appendChild(el('div', 'norm', card.norm));
-  }
-
-  // Для сроков в рабочих днях показываем первый день течения — иначе непонятно,
-  // почему дата уехала так далеко (например, за январские каникулы).
-  if (card.first_working_day) {
-    c.appendChild(
-      el('div', 'hint', `Отсчёт рабочих дней с ${isoToRu(card.first_working_day)}`),
-    );
-  }
-  if (card.note) c.appendChild(el('div', 'note', card.note));
-
-  if (opts.conditionNote) {
-    c.appendChild(el('div', 'note', opts.conditionNote));
-  }
-
-  // Перерывы срока (ст. 22 ФЗ № 229-ФЗ): история введённых событий.
-  if (card.interruptions) c.appendChild(renderInterruptionHistory(card));
-
-  if (card.warnings) {
-    for (const w of card.warnings) {
-      const details = [el('div', null, w.text)];
-      // Структурные даты предупреждения форматируем здесь: views отдаёт ISO.
-      if (w.allowed_deadline && w.actual_date) {
-        details.push(
-          el(
-            'div',
-            null,
-            `${w.dates_label ?? 'Срок отложения истекал'} ` +
-              `${isoToRu(w.allowed_deadline)}, решение изготовлено ` +
-              `${isoToRu(w.actual_date)}.`,
-          ),
-        );
-      }
-      // Величина расхождения — в тех же единицах, в каких задан порог.
-      if (w.overdue_working_days) {
-        const n = w.overdue_working_days;
-        details.push(
-          el('div', null, `Расхождение — ${n} рабочих ${pluralDays(n)} сверх срока.`),
-        );
-      }
-      c.appendChild(collapsedWarning('Суд нарушил срок изготовления решения', details));
-    }
-  }
-
-  if (card.calendar_warning) {
-    c.appendChild(
-      collapsedWarning('Календарь на этот год ещё не окончательный', [
-        el('div', null, card.calendar_warning.text),
-      ]),
-    );
-  }
-
-  if (card.exhaustion_warning) c.appendChild(renderExhaustionWarning(card.exhaustion_warning));
-
-  if (card.boundary_warning) c.appendChild(renderBoundaryWarning(card.boundary_warning));
-
-  if (card.alternative) c.appendChild(renderAlternative(card));
-
+// Предметные части карточки срока: их тексты завязаны на конкретные нормы,
+// поэтому в ядре их нет — оно вызывает их по признакам модели (см. renderTermCard
+// в core/ui/render.js).
+const TERM_CARD_PARTS = {
+  interruptions: renderInterruptionHistory,
+  exhaustionWarning: renderExhaustionWarning,
+  boundaryWarning: renderBoundaryWarning,
+  alternative: renderAlternative,
   // Практика ВС (vs_practice_change, п. 5 ч. 4 ст. 392): обе промежуточные
   // даты и явное указание, какая контролирует, — иначе на карточке был бы
   // только финальный ответ без объяснения, откуда он взялся.
-  if (card.details && card.details.vs_practice_change) {
-    c.appendChild(renderVsPracticeChangeComponents(card.details.vs_practice_change));
-  }
-
-  if (card.details) c.appendChild(renderDetails(card.details));
-  if (exportableIds.has(card.id)) c.appendChild(googleCalendarLink(card));
-  return c;
-}
+  detailComponents: (details) =>
+    details.vs_practice_change
+      ? renderVsPracticeChangeComponents(details.vs_practice_change)
+      : null,
+  calendarLink: (card) => (exportableIds.has(card.id) ? googleCalendarLink(card) : null),
+};
 
 // --- Перерывы срока предъявления (ч. 1–3 ст. 22 ФЗ № 229-ФЗ) -----------------
 //
@@ -668,21 +508,6 @@ function googleCalendarLink(card) {
   return wrap;
 }
 
-// Предупреждение в одну строку; полный текст раскрывается по клику.
-//
-// Раньше жёлтый блок занимал больше места, чем сама дата, и вытеснял её из
-// первого экрана. Свёрнутый вид оставляет суть, развёрнутый — все подробности.
-// Нативный <details>: раскрытие по клику работает без нашего кода (раздел 9).
-function collapsedWarning(summaryText, detailNodes, cls = 'warn') {
-  const box = el('details', `${cls} collapsible`);
-  const head = el('summary', null, summaryText);
-  box.appendChild(head);
-  const body = el('div', 'warn-body');
-  for (const node of detailNodes) if (node) body.appendChild(node);
-  box.appendChild(body);
-  return box;
-}
-
 // Исчерпание способов обжалования: акт в апелляции не обжаловался.
 // Расчёт остаётся — он верен для актов, не подлежащих апелляционному обжалованию.
 function renderExhaustionWarning(w) {
@@ -778,97 +603,6 @@ function renderVsPracticeChangeComponents(d) {
   return box;
 }
 
-// Уровень 2 — срок суда (informational: true). Тот же состав данных, но без
-// крупной даты и рамки: его не надо успевать соблюсти, он справочный.
-function renderInfoTermCard(card) {
-  const c = el('div', 'card info-card');
-  const head = el('div', 'info-head');
-  const title = el('span', 'info-title', card.title);
-  head.appendChild(title);
-  head.appendChild(el('span', 'badge info', 'справочно'));
-  c.appendChild(head);
-
-  const line = el('div', 'info-line');
-  line.appendChild(el('span', 'deadline-caption inline', `${DEADLINE_CAPTION_COURT}:`));
-  line.appendChild(
-    el(
-      'span',
-      card.status === 'expired' ? 'info-date expired' : 'info-date',
-      card.deadline ? isoToRu(card.deadline) : '—',
-    ),
-  );
-  line.appendChild(el('span', 'norm', card.norm));
-  c.appendChild(line);
-
-  if (card.status === 'expired' && card.expired) {
-    const n = card.expired.days;
-    c.appendChild(el('div', 'hint', `Срок истёк ${n} ${pluralDays(n)} назад.`));
-  }
-  if (card.first_working_day) {
-    c.appendChild(el('div', 'hint', `Отсчёт рабочих дней с ${isoToRu(card.first_working_day)}`));
-  }
-  if (card.note) c.appendChild(el('div', 'hint', card.note));
-  if (card.calendar_warning) {
-    c.appendChild(
-      collapsedWarning('Календарь на этот год ещё не окончательный', [
-        el('div', null, card.calendar_warning.text),
-      ]),
-    );
-  }
-  if (card.details) c.appendChild(renderDetails(card.details));
-  return c;
-}
-
-// Подлежащее к сообщению-состоянию события. Сообщения вида «Вступит в силу …»
-// приходят без подлежащего — подставляем его, чтобы строка читалась сама по
-// себе. Сообщения с собственным подлежащим («…заочное решение отменено») не
-// трогаем.
-function withSubject(subject, message) {
-  return message.startsWith('Вступит ') ? message.replace(/^Вступит /, `${subject} вступит `) : message;
-}
-
-// Уровень 3 — событие. Строкой текста, без карточки: вступление в силу не
-// дедлайн, успевать к нему нечего. Поля-уточнения, привязанные к событию,
-// остаются под строкой — иначе ветвь стала бы недоступной для ввода.
-function renderEvent(card, opts = {}) {
-  const box = el('div', 'event-line');
-
-  // Подлежащее в строке обязательно: событие рендерится без карточки, и в отрыве
-  // от заголовка (выделение, копирование) «Вступит в силу …» непонятно — что
-  // именно. Ставим явно «Решение суда …»/«Заочное решение …» во всех состояниях.
-  const subject = card.subject || 'Решение суда';
-  let text;
-  if (card.status === 'resolved') text = `${subject} вступило в силу ${isoToRu(card.date)}`;
-  else if (card.not_earlier_than) text = `${subject} вступит в силу не ранее ${isoToRu(card.not_earlier_than)}`;
-  else if (card.message) text = withSubject(subject, card.message);
-  else text = 'Дата вступления в силу пока не определена';
-
-  const head = el('div', 'event-head');
-  head.appendChild(el('span', card.status === 'resolved' ? 'event-text done' : 'event-text', text));
-  head.appendChild(el('span', 'norm', card.norm));
-  box.appendChild(head);
-
-  // Дата события читается иначе, чем дедлайн: это не «успеть до», а момент,
-  // с которого постановление действует.
-  if (card.status === 'resolved') {
-    box.appendChild(
-      el('div', 'hint', 'С этой даты постановление считается вступившим в законную силу.'),
-    );
-  }
-
-  if (card.note) box.appendChild(el('div', 'hint', card.note));
-  if (card.calendar_warning) {
-    box.appendChild(
-      collapsedWarning('Календарь на этот год ещё не окончательный', [
-        el('div', null, card.calendar_warning.text),
-      ]),
-    );
-  }
-  if (card.details) box.appendChild(renderDetails(card.details));
-  if (opts.assumptionNote) box.appendChild(el('div', 'note', opts.assumptionNote));
-  return box;
-}
-
 // Поле-приглашение уточнить (одно из недостающих input).
 // labelOverride — для полей, чья подпись зависит не от самого поля, а от
 // другого выбора на экране (дата обстоятельства пересмотра — от основания,
@@ -947,71 +681,16 @@ function summaryEntries(cards) {
   return entries;
 }
 
-function updateExportButtons() {
-  // .ics — только когда есть сроки для календаря; копирование и печать — когда
-  // есть хоть что-то видимое (сроки суда и события тоже переносятся текстом).
-  const ics = document.getElementById('download-ics');
-  if (ics) ics.disabled = currentIcsTerms.length === 0;
-  for (const id of ['copy-terms', 'print-terms']) {
-    const btn = document.getElementById(id);
-    if (btn) btn.disabled = currentSummary.length === 0;
-  }
-}
-
-// Текстовый список в буфер обмена. clipboard.writeText есть не везде (и требует
-// защищённого соединения), поэтому при отказе — запасной путь через выделение
-// временного поля.
+// Копирование в буфер обмена: текст собирается здесь (в нём предметные подписи
+// и название ситуации), а работа с буфером и сообщение о результате — в ядре.
 async function copyTerms() {
   if (currentSummary.length === 0) return;
-  const text = termsAsText(currentSummary, {
-    today,
-    situation: situationById(state.situation, SITUATIONS).label,
-  });
-
-  let ok = true;
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    ok = copyViaSelection(text);
-  }
-  showCopyStatus(ok ? 'Скопировано' : 'Не удалось скопировать');
-}
-
-function copyViaSelection(text) {
-  const area = document.createElement('textarea');
-  area.value = text;
-  area.setAttribute('readonly', '');
-  area.style.position = 'fixed';
-  area.style.opacity = '0';
-  document.body.appendChild(area);
-  area.select();
-  let ok = false;
-  try {
-    ok = document.execCommand('copy');
-  } catch {
-    ok = false;
-  }
-  area.remove();
-  return ok;
-}
-
-let copyStatusTimer = null;
-function showCopyStatus(message) {
-  const box = document.getElementById('copy-status');
-  if (!box) return;
-  box.textContent = message;
-  clearTimeout(copyStatusTimer);
-  copyStatusTimer = setTimeout(() => {
-    box.textContent = '';
-  }, 3000);
-}
-
-// Печатная версия — тот же список строк, что и копирование: заголовок и по
-// строке на срок/событие. CSS печати прячет интерфейс и сами карточки, оставляя
-// только этот блок, — иначе печать повторяла бы неоднозначность карточек.
-function printTerms() {
-  if (currentSummary.length === 0) return;
-  window.print();
+  await copyToClipboard(
+    termsAsText(currentSummary, {
+      today,
+      situation: situationById(state.situation, SITUATIONS).label,
+    }),
+  );
 }
 
 function renderPrintList(situation) {
@@ -1052,88 +731,25 @@ function printItem(item) {
   return box;
 }
 
+// Имя файла календаря — предметное; всё остальное (лист «Поделиться» iOS,
+// blob-ссылка, освобождение URL) делает ядро.
 const ICS_FILENAME = 'gpk-sroki.ics';
-
-// Тип с charset — для скачивания файлом; для File в «Поделиться» параметр
-// убираем: часть реализаций canShare не распознаёт тип с параметрами.
-const ICS_TYPE_DOWNLOAD = 'text/calendar;charset=utf-8';
-const ICS_TYPE_FILE = 'text/calendar';
 
 async function downloadICS() {
   if (currentIcsTerms.length === 0) return;
   const ics = buildICS(currentIcsTerms, { referenceDate: today, now: new Date() });
-
-  // iOS Safari не выполняет атрибут download у blob:-ссылки: она открывает
-  // содержимое предпросмотром, и добавить события в календарь оттуда нельзя —
-  // тип файла при этом ни при чём. Системный лист «Поделиться» такую
-  // возможность даёт: Календарь в нём есть.
-  const file = new File([ics], ICS_FILENAME, { type: ICS_TYPE_FILE });
-  if (navigator.canShare?.({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file] });
-      return;
-    } catch (err) {
-      // Пользователь закрыл лист — это не сбой, скачивать вдогонку не нужно.
-      if (err && err.name === 'AbortError') return;
-      // Остальное (лист недоступен, отказ платформы) — уходим на скачивание.
-    }
-  }
-
-  const blob = new Blob([ics], { type: ICS_TYPE_DOWNLOAD });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = ICS_FILENAME;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  // Освобождать ссылку в том же кадре нельзя: Safari успевает прервать
-  // начатое скачивание. Пара сотен байт подождут.
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  await downloadICSFile(ics, ICS_FILENAME);
 }
 
 // --- Главный рендер ---------------------------------------------------------
 
-// Расчёт идёт по каждому вводу, а render() пересобирает поля заново — без
-// восстановления фокуса каретка выпадала бы из поля на каждом нажатии.
-// Поля адресуются по устойчивым id (`in-<input>`), поэтому хватает id и позиции
-// каретки.
-function captureFocus() {
-  const active = document.activeElement;
-  if (!active || active.tagName !== 'INPUT' || !active.id) return null;
-  return { id: active.id, start: active.selectionStart, end: active.selectionEnd };
-}
-
-function restoreFocus(snapshot) {
-  if (!snapshot) return;
-  const next = document.getElementById(snapshot.id);
-  if (!next || next === document.activeElement) return;
-  next.focus();
-  if (snapshot.start != null) next.setSelectionRange(snapshot.start, snapshot.end);
-}
-
-// Плавное появление блоков. render() пересобирает DOM целиком, поэтому «новизну»
-// блока храним между перерисовками по устойчивому ключу: разворачиваем по высоте
-// только тот блок, ключа которого не было в прошлой отрисовке. Уже показанные
-// пересобираются без анимации, поэтому фокус и каретка во вводе не сбиваются —
-// анимируется соседний блок, а не тот, куда печатают. Блок, чей ключ исчез, при
-// повторном появлении развернётся снова.
-const revealedKeys = new Set();
-let revealSeen = new Set();
-
-function reveal(key, node) {
-  revealSeen.add(key);
-  const wrap = el('div', 'reveal');
-  if (!revealedKeys.has(key)) wrap.classList.add('reveal-in');
-  const inner = el('div', 'reveal-inner');
-  inner.appendChild(node);
-  wrap.appendChild(inner);
-  return wrap;
-}
+// Захват/восстановление фокуса и механика плавного появления блоков (reveal)
+// живут в core/ui/render.js: render() вызывает captureFocus/beginReveal в начале
+// и commitReveal/restoreFocus в конце.
 
 function render() {
   const focus = captureFocus();
-  revealSeen = new Set();
+  beginReveal();
   renderedFields.clear();
   const situation = situationById(state.situation, SITUATIONS);
   const visible = new Set(situation.nodes);
@@ -1160,7 +776,7 @@ function render() {
     exportableIds.add(card.id);
     exportDurations.set(card.id, card.duration || meta.duration);
   }
-  updateExportButtons();
+  updateExportButtons({ icsTerms: currentIcsTerms, summary: currentSummary });
   renderPrintList(situation);
 
   renderSituationSwitch(situation);
@@ -1213,7 +829,7 @@ function render() {
           opts.conditionNote =
             'Действует при том же условии — что решение не обжаловалось в апелляции.';
         }
-        const termEl = renderTermCard(card, opts);
+        const termEl = renderTermCard(card, opts, TERM_CARD_PARTS);
         const redField = REDACTION_FIELD[id];
         if (redField) termEl.appendChild(renderRedactionField(redField));
         // На карточке замечаний — необязательная дата их подачи: от неё
@@ -1292,10 +908,7 @@ function render() {
     );
   }
 
-  // Какие блоки показаны сейчас — то и «уже развёрнуто» для следующей отрисовки.
-  revealedKeys.clear();
-  for (const k of revealSeen) revealedKeys.add(k);
-
+  commitReveal();
   restoreFocus(focus);
 }
 
@@ -1847,7 +1460,7 @@ if (downloadBtn) downloadBtn.addEventListener('click', downloadICS);
 const copyBtn = document.getElementById('copy-terms');
 if (copyBtn) copyBtn.addEventListener('click', copyTerms);
 const printBtn = document.getElementById('print-terms');
-if (printBtn) printBtn.addEventListener('click', printTerms);
+if (printBtn) printBtn.addEventListener('click', () => printTerms(currentSummary));
 
 renderStubs();
 render();
