@@ -208,16 +208,6 @@ export const SITUATIONS = [
 
 export const DEFAULT_SITUATION = 'general';
 
-export function situationById(id) {
-  return SITUATIONS.find((s) => s.id === id) ?? SITUATIONS[0];
-}
-
-/** Все узлы всех ситуаций — в порядке ситуаций и порядке внутри каждой. */
-export function allSituationNodes() {
-  return SITUATIONS.flatMap((s) => s.nodes);
-}
-
-/** Все поля ввода, привязанные к ситуациям (без статического поля общей ветви). */
-export function allSituationFields() {
-  return SITUATIONS.flatMap((s) => s.fields);
-}
+// situationById, allSituationNodes, allSituationFields — предметно-независимая
+// механика, вынесена в core/view/situations.js (шаг 9 аудита, см.
+// docs/core-extraction-audit.md, §4). Здесь остаются только данные ГПК.

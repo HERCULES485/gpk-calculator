@@ -3,11 +3,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildICS, icsTermsFromChain, icsTermsFromView, TERM_REGISTRY } from '../src/ics.js';
+import { buildICS, icsTermsFromChain, icsTermsFromView } from '../src/ics.js';
+// Реестр переехал в src/term-registry.js вместе с исчерпывающим `import *`,
+// который и даёт свойство «новый узел не выпадет из экспорта молча» (шаг 10).
+import { TERM_REGISTRY } from '../src/term-registry.js';
 import { buildView } from '../src/views.js';
 import { computeChain } from '../src/chain.js';
-import { addDays, addMonths } from '../src/engine.js';
-import { toISODate, isWorkingDay, shiftBackIfNonWorking, subtractWorkingDays } from '../src/calendar.js';
+import { addDays, addMonths } from '../core/engine/engine.js';
+import { toISODate, isWorkingDay, shiftBackIfNonWorking, subtractWorkingDays } from '../core/calendar/calendar.js';
 
 const NOW = '2025-01-01T00:00:00Z'; // фиксируем DTSTAMP для детерминизма
 

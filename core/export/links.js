@@ -35,8 +35,9 @@ function lowerFirst(text) {
 }
 
 // Норма — коротко: без скобочного пояснения (редакция, глава и т.п.). Для
-// «ч. 1 ст. 321 ГПК РФ» отбрасывать нечего; у кассации «(ред. ФЗ № 135-ФЗ …)»
-// уходит. Обоснования и «по закону» в подписи не выводим.
+// нормы без скобок отбрасывать нечего; у нормы со скобочным примечанием
+// (например, о редакции закона) оно уходит. Обоснования и «по закону» в
+// подписи не выводим.
 function shortNorm(norm) {
   return norm ? norm.split('(')[0].trim() : '';
 }
@@ -174,18 +175,53 @@ export function termsAsText(entries, options = {}) {
   );
 }
 
-// Русское описание правила напоминаний для срока данной длительности — для
-// пояснения под ссылкой в Google Календарь. Держим синхронно с reminderOffsets
-// в ics.js: те же длительности, те же смещения.
-export function reminderRulePhrase(duration) {
-  const d = duration || {};
-  if (d.unit === 'month' && d.value === 1) return 'за 3 и 7 дней';
-  if (d.unit === 'month' && d.value === 3) return 'за 3 и 14 дней';
-  if (d.unit === 'year' && d.value === 3) return 'за 7 дней и 1 месяц';
-  if (d.unit === 'working_day') {
-    if (d.value === 3) return 'за 1 рабочий день';
-    if (d.value === 5 || d.value === 7) return 'за 1 и 2 рабочих дня';
-    if (d.value === 15) return 'за 3 и 7 рабочих дней';
+// Формы существительных для единиц смещения: [1, 2–4, 5 и больше].
+const OFFSET_UNIT_FORMS = {
+  day: ['день', 'дня', 'дней'],
+  month: ['месяц', 'месяца', 'месяцев'],
+  working_day: ['рабочий день', 'рабочих дня', 'рабочих дней'],
+};
+
+// Форма по числу: 1 — «день», 2–4 — «дня», 5+ — «дней»; 11–14 всегда как 5+.
+function pluralForm(value, forms) {
+  const n = Math.abs(value) % 100;
+  const tail = n % 10;
+  if (n > 10 && n < 20) return forms[2];
+  if (tail === 1) return forms[0];
+  if (tail > 1 && tail < 5) return forms[1];
+  return forms[2];
+}
+
+/**
+ * Русское описание правила напоминаний для срока данной длительности — для
+ * пояснения под ссылкой в Google Календарь («за 3 и 7 дней»).
+ *
+ * Фраза СТРОИТСЯ по той же таблице смещений, по которой считаются напоминания в
+ * .ics (offsets), а не хранит свою копию. Раньше здесь лежал второй, вручную
+ * поддерживаемый список — и он уже разошёлся с первым: правила для шести
+ * месяцев и для десяти рабочих дней в .ics были, а фраза для них возвращала
+ * пустую строку, то есть пользователю о напоминаниях не сообщалось вовсе.
+ * Общий источник снимает этот класс расхождений (аудит, фрагмент 8).
+ *
+ * @param {{value: number, unit: string}} duration — длительность срока.
+ * @param {(duration: object) => Array<{unit: string, value: number}>} offsets —
+ *   таблица правил напоминаний предметного модуля.
+ * @returns {string} фраза или '' — если правил нет либо единица незнакома
+ *   (пустая строка означает «сказать нечего»: пояснение просто не выводится).
+ */
+export function reminderRulePhrase(duration, offsets) {
+  const rules = typeof offsets === 'function' ? offsets(duration) || [] : [];
+  if (rules.length === 0) return '';
+  if (rules.some((r) => !OFFSET_UNIT_FORMS[r.unit])) return '';
+
+  // Смещения одной единицы: называем её один раз, в конце («за 3 и 7 дней»).
+  // Разных — при каждом числе своя («за 7 дней и 1 месяц»).
+  const single = rules.every((r) => r.unit === rules[0].unit);
+  if (single) {
+    const values = rules.map((r) => r.value);
+    const noun = pluralForm(values[values.length - 1], OFFSET_UNIT_FORMS[rules[0].unit]);
+    return `за ${values.join(' и ')} ${noun}`;
   }
-  return '';
+  const parts = rules.map((r) => `${r.value} ${pluralForm(r.value, OFFSET_UNIT_FORMS[r.unit])}`);
+  return `за ${parts.join(' и ')}`;
 }

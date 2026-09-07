@@ -10,6 +10,7 @@ import {
   REVIEW_GROUNDS,
 } from '../src/views.js';
 import { buildICS, icsTermsFromView, exportableCards } from '../src/ics.js';
+import { reminderOffsets } from '../src/term-registry.js';
 import {
   googleCalendarUrl,
   termsAsText,
@@ -20,9 +21,10 @@ import {
   calendarEventTitle,
   DEADLINE_CAPTION,
   DEADLINE_CAPTION_COURT,
-} from '../src/export-links.js';
-import { applyDateEdit, dateFieldError, isoToRu, ruToISO } from '../src/date-field.js';
-import { SITUATIONS, DEFAULT_SITUATION, situationById } from '../src/situations.js';
+} from '../core/export/links.js';
+import { applyDateEdit, dateFieldError, isoToRu, ruToISO } from '../core/ui/date-field.js';
+import { SITUATIONS, DEFAULT_SITUATION } from '../src/situations.js';
+import { situationById } from '../core/view/situations.js';
 
 // --- Метаданные полей (п. 4.1 SPEC.md) --------------------------------------
 
@@ -263,7 +265,7 @@ function todayISO() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-// isoToRu/ruToISO живут в src/date-field.js — они нужны и тестам.
+// isoToRu/ruToISO живут в core/ui/date-field.js — они нужны и тестам.
 
 // Название поля для фразы «Укажите …»: подписи начинаются с «Дата», а дальше
 // уже идёт родительный падеж — остаётся отбросить уточнение в скобках. Поля не
@@ -657,7 +659,7 @@ function googleCalendarLink(card) {
   a.rel = 'noopener noreferrer';
   wrap.appendChild(a);
 
-  const rule = reminderRulePhrase(exportDurations.get(card.id));
+  const rule = reminderRulePhrase(exportDurations.get(card.id), reminderOffsets);
   const note = rule
     ? `Ссылка не задаёт напоминания — Google подставит своё по умолчанию. ` +
       `Наши напоминания для этого срока (${rule}) добавьте в событии вручную.`
@@ -963,7 +965,7 @@ async function copyTerms() {
   if (currentSummary.length === 0) return;
   const text = termsAsText(currentSummary, {
     today,
-    situation: situationById(state.situation).label,
+    situation: situationById(state.situation, SITUATIONS).label,
   });
 
   let ok = true;
@@ -1133,7 +1135,7 @@ function render() {
   const focus = captureFocus();
   revealSeen = new Set();
   renderedFields.clear();
-  const situation = situationById(state.situation);
+  const situation = situationById(state.situation, SITUATIONS);
   const visible = new Set(situation.nodes);
 
   // Расчёт от выбора ситуации не зависит: buildView по-прежнему считает все

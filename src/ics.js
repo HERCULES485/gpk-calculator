@@ -1,18 +1,27 @@
-// Экспорт сроков в .ics (раздел 8, задача 5 SPEC.md).
+// Экспорт сроков ГПК в .ics (раздел 8, задача 5 SPEC.md) — предметная обвязка
+// над генератором ядра.
 //
-// Экспортируются только сроки с ics: true. Событие — на весь день в дату
-// дедлайна; в нём название срока, дата и норма (в описании). Напоминания —
-// по правилам раздела 8, не больше двух на событие и от ближайшего к дедлайну
-// к более раннему (календари обрезают список молча, см. reminderOffsets).
-// Смещения в месяцах вычитаются календарно с клампингом на последний день
-// месяца (как addMonths движка, в обратную сторону); смещения в днях —
-// календарные, кроме сроков в рабочих днях. Дата напоминания на нерабочий день
-// сдвигается НАЗАД, к предыдущему рабочему (через календарный модуль).
-// Напоминание раньше даты расчёта не создаётся.
+// Сама механика iCalendar (сборка, экранирование, свёртка строк, VALARM) живёт
+// в core/export/ics.js и о ГПК ничего не знает. Здесь — только предметное:
+// идентификаторы продукта, таблица напоминаний и реестр узлов (все три из
+// src/term-registry.js) подставляются в общие функции, а icsTermsFromChain
+// разбирает результат computeChain по именам полей конкретных процедур ГПК.
+//
+// Обёртки сохраняют прежние сигнатуры (buildICS(terms, options),
+// icsTermsFromView(view), exportableCards(view)), поэтому вызывающий код —
+// web/app.js и тесты — от параметризации ядра не зависит.
 
-import { shiftBackIfNonWorking, subtractWorkingDays, toISODate } from './calendar.js';
-import { addMonths } from './engine.js';
-import { calendarEventTitle } from './export-links.js';
+import {
+  buildICS as coreBuildICS,
+  icsTermsFromView as coreIcsTermsFromView,
+  exportableCards as coreExportableCards,
+} from '../core/export/ics.js';
+import {
+  TERM_REGISTRY,
+  ICS_PRODID,
+  ICS_UID_DOMAIN,
+  reminderOffsets,
+} from './term-registry.js';
 import {
   APPEAL_GENERAL,
   CASSATION_KSOYU,
@@ -40,271 +49,38 @@ import {
   MIROVOY_APPEAL,
 } from './chain.js';
 
-import * as chainModule from './chain.js';
-
-const DAY_MS = 86_400_000;
-const PRODID = '-//gpk-calculator//Процессуальные сроки ГПК//RU';
-
 /**
- * Реестр сроков по id узла. Собирается автоматически из экспортов chain.js,
- * поэтому новый узел не может выпасть из экспорта .ics молча — он попадает в
- * реестр вместе с самим определением срока.
+ * Строит содержимое .ics по срокам ГПК: та же сигнатура, что и раньше
+ * (referenceDate, now), предметные параметры ядра подставляются здесь.
+ * @param {Array<object>} terms
+ * @param {{referenceDate?: string, now?: Date|string}} [options]
+ * @returns {string}
  */
-export const TERM_REGISTRY = Object.fromEntries(
-  Object.values(chainModule)
-    .filter(
-      (v) =>
-        v && typeof v === 'object' && typeof v.id === 'string' && v.duration && 'ics' in v,
-    )
-    .map((term) => [term.id, term]),
-);
-
-/**
- * Экспортируемые сроки из структуры отображения: рассчитанные (есть дедлайн) и
- * с ics: true. Длительность берётся из самой карточки, если она её несёт (она
- * может отличаться от константы — например, 3 или 15 рабочих дней у заявления
- * мировому судье в зависимости от явки), иначе из реестра.
- * @param {{cards: object[]}} view — результат buildView.
- * @returns {Array<object>} сроки для buildICS.
- */
-export function icsTermsFromView(view) {
-  return exportableCards(view).map(({ card, meta }) => ({
-    title: card.title,
-    deadline: card.deadline,
-    norm: card.norm,
-    ics: true,
-    duration: card.duration || meta.duration,
-  }));
+export function buildICS(terms, options = {}) {
+  return coreBuildICS(terms, {
+    ...options,
+    prodId: ICS_PRODID,
+    uidDomain: ICS_UID_DOMAIN,
+    offsets: reminderOffsets,
+  });
 }
 
 /**
- * Карточки, которые имеет смысл переносить в календарь. Общий отбор для всех
- * способов переноса — .ics, ссылки в Google Календарь и текстового списка,
- * чтобы они не расходились между собой.
+ * Экспортируемые сроки из структуры отображения — по реестру узлов ГПК.
+ * @param {{cards: object[]}} view — результат buildView.
+ * @returns {Array<object>}
+ */
+export function icsTermsFromView(view) {
+  return coreIcsTermsFromView(view, TERM_REGISTRY);
+}
+
+/**
+ * Карточки, которые имеет смысл переносить в календарь — по реестру узлов ГПК.
  * @param {{cards: object[]}} view
  * @returns {Array<{card: object, meta: object}>}
  */
 export function exportableCards(view) {
-  const out = [];
-  for (const card of (view && view.cards) || []) {
-    const meta = TERM_REGISTRY[card.id];
-    if (!meta || meta.ics !== true || !card.deadline) continue;
-    // Истёкшие и пропущенные сроки не переносим: напоминать не о чем. Это не то
-    // же, что отсечение прошлых напоминаний по referenceDate — там срок ещё
-    // идёт, и событие в файле остаётся, просто без части будильников.
-    if (card.status === 'expired' || card.status === 'missed') continue;
-    out.push({ card, meta });
-  }
-  return out;
-}
-
-// Правила напоминаний (раздел 8 SPEC.md) по длительности срока: смещения до
-// дедлайна, каждое со своей единицей (день — календарный, месяц — с клампингом).
-//
-// Не больше двух на событие: календари обрезают список молча и отбрасывают
-// именно последние — ближайшие к дедлайну и самые нужные (iOS показывает два,
-// Outlook одно, проверено на устройствах). Поэтому смещения перечислены от
-// ближайшего к дедлайну к более раннему: если календарь оставит одно, останется
-// то, которое важнее.
-function reminderOffsets(duration) {
-  if (duration && duration.unit === 'month' && duration.value === 1) {
-    return [
-      { unit: 'day', value: 3 },
-      { unit: 'day', value: 7 },
-    ];
-  }
-  if (duration && duration.unit === 'month' && duration.value === 3) {
-    return [
-      { unit: 'day', value: 3 },
-      { unit: 'day', value: 14 },
-    ];
-  }
-  // Шесть месяцев: только у практики ВС (vs_practice_change, п. 5 ч. 4 ст. 392),
-  // когда шестимесячный потолок ч. 3 ст. 394 оказывается контролирующим —
-  // остальные узлы такой длительности не имеют. Тот же принцип, что у прочих
-  // месячных сроков (ближнее напоминание не растёт, дальнее — растёт вместе со
-  // сроком): ближнее держим на уровне трёхмесячного (3 дня), дальнее продлеваем
-  // до месяца — запас пропорционален более длинному сроку.
-  if (duration && duration.unit === 'month' && duration.value === 6) {
-    return [
-      { unit: 'day', value: 3 },
-      { unit: 'day', value: 30 },
-    ];
-  }
-  if (duration && duration.unit === 'year' && duration.value === 3) {
-    return [
-      { unit: 'day', value: 7 },
-      { unit: 'month', value: 1 },
-    ];
-  }
-  // Сроки в рабочих днях: смещения тоже в рабочих днях — календарное смещение
-  // на каникулах увело бы напоминание за границу срока.
-  if (duration && duration.unit === 'working_day') {
-    switch (duration.value) {
-      case 3: // заявление мировому судье при явке (п. 1 ч. 4 ст. 199)
-        return [{ unit: 'working_day', value: 1 }];
-      case 5: // замечания на протокол, заявление по упрощённому производству
-      case 7: // заявление об отмене заочного решения (ч. 1 ст. 237)
-        return [
-          { unit: 'working_day', value: 1 },
-          { unit: 'working_day', value: 2 },
-        ];
-      case 10: // возражения должника на судебный приказ (ст. 128)
-        return [
-          { unit: 'working_day', value: 2 },
-          { unit: 'working_day', value: 5 },
-        ];
-      case 15: // частная жалоба, апелляция по упрощённому, заявление без явки
-        return [
-          { unit: 'working_day', value: 3 },
-          { unit: 'working_day', value: 7 },
-        ];
-      default:
-        return [];
-    }
-  }
-  return [];
-}
-
-// --- Даты -------------------------------------------------------------------
-
-function toDate(iso) {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d));
-}
-function addDaysISO(iso, n) {
-  return toISODate(new Date(toDate(iso).getTime() + n * DAY_MS));
-}
-// Смещение назад от дедлайна на одно правило напоминания.
-function offsetBackISO(deadlineISO, off) {
-  if (off.unit === 'month') return toISODate(addMonths(deadlineISO, -off.value));
-  if (off.unit === 'working_day') return subtractWorkingDays(deadlineISO, off.value);
-  return addDaysISO(deadlineISO, -off.value);
-}
-function compact(iso) {
-  return iso.replace(/-/g, ''); // YYYY-MM-DD → YYYYMMDD
-}
-function stampUTC(value) {
-  const d = value instanceof Date ? value : value ? new Date(value) : new Date();
-  const p = (n) => String(n).padStart(2, '0');
-  return (
-    `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}` +
-    `T${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}Z`
-  );
-}
-
-// --- Текст iCalendar --------------------------------------------------------
-
-// Экранирование значений (RFC 5545 §3.3.11).
-function esc(text) {
-  return String(text)
-    .replace(/\\/g, '\\\\')
-    .replace(/;/g, '\\;')
-    .replace(/,/g, '\\,')
-    .replace(/\r?\n/g, '\\n');
-}
-
-// Свёртка строки до 75 октетов (RFC 5545 §3.1); продолжение — с пробела.
-function foldLine(line) {
-  const enc = new TextEncoder();
-  if (enc.encode(line).length <= 75) return line;
-  const chunks = [];
-  let chunk = '';
-  let bytes = 0;
-  for (const ch of line) {
-    const cb = enc.encode(ch).length;
-    const max = chunks.length === 0 ? 75 : 74; // на продолжении 1 октет — пробел
-    if (bytes + cb > max) {
-      chunks.push(chunk);
-      chunk = ch;
-      bytes = cb;
-    } else {
-      chunk += ch;
-      bytes += cb;
-    }
-  }
-  chunks.push(chunk);
-  return chunks[0] + chunks.slice(1).map((c) => `\r\n ${c}`).join('');
-}
-
-// --- Сборка -----------------------------------------------------------------
-
-// Даты напоминаний для одного срока: сдвиг назад с нерабочих, отсев прошлого.
-function reminderDates(term, referenceDate) {
-  const out = [];
-  for (const off of reminderOffsets(term.duration)) {
-    const raw = offsetBackISO(term.deadline, off);
-    // Смещение в рабочих днях уже даёт рабочий день — сдвигать нечего (как и с
-    // дедлайном срока в рабочих днях). Календарные смещения сдвигаем назад.
-    const date = off.unit === 'working_day' ? raw : shiftBackIfNonWorking(raw);
-    if (referenceDate != null && date < referenceDate) continue; // раньше даты расчёта
-    out.push(date);
-  }
-  return [...new Set(out)]; // после сдвига даты могут совпасть
-}
-
-// Метка выгрузки для UID. Без неё UID складывался из даты и порядкового номера,
-// и расчёты по разным делам с совпадающими датами перезаписывали друг друга в
-// календаре: два файла с апелляцией на одну дату давали одно событие.
-function exportToken() {
-  const rnd = globalThis.crypto?.randomUUID?.();
-  if (rnd) return rnd.replace(/-/g, '').slice(0, 12);
-  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function eventLines(term, index, stamp, referenceDate, token) {
-  const lines = [
-    'BEGIN:VEVENT',
-    `UID:${compact(term.deadline)}-${index}-${token}@gpk-calculator`,
-    `DTSTAMP:${stamp}`,
-    `DTSTART;VALUE=DATE:${compact(term.deadline)}`,
-    `DTEND;VALUE=DATE:${compact(addDaysISO(term.deadline, 1))}`, // конец исключающий
-    `SUMMARY:${esc(calendarEventTitle(term.title))}`,
-    `DESCRIPTION:${esc(`Норма: ${term.norm}`)}`,
-    'TRANSP:TRANSPARENT',
-  ];
-  for (const r of reminderDates(term, referenceDate)) {
-    lines.push(
-      'BEGIN:VALARM',
-      'ACTION:DISPLAY',
-      `DESCRIPTION:${esc(`${term.title} — напоминание о сроке`)}`,
-      `TRIGGER;VALUE=DATE-TIME:${compact(r)}T090000Z`,
-      'END:VALARM',
-    );
-  }
-  lines.push('END:VEVENT');
-  return lines;
-}
-
-/**
- * Строит содержимое .ics.
- * @param {Array<{title,deadline,norm,ics,duration:{value,unit}}>} terms — сроки;
- *   deadline и все даты — 'YYYY-MM-DD'.
- * @param {{referenceDate?: string, now?: Date|string}} [options]
- *   referenceDate — дата расчёта: напоминания раньше неё не создаются;
- *   now — значение DTSTAMP (по умолчанию текущее время).
- * @returns {string} текст файла с CRLF-переводами строк.
- */
-export function buildICS(terms, options = {}) {
-  const { referenceDate = null, now } = options;
-  const stamp = stampUTC(now);
-
-  const lines = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    `PRODID:${PRODID}`,
-    'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH',
-  ];
-
-  const exported = (terms || []).filter((t) => t && t.ics === true);
-  const token = exportToken(); // одна метка на выгрузку — события файла связаны
-  exported.forEach((term, i) => {
-    lines.push(...eventLines(term, i, stamp, referenceDate, token));
-  });
-
-  lines.push('END:VCALENDAR');
-  return lines.map(foldLine).join('\r\n') + '\r\n';
+  return coreExportableCards(view, TERM_REGISTRY);
 }
 
 /**
