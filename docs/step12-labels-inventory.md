@@ -21,6 +21,7 @@
 | `FOLLOW_UP_FIELDS` | **Нет** — только `web/app.js:1313` | — | Оставлен как есть — не дублирование |
 | `REDACTION_FIELD` | **Нет** — только `web/app.js:1521` | — | Оставлен как есть — не дублирование |
 | `GENERAL_CHAIN_NODES` | **Нет** — только `web/app.js:242` | — | Оставлен как есть — не дублирование |
+| 5 ключей `INPUT_LABELS`, отсутствующих в `views.js` (см. §1.1) | Использование в `missingInputs()` внутри `views.js` | — | **Не используются.** Ни один из 5 не передаётся ни в один вызов `missingInputs()` — см. «Проверено дополнительно» |
 
 ---
 
@@ -106,7 +107,63 @@
 
 ---
 
-## 3. Что сделано и что не сделано в этом PR
+## 3. Проверено дополнительно — используются ли в `views.js` 5 ключей, отсутствующих в его `INPUT_LABELS`
+
+Открытый вопрос: 5 ключей из §1.1 (`simplified_appeal_ruling_reasoned_date`,
+`default_judgment_appeal_ruling_reasoned_date`, `mirovoy_appeal_ruling_date`,
+`periodic_payment_indefinite`, `foreign_state_default_judgment_appeal_ruling_reasoned_date`)
+существуют только в `INPUT_LABELS` из `web/app.js`. Раз в `src/views.js`
+записей с такими ключами в самом словаре нет, вопрос — обращается ли
+`views.js` к своему (неполному) `INPUT_LABELS` по одному из этих 5 id через
+`missingInputs(ids, inputs)` (локальная обёртка над
+`genericMissingInputs(ids, inputs, INPUT_LABELS)`, `views.js:172–174`). Если
+да — `genericMissingInputs` получит `undefined` вместо текста подписи, и
+пользователь увидит пустое/некорректное место в списке «что ещё уточнить».
+
+**Способ проверки:** найдены все вызовы `missingInputs(...)` в
+`src/views.js` (`grep -n "missingInputs\s*("`) — их 9
+(`views.js:456, 545, 757, 780, 804, 830, 943, 1061`, плюс определение на
+`172`). Часть вызовов передаёт литеральный массив id, часть — переменную;
+для каждой переменной источник прослежен до места формирования массива:
+
+* `views.js:757, 780, 804, 1061` — литералы `['appeal_ruling_date']`,
+  `['appeal_ruling_reasoned_date']`, `['appeal_filed_date']`,
+  `['reasoned_decision_date']`. Ни один из 5 искомых id.
+* `views.js:830` — переменная `missing`, присваивается на `views.js:820–823`
+  одним из двух литералов: `['ksoyu_ruling_reasoned_date']` или
+  `['ksoyu_ruling_date']`. Ни один из 5 искомых id.
+* `views.js:456, 545` — переменная `dj.appeal_blocked.missing`. `appeal_blocked`
+  формируется в `src/chain.js:1975` (обычное заочное решение) и
+  `src/chain.js:2307` (заочное решение против иностранного государства) —
+  единственные присвоения `missing:` в обоих объектах: `['default_judgment_refusal_date']`
+  и `['foreign_state_default_judgment_refusal_date']` соответственно. Ни один
+  из 5 искомых id (в частности, не `default_judgment_appeal_ruling_reasoned_date`
+  и не `foreign_state_default_judgment_appeal_ruling_reasoned_date`, несмотря
+  на похожие имена).
+* `views.js:943` — переменная `terms.review_new_circumstances_missing`,
+  которая приходит из `reviewResult.missing`
+  (`src/chain.js:897`, `reviewResult = computeReviewNewCircumstancesResult(inputs ?? {})`).
+  Функция `computeReviewNewCircumstancesResult` (`src/chain.js:1421–1429`)
+  возвращает `missing: null` для всех оснований, кроме
+  `vs_practice_change_ground_id`, для которого вызывается
+  `computeVsPracticeChangeTerm` (`src/chain.js:1319` и далее) — там
+  `missing` строится только из `review_refusal_ruling_received_date`,
+  `review_publication_date` и `review_last_act_entry_into_force_date`
+  (`src/chain.js:1325–1333`). Ни один из 5 искомых id.
+
+**Вывод:** ни один из 5 идентификаторов не встречается ни в одном вызове
+`missingInputs()` в `src/views.js` — ни как литерал, ни через переменные
+(их источники в `src/chain.js` тоже не производят эти 5 id). Значит,
+`genericMissingInputs` не получает `undefined` для этих полей в текущем
+коде, и пользователь не видит пустого/некорректного места из-за этого
+расхождения. Расхождение из §1.1 (5 ключей отсутствуют в `INPUT_LABELS`
+`views.js`) остаётся зафиксированным как факт для будущего решения по
+объединению словарей, но само по себе оно сейчас не проявляется как
+видимый пользователю дефект. Код не менялся.
+
+---
+
+## 4. Что сделано и что не сделано в этом PR
 
 * `src/labels.js` **не создан** — единственный кандидат на перенос
   (`INPUT_LABELS`) не прошёл проверку на отсутствие расхождений.
