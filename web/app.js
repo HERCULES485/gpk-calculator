@@ -22,7 +22,8 @@ import {
   DEADLINE_CAPTION_COURT,
 } from '../core/export/links.js';
 import { applyDateEdit, dateFieldError, isoToRu, ruToISO } from '../core/ui/date-field.js';
-import { SITUATIONS, DEFAULT_SITUATION, situationById } from '../src/situations.js';
+import { SITUATIONS, DEFAULT_SITUATION } from '../src/situations.js';
+import { situationById } from '../core/view/situations.js';
 
 // --- Метаданные полей (п. 4.1 SPEC.md) --------------------------------------
 
@@ -963,7 +964,7 @@ async function copyTerms() {
   if (currentSummary.length === 0) return;
   const text = termsAsText(currentSummary, {
     today,
-    situation: situationById(state.situation).label,
+    situation: situationById(state.situation, SITUATIONS).label,
   });
 
   let ok = true;
@@ -1133,7 +1134,7 @@ function render() {
   const focus = captureFocus();
   revealSeen = new Set();
   renderedFields.clear();
-  const situation = situationById(state.situation);
+  const situation = situationById(state.situation, SITUATIONS);
   const visible = new Set(situation.nodes);
 
   // Расчёт от выбора ситуации не зависит: buildView по-прежнему считает все

@@ -6,13 +6,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { SITUATIONS, DEFAULT_SITUATION } from '../src/situations.js';
 import {
-  SITUATIONS,
-  DEFAULT_SITUATION,
   situationById,
   allSituationNodes,
   allSituationFields,
-} from '../src/situations.js';
+  checkSituationCoverage,
+} from '../core/view/situations.js';
 import { buildView } from '../src/views.js';
 
 // Данные, поднимающие все ветви разом.
@@ -52,24 +52,23 @@ const ALL_BRANCHES_INPUTS = {
 };
 
 test('каждый узел из buildView попадает ровно в одну ситуацию', () => {
+  // Сама проверка инварианта (нет ни пропущенных, ни задвоенных узлов) —
+  // предметно-независимая функция core/view/situations.js; здесь только
+  // ГПК-специфичная часть: получить реальный список узлов через buildView.
   const view = buildView(ALL_BRANCHES_INPUTS, { today: '2025-07-01' });
-  const claimed = allSituationNodes();
-  const claimedSet = new Set(claimed);
-
   const shown = [...view.cards, ...view.incomplete].map((n) => n.id);
-  const orphans = [...new Set(shown)].filter((id) => !claimedSet.has(id));
-  assert.deepEqual(orphans, [], 'узлы, не привязанные ни к одной ситуации');
+  assert.doesNotThrow(() => checkSituationCoverage(shown, SITUATIONS));
 });
 
 test('узлы не дублируются между ситуациями', () => {
-  const claimed = allSituationNodes();
+  const claimed = allSituationNodes(SITUATIONS);
   const seen = new Set();
   const duplicates = claimed.filter((id) => (seen.has(id) ? true : (seen.add(id), false)));
   assert.deepEqual(duplicates, []);
 });
 
 test('поля ввода не дублируются между ситуациями', () => {
-  const fields = allSituationFields();
+  const fields = allSituationFields(SITUATIONS);
   assert.equal(new Set(fields).size, fields.length);
 });
 
@@ -78,7 +77,7 @@ test('в ситуациях нет узлов, которых модель не 
   // несуществующими id, иначе оно перестаёт быть картой реальных узлов.
   const view = buildView(ALL_BRANCHES_INPUTS, { today: '2025-07-01' });
   const shown = new Set([...view.cards, ...view.incomplete].map((n) => n.id));
-  const missing = allSituationNodes().filter((id) => !shown.has(id));
+  const missing = allSituationNodes(SITUATIONS).filter((id) => !shown.has(id));
   assert.deepEqual(missing, [], 'узлы разбиения, которых нет в модели');
 });
 
@@ -279,15 +278,15 @@ test('заочное решение против иностранного гос
 
 test('по умолчанию выбран общий порядок', () => {
   assert.equal(DEFAULT_SITUATION, 'general');
-  assert.equal(situationById(DEFAULT_SITUATION).label, 'Решение суда в общем порядке');
+  assert.equal(situationById(DEFAULT_SITUATION, SITUATIONS).label, 'Решение суда в общем порядке');
   assert.equal(SITUATIONS[0].id, 'general');
   // Только у общей ветви поле даты решения статическое, в разметке страницы.
   assert.equal(SITUATIONS.filter((s) => s.primary_field).length, 1);
 });
 
 test('неизвестный id ситуации откатывается к общему порядку', () => {
-  assert.equal(situationById('нет такой').id, 'general');
-  assert.equal(situationById(undefined).id, 'general');
+  assert.equal(situationById('нет такой', SITUATIONS).id, 'general');
+  assert.equal(situationById(undefined, SITUATIONS).id, 'general');
 });
 
 test('все одиннадцать ситуаций на месте и подписаны', () => {
