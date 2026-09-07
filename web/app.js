@@ -10,6 +10,7 @@ import {
   REVIEW_GROUNDS,
 } from '../src/views.js';
 import { buildICS, icsTermsFromView, exportableCards } from '../src/ics.js';
+import { reminderOffsets } from '../src/term-registry.js';
 import {
   googleCalendarUrl,
   termsAsText,
@@ -658,7 +659,7 @@ function googleCalendarLink(card) {
   a.rel = 'noopener noreferrer';
   wrap.appendChild(a);
 
-  const rule = reminderRulePhrase(exportDurations.get(card.id));
+  const rule = reminderRulePhrase(exportDurations.get(card.id), reminderOffsets);
   const note = rule
     ? `Ссылка не задаёт напоминания — Google подставит своё по умолчанию. ` +
       `Наши напоминания для этого срока (${rule}) добавьте в событии вручную.`

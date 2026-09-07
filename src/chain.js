@@ -1242,7 +1242,7 @@ export function reviewGroundById(id) {
   return REVIEW_GROUND_BY_ID.get(id) ?? null;
 }
 
-// Метаданные узла для .ics-реестра (см. TERM_REGISTRY в ics.js): он собирается
+// Метаданные узла для .ics-реестра (см. TERM_REGISTRY в term-registry.js): он собирается
 // автоматически из экспортов chain.js по id/duration/ics, а полная норма у
 // этого узла зависит от выбранного основания и строится на лету в
 // reviewTermFor — этой константы для расчёта не хватает, только для реестра.
@@ -2098,7 +2098,7 @@ export const FOREIGN_STATE_DEFAULT_JUDGMENT_CANCELLATION_REQUEST = {
   ],
 };
 
-// Реестровая запись срока апелляции для TERM_REGISTRY (ics.js, автосборка по
+// Реестровая запись срока апелляции для TERM_REGISTRY (term-registry.js, автосборка по
 // экспортам chain.js) — по образцу REVIEW_NEW_CIRCUMSTANCES_FILING: duration
 // здесь заглушка (нужны только id/ics для реестра), фактическая длительность
 // всегда берётся с самого посчитанного узла (computeForeignStateAppealTerm),
