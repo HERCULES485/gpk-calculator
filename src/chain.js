@@ -53,7 +53,6 @@ export const CASSATION_KSOYU = {
   id: 'cassation_ksoyu',
   title: 'Кассационная жалоба в КСОЮ',
   duration: { value: 3, unit: 'month' },
-  condition: 'entry_into_force.resolved',
   weekend_shift: true,
   ics: true,
   midnight_rule: 'ч. 3 ст. 108 ГПК РФ',
@@ -174,7 +173,6 @@ export const CASSATION_VS = {
   id: 'cassation_vs',
   title: 'Кассационная жалоба в Судебную коллегию ВС РФ',
   duration: { value: 3, unit: 'month' },
-  condition: 'ksoyu_ruling_date', // узел доступен после определения КСОЮ
   weekend_shift: true,
   ics: true,
   midnight_rule: 'ч. 3 ст. 108 ГПК РФ',
@@ -242,7 +240,6 @@ export const ENFORCEMENT_PRESENTATION = {
   title: 'Предъявление исполнительного листа к исполнению',
   duration: { value: 3, unit: 'year' },
   anchor: { event: 'entry_into_force', offset_start: 1 },
-  condition: 'entry_into_force.resolved',
   weekend_shift: true,
   ics: true,
   // Срок прерывается событиями ст. 22 (ч. 1–3): якорь сдвигается на последнее
@@ -432,7 +429,6 @@ export const PROTOCOL_REMARKS = {
   title: 'Замечания на протокол судебного заседания',
   duration: { value: 5, unit: 'working_day' },
   anchor: { event: 'protocol_signed_date', offset_start: 1 },
-  condition: 'protocol_signed_date',
   ics: true,
   logic:
     'Пять дней со дня подписания протокола. Срок исчисляется днями — нерабочие ' +
@@ -459,7 +455,6 @@ export const PROTOCOL_REMARKS_REVIEW = {
   title: 'Рассмотрение замечаний судьёй',
   duration: { value: 5, unit: 'working_day' },
   anchor: { event: 'protocol_remarks_filed_date', offset_start: 1 },
-  condition: 'protocol_signed_date',
   informational: true, // срок суда, не сторона его соблюдает
   ics: false,
   logic:
@@ -486,7 +481,6 @@ export const PRIVATE_COMPLAINT = {
   title: 'Частная жалоба на определение суда первой инстанции',
   duration: { value: 15, unit: 'working_day' },
   anchor: { event: 'interim_ruling_date', offset_start: 1 },
-  condition: 'interim_ruling_date',
   ics: true,
   logic:
     'Пятнадцать дней со дня вынесения определения судом первой инстанции. Срок ' +
@@ -531,7 +525,6 @@ export const COURT_ORDER_OBJECTION = {
   title: 'Возражения должника относительно исполнения судебного приказа',
   duration: { value: 10, unit: 'working_day' },
   anchor: { event: 'court_order_copy_received_date', offset_start: 1 },
-  condition: 'court_order_copy_received_date',
   ics: true,
   logic:
     'Десять дней со дня получения должником копии судебного приказа (ст. 128 ' +
@@ -574,7 +567,6 @@ export const COURT_ORDER_PRESENTATION = {
   title: 'Предъявление судебного приказа к исполнению',
   duration: { value: 3, unit: 'year' },
   anchor: { event: 'court_order_issued_date', offset_start: 1 },
-  condition: 'court_order_issued_date',
   weekend_shift: true,
   ics: true,
   // Перерыв по ст. 22 общий для всех исполнительных документов — судебный
@@ -618,7 +610,6 @@ export const PERIODIC_PAYMENTS_PRESENTATION = {
   title: 'Предъявление к исполнению документов о взыскании периодических платежей',
   duration: { value: 3, unit: 'year' },
   anchor: { event: 'periodic_payment_period_end_date', offset_start: 1 },
-  condition: 'periodic_payment_period_end_date && !periodic_payment_indefinite',
   weekend_shift: true,
   ics: true,
   logic:
@@ -655,6 +646,9 @@ const PERIODIC_PAYMENTS_INDEFINITE_REASON =
 // даёт точки отсчёта, поэтому вместо computeSimpleTerm возвращаем узел в
 // состоянии not_applicable, а не «недостаточно данных».
 function computePeriodicPayments(inputs) {
+  // condition (бывшее поле, часть 1 из 2) — '!periodic_payment_indefinite':
+  // при бессрочном взыскании узел не считается — состояние not_applicable
+  // вместо computeSimpleTerm.
   if (inputs?.periodic_payment_indefinite === true) {
     return {
       id: PERIODIC_PAYMENTS_PRESENTATION.id,
@@ -665,6 +659,8 @@ function computePeriodicPayments(inputs) {
       reason: PERIODIC_PAYMENTS_INDEFINITE_REASON,
     };
   }
+  // condition (бывшее поле, часть 2 из 2) — 'periodic_payment_period_end_date':
+  // узел появляется только после ввода даты окончания периода взыскания.
   return computeSimpleTerm(
     PERIODIC_PAYMENTS_PRESENTATION,
     inputs?.periodic_payment_period_end_date,
@@ -699,7 +695,6 @@ export const CHILD_RETURN_APPEAL = {
   title: 'Апелляционная жалоба по делу о возвращении ребёнка (глава 22.2 ГПК)',
   duration: { value: 10, unit: 'working_day' },
   anchor: { event: 'child_return_reasoned_decision_date', offset_start: 1 },
-  condition: 'child_return_reasoned_decision_date',
   ics: true,
   logic:
     'Десять дней со дня принятия решения суда в окончательной форме (ч. 1 ' +
@@ -729,7 +724,6 @@ export const CHILD_RETURN_PRIVATE_COMPLAINT = {
   title: 'Частная жалоба по делу о возвращении ребёнка (глава 22.2 ГПК)',
   duration: { value: 10, unit: 'working_day' },
   anchor: { event: 'child_return_interim_ruling_date', offset_start: 1 },
-  condition: 'child_return_interim_ruling_date',
   ics: true,
   logic:
     'Десять дней со дня вынесения определения судом первой инстанции по делу ' +
@@ -773,7 +767,6 @@ export const ADOPTION_APPEAL = {
   title: 'Апелляционная жалоба по делу об усыновлении ребёнка',
   duration: { value: 10, unit: 'working_day' },
   anchor: { event: 'adoption_reasoned_decision_date', offset_start: 1 },
-  condition: 'adoption_reasoned_decision_date',
   ics: true,
   logic:
     'Десять дней со дня принятия решения суда в окончательной форме (ч. 2.1 ' +
@@ -828,11 +821,15 @@ export function computeIndependentTerms(inputs) {
   return {
     protocol_remarks: remarks,
     protocol_remarks_review: review,
+    // condition (бывшее поле PRIVATE_COMPLAINT) — 'interim_ruling_date': узел
+    // появляется только после ввода даты определения суда первой инстанции.
     private_complaint: computeSimpleTerm(PRIVATE_COMPLAINT, inputs?.interim_ruling_date),
     supervision: computeSimpleTerm(SUPERVISION, inputs?.vs_ruling_date),
     // Обжалование определения о возврате кассационной жалобы (ч. 1 ст. 379.2):
     // событие стадии кассации, возможное по делу любой категории, — поэтому
     // независимый узел, а не часть какой-либо ветви цепочки.
+    // condition (бывшее поле) — 'cassation_return_ruling_date': узел появляется
+    // только после ввода даты определения о возврате жалобы.
     cassation_return_ruling_appeal: computeSimpleTerm(
       CASSATION_RETURN_RULING_APPEAL,
       inputs?.cassation_return_ruling_date,
@@ -841,6 +838,8 @@ export function computeIndependentTerms(inputs) {
     // процессуальное событие, не привязанное к категории дела, — независимый
     // узел, как cassation_return_ruling_appeal выше. Якорь — дата получения
     // постановления стороной, а не дата его вынесения третейским судом.
+    // condition (бывшее поле) — 'arbitration_competence_ruling_received_date':
+    // узел появляется только после ввода даты получения постановления.
     arbitration_competence_appeal: computeSimpleTerm(
       ARBITRATION_COMPETENCE_APPEAL,
       inputs?.arbitration_competence_ruling_received_date,
@@ -849,6 +848,8 @@ export function computeIndependentTerms(inputs) {
     // в процессе исполнения судебного акта (ч. 11 ст. 153.10): акт, для
     // которого апелляционное обжалование не предусмотрено, — обжалуется сразу
     // в кассацию, независимый узел по тому же образцу, что и два выше.
+    // condition (бывшее поле) — 'settlement_approval_ruling_date': узел
+    // появляется только после ввода даты определения об утверждении соглашения.
     settlement_approval_cassation_appeal: computeSimpleTerm(
       SETTLEMENT_APPROVAL_CASSATION_APPEAL,
       inputs?.settlement_approval_ruling_date,
@@ -857,10 +858,15 @@ export function computeIndependentTerms(inputs) {
     // должника (ст. 128) считаются от даты получения копии приказа,
     // предъявление к исполнению — от даты его выдачи взыскателю; ни один из
     // них не является входом для другого.
+    // condition (бывшее поле COURT_ORDER_OBJECTION) — 'court_order_copy_received_date':
+    // узел появляется только после ввода даты получения копии приказа.
     court_order_objection: computeSimpleTerm(
       COURT_ORDER_OBJECTION,
       inputs?.court_order_copy_received_date,
     ),
+    // condition (бывшее поле COURT_ORDER_PRESENTATION) — 'court_order_issued_date':
+    // узел появляется только после ввода даты выдачи приказа взыскателю —
+    // гарантирует null-чек в core/engine/interruption.js (computeInterruptibleTerm).
     court_order_presentation: computeInterruptibleTerm(
       COURT_ORDER_PRESENTATION,
       inputs?.court_order_issued_date,
@@ -873,10 +879,14 @@ export function computeIndependentTerms(inputs) {
     // окончательной форме, частная жалоба — от даты определения суда первой
     // инстанции; ни одна из дат не является входом для другого узла, поэтому
     // отдельная функция-ветвь им не нужна.
+    // condition (бывшее поле CHILD_RETURN_APPEAL) — 'child_return_reasoned_decision_date':
+    // узел появляется только после ввода даты решения в окончательной форме.
     child_return_appeal: computeSimpleTerm(
       CHILD_RETURN_APPEAL,
       inputs?.child_return_reasoned_decision_date,
     ),
+    // condition (бывшее поле CHILD_RETURN_PRIVATE_COMPLAINT) — 'child_return_interim_ruling_date':
+    // узел появляется только после ввода даты определения суда первой инстанции.
     child_return_private_complaint: computeSimpleTerm(
       CHILD_RETURN_PRIVATE_COMPLAINT,
       inputs?.child_return_interim_ruling_date,
@@ -884,6 +894,8 @@ export function computeIndependentTerms(inputs) {
     // Дела об усыновлении (глава 29): независимый узел по той же логике, что
     // и child_return_appeal выше — отдельная категория дел со своим сроком
     // апелляции.
+    // condition (бывшее поле ADOPTION_APPEAL) — 'adoption_reasoned_decision_date':
+    // узел появляется только после ввода даты решения в окончательной форме.
     adoption_appeal: computeSimpleTerm(
       ADOPTION_APPEAL,
       inputs?.adoption_reasoned_decision_date,
@@ -920,7 +932,6 @@ export const SUPERVISION = {
   title: 'Надзорная жалоба в Президиум ВС РФ',
   duration: { value: 3, unit: 'month' },
   anchor: { event: 'vs_ruling_date', offset_start: 1 },
-  condition: 'vs_ruling_date',
   weekend_shift: true,
   ics: true,
   logic:
@@ -978,7 +989,6 @@ export const CASSATION_RETURN_RULING_APPEAL = {
   title: 'Обжалование определения о возврате кассационной жалобы',
   duration: { value: 1, unit: 'month' },
   anchor: { event: 'cassation_return_ruling_date', offset_start: 1 },
-  condition: 'cassation_return_ruling_date',
   weekend_shift: true,
   ics: true,
   logic:
@@ -1030,7 +1040,6 @@ export const ARBITRATION_COMPETENCE_APPEAL = {
   title: 'Отмена постановления третейского суда о наличии компетенции',
   duration: { value: 1, unit: 'month' },
   anchor: { event: 'arbitration_competence_ruling_received_date', offset_start: 1 },
-  condition: 'arbitration_competence_ruling_received_date',
   weekend_shift: true,
   ics: true,
   logic:
@@ -1082,7 +1091,6 @@ export const SETTLEMENT_APPROVAL_CASSATION_APPEAL = {
   title: 'Обжалование определения об утверждении мирового соглашения',
   duration: { value: 1, unit: 'month' },
   anchor: { event: 'settlement_approval_ruling_date', offset_start: 1 },
-  condition: 'settlement_approval_ruling_date',
   weekend_shift: true,
   ics: true,
   logic:
@@ -1263,7 +1271,6 @@ function reviewTermFor(ground) {
     title: REVIEW_NEW_CIRCUMSTANCES_FILING.title,
     duration: REVIEW_NEW_CIRCUMSTANCES_DURATION,
     anchor: { event: 'review_circumstance_date', offset_start: 1 },
-    condition: 'review_ground && review_circumstance_date',
     weekend_shift: true,
     ics: true,
     logic: ground.logic,
@@ -1419,9 +1426,14 @@ function computeVsPracticeChangeTerm(inputs) {
  * @returns {{term:object|null, missing:string[]|null}}
  */
 function computeReviewNewCircumstancesResult(inputs) {
+  // condition (бывшее поле REVIEW_NEW_CIRCUMSTANCES_FILING, часть 1 из 2) —
+  // 'review_ground': без выбранного и распознанного основания узла нет вовсе.
   const ground = reviewGroundById(inputs?.review_ground);
   if (!ground) return { term: null, missing: null };
   if (ground.id === VS_PRACTICE_CHANGE_GROUND_ID) return computeVsPracticeChangeTerm(inputs);
+  // condition (бывшее поле REVIEW_NEW_CIRCUMSTANCES_FILING, часть 2 из 2) —
+  // 'review_circumstance_date': узел появляется только после ввода даты
+  // обстоятельства (для шести оснований, кроме vs_practice_change).
   const term = computeSimpleTerm(reviewTermFor(ground), inputs?.review_circumstance_date, {
     review_ground: ground.id,
   });
@@ -1496,7 +1508,13 @@ function computeReviewNewCircumstancesRestoration(primaryTerm) {
 // Рассмотрение считается от фактической даты подачи замечаний, если она введена;
 // иначе — от последнего дня срока подачи (худший случай), это помечается.
 function computeProtocolRemarks(inputs) {
+  // condition (бывшее поле PROTOCOL_REMARKS) — 'protocol_signed_date': без даты
+  // подписания протокола узел не появляется, гарантирует общий null-чек
+  // computeSimpleTerm (core/engine/term.js).
   const remarks = computeSimpleTerm(PROTOCOL_REMARKS, inputs.protocol_signed_date);
+  // condition (бывшее поле PROTOCOL_REMARKS_REVIEW) — тоже 'protocol_signed_date',
+  // а не собственный якорь узла (protocol_remarks_filed_date): рассмотрение
+  // недоступно, если недоступны сами замечания, — гарантируется этим возвратом.
   if (remarks == null) return { remarks: null, review: null };
 
   const filed = toISO(inputs.protocol_remarks_filed_date);
@@ -1529,7 +1547,6 @@ export const SIMPLIFIED_REASONED_REQUEST = {
   title: 'Заявление о составлении мотивированного решения',
   duration: { value: 5, unit: 'working_day' },
   anchor: { event: 'simplified_resolution_date', offset_start: 1 },
-  condition: 'simplified_resolution_date',
   ics: true,
   logic:
     'Пять дней со дня подписания резолютивной части решения. Срок в рабочих ' +
@@ -1575,7 +1592,6 @@ export const SIMPLIFIED_APPEAL = {
   title: 'Апелляционная жалоба (упрощённое производство)',
   duration: { value: 15, unit: 'working_day' },
   anchor: { event: 'simplified_resolution_date', offset_start: 1 },
-  condition: 'simplified_resolution_date',
   ics: true,
   logic:
     'Пятнадцать дней со дня принятия решения, а при составлении мотивированного ' +
@@ -1661,6 +1677,9 @@ function resolveSimplifiedEntry(appealFiled, reasoned, appealDeadline, appealRul
  * @returns {object|null} null, если не введена дата резолютивной части.
  */
 export function computeSimplified(inputs, referenceDate = null) {
+  // condition (бывшие поля SIMPLIFIED_REASONED_REQUEST и SIMPLIFIED_APPEAL) —
+  // 'simplified_resolution_date': без даты резолютивной части ни один узел
+  // этой ветки не появляется.
   const resolution = toISO(inputs?.simplified_resolution_date);
   if (resolution == null) return null;
 
@@ -1753,7 +1772,6 @@ export const DEFAULT_JUDGMENT_CANCELLATION_REQUEST = {
   title: 'Заявление об отмене заочного решения',
   duration: { value: 7, unit: 'working_day' },
   anchor: { event: 'default_judgment_service_date', offset_start: 1 },
-  condition: 'default_judgment_service_date',
   ics: true,
   logic:
     'Семь дней со дня вручения ответчику копии заочного решения. Срок ' +
@@ -1932,6 +1950,9 @@ function resolveDefaultJudgmentEntry(facts) {
  * @returns {object|null} null, если не введена дата вручения копии решения.
  */
 export function computeDefaultJudgment(inputs, referenceDate = null) {
+  // condition (бывшее поле DEFAULT_JUDGMENT_CANCELLATION_REQUEST) —
+  // 'default_judgment_service_date': без даты вручения копии решения узел не
+  // появляется.
   const service = toISO(inputs?.default_judgment_service_date);
   if (service == null) return null;
 
@@ -2073,7 +2094,6 @@ export const FOREIGN_STATE_DEFAULT_JUDGMENT_CANCELLATION_REQUEST = {
   title: 'Заявление иностранного государства об отмене заочного решения',
   duration: { value: 2, unit: 'month' },
   anchor: { event: 'foreign_state_default_judgment_service_date', offset_start: 1 },
-  condition: 'foreign_state_default_judgment_service_date',
   weekend_shift: true,
   ics: true,
   logic:
@@ -2279,6 +2299,9 @@ function resolveForeignStateDefaultJudgmentEntry(facts) {
  * @returns {object|null} null, если не введена дата вручения копии решения.
  */
 export function computeDefaultJudgmentForeignState(inputs, referenceDate = null) {
+  // condition (бывшее поле FOREIGN_STATE_DEFAULT_JUDGMENT_CANCELLATION_REQUEST) —
+  // 'foreign_state_default_judgment_service_date': без даты вручения копии
+  // решения узел не появляется.
   const service = toISO(inputs?.foreign_state_default_judgment_service_date);
   if (service == null) return null;
 
@@ -2375,7 +2398,6 @@ export const MIROVOY_REASONED_REQUEST = {
   title: 'Заявление о составлении мотивированного решения (мировой судья)',
   duration: { value: 3, unit: 'working_day' }, // переопределяется по явке
   anchor: { event: 'mirovoy_resolution_date', offset_start: 1 },
-  condition: 'mirovoy_resolution_date',
   ics: true,
   midnight_rule: 'ч. 3 ст. 108 ГПК РФ',
   restoration_norm: 'ст. 112 ГПК РФ',
@@ -2444,7 +2466,6 @@ export const MIROVOY_APPEAL = {
   title: 'Апелляционная жалоба на решение мирового судьи',
   duration: { value: 1, unit: 'month' },
   anchor: { offset_start: 1 },
-  condition: 'mirovoy_resolution_date',
   weekend_shift: true,
   ics: true,
   midnight_rule: 'ч. 3 ст. 108 ГПК РФ — сдача на почту до 24:00 последнего дня',
@@ -2552,6 +2573,11 @@ function resolveMirovoyEntry(inputs, appealDeadline, today) {
  * @returns {object|null} null, если не введена дата объявления резолютивной части.
  */
 export function computeMirovoy(inputs, referenceDate = null) {
+  // condition (бывшие поля MIROVOY_REASONED_REQUEST, MIROVOY_APPEAL и
+  // MIROVOY_CASSATION) — 'mirovoy_resolution_date': без даты объявления
+  // резолютивной части ни один узел этой ветки не появляется (кассация
+  // считается через computeMirovoyCassation ниже по этому же inputs, за тем
+  // же ранним возвратом).
   const resolution = toISO(inputs?.mirovoy_resolution_date);
   if (resolution == null) return null;
 
@@ -2622,7 +2648,6 @@ export const MIROVOY_CASSATION = {
   title: 'Кассационная жалоба (дела мировых судей)',
   duration: { value: 3, unit: 'month' },
   anchor: { offset_start: 1 },
-  condition: 'mirovoy_resolution_date',
   weekend_shift: true,
   ics: true,
   midnight_rule: 'ч. 3 ст. 108 ГПК РФ — сдача на почту до 24:00 последнего дня',
