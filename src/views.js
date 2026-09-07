@@ -58,77 +58,7 @@ import {
   missingInputs as genericMissingInputs,
   markExpired as genericMarkExpired,
 } from '../core/view/cards.js';
-
-// Названия input (п. 4.1 SPEC.md) для списка «что ещё можно уточнить».
-const INPUT_LABELS = {
-  reasoned_decision_date: 'Дата изготовления мотивированного решения',
-  hearing_end_date: 'Дата окончания разбирательства дела',
-  appeal_filed_date: 'Дата подачи апелляционной жалобы',
-  appeal_ruling_date: 'Дата принятия апелляционного определения',
-  appeal_ruling_reasoned_date: 'Дата изготовления мотивированного апелляционного определения',
-  cassation_filed_date: 'Дата подачи кассационной жалобы',
-  ksoyu_ruling_date: 'Дата вынесения определения КСОЮ',
-  ksoyu_ruling_reasoned_date: 'Дата изготовления мотивированного определения КСОЮ',
-  vs_cassation_filed_date: 'Дата подачи кассационной жалобы в ВС РФ',
-  protocol_signed_date: 'Дата подписания протокола судебного заседания',
-  protocol_remarks_filed_date: 'Дата подачи замечаний на протокол',
-  interim_ruling_date: 'Дата вынесения определения судом первой инстанции',
-  simplified_resolution_date: 'Дата подписания резолютивной части решения (упрощённое производство)',
-  simplified_reasoned_request_date: 'Дата подачи заявления о составлении мотивированного решения',
-  simplified_reasoned_date: 'Дата составления мотивированного решения',
-  simplified_appeal_filed_date: 'Дата подачи апелляционной жалобы (упрощённое производство)',
-  simplified_appeal_ruling_date: 'Дата определения апелляционной инстанции (упрощённое производство)',
-  default_judgment_service_date: 'Дата вручения ответчику копии заочного решения',
-  default_judgment_cancellation_request_date: 'Дата подачи заявления об отмене заочного решения',
-  default_judgment_refusal_date: 'Дата определения об отказе в отмене заочного решения',
-  default_judgment_cancellation_date: 'Дата определения об отмене заочного решения (заявление удовлетворено)',
-  default_judgment_appeal_filed_date: 'Дата подачи апелляционной жалобы (заочное решение)',
-  default_judgment_appeal_ruling_date: 'Дата определения апелляционной инстанции (заочное решение)',
-  default_judgment_subject: 'Кто обжалует заочное решение',
-  mirovoy_resolution_date: 'Дата объявления резолютивной части (мировой судья)',
-  mirovoy_attendance: 'Участник присутствовал в судебном заседании',
-  mirovoy_request_date: 'Дата подачи заявления о составлении мотивированного решения',
-  mirovoy_reasoned_date: 'Дата составления мотивированного решения мировым судьёй',
-  mirovoy_appeal_ruling_reasoned_date:
-    'Дата изготовления мотивированного апелляционного определения районного суда',
-  vs_ruling_date: 'Дата вынесения определения Судебной коллегии ВС РФ',
-  cassation_return_ruling_date: 'Дата определения о возврате кассационной жалобы',
-  court_order_copy_received_date: 'Дата получения должником копии судебного приказа',
-  court_order_issued_date: 'Дата выдачи судебного приказа',
-  periodic_payment_period_end_date: 'Дата окончания срока, на который присуждены платежи',
-  child_return_reasoned_decision_date:
-    'Дата решения суда в окончательной форме (глава 22.2 ГПК)',
-  child_return_interim_ruling_date:
-    'Дата определения суда первой инстанции (глава 22.2 ГПК)',
-  adoption_reasoned_decision_date: 'Дата решения суда в окончательной форме (усыновление)',
-  arbitration_competence_ruling_received_date:
-    'Дата получения постановления третейского суда о компетенции',
-  settlement_approval_ruling_date:
-    'Дата определения об утверждении мирового соглашения',
-  foreign_state_default_judgment_service_date:
-    'Дата вручения иностранному государству копии заочного решения',
-  foreign_state_default_judgment_cancellation_request_date:
-    'Дата подачи заявления об отмене заочного решения (иностранное государство)',
-  foreign_state_default_judgment_refusal_date:
-    'Дата определения об отказе в отмене заочного решения (иностранное государство)',
-  foreign_state_default_judgment_cancellation_date:
-    'Дата определения об отмене заочного решения (заявление удовлетворено, иностранное государство)',
-  foreign_state_default_judgment_appeal_filed_date:
-    'Дата подачи апелляционной жалобы (заочное решение против иностранного государства)',
-  foreign_state_default_judgment_appeal_ruling_date:
-    'Дата определения апелляционной инстанции (заочное решение против иностранного государства)',
-  enforcement_interruptions: 'Перерывы срока предъявления (ст. 22 ФЗ № 229-ФЗ)',
-  review_ground: 'Основание пересмотра (глава 42 ГПК)',
-  review_circumstance_date: 'Дата обстоятельства (зависит от основания)',
-  review_discovered_during_cassation:
-    'Обнаружено при рассмотрении кассационной/надзорной жалобы, представления',
-  review_publication_date:
-    'Дата опубликования постановления Пленума/Президиума ВС РФ в сети «Интернет»',
-  review_refusal_ruling_received_date:
-    'Дата получения копии определения об отказе в передаче жалобы для рассмотрения',
-  review_last_act_entry_into_force_date:
-    'Дата вступления в силу последнего судебного постановления по делу',
-};
+import { INPUT_LABELS } from './labels.js';
 
 // Подписи оснований перерыва — для выпадающего списка в UI и для истории на
 // карточке. Идентификаторы — из INTERRUPTION_TYPES (chain.js).

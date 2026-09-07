@@ -25,88 +25,16 @@ import {
 import { applyDateEdit, dateFieldError, isoToRu, ruToISO } from '../core/ui/date-field.js';
 import { SITUATIONS, DEFAULT_SITUATION } from '../src/situations.js';
 import { situationById } from '../core/view/situations.js';
+import { INPUT_LABELS } from '../src/labels.js';
 
 // --- Метаданные полей (п. 4.1 SPEC.md) --------------------------------------
-
-const INPUT_LABELS = {
-  reasoned_decision_date: 'Дата изготовления мотивированного решения',
-  hearing_end_date: 'Дата окончания разбирательства дела',
-  appeal_filed_date: 'Дата подачи апелляционной жалобы',
-  appeal_ruling_date: 'Дата принятия апелляционного определения',
-  appeal_ruling_reasoned_date: 'Дата изготовления мотивированного апелляционного определения',
-  cassation_filed_date: 'Дата подачи кассационной жалобы',
-  ksoyu_ruling_date: 'Дата вынесения определения КСОЮ',
-  ksoyu_ruling_reasoned_date: 'Дата изготовления мотивированного определения КСОЮ',
-  vs_cassation_filed_date: 'Дата подачи кассационной жалобы в ВС РФ',
-  protocol_signed_date: 'Дата подписания протокола судебного заседания',
-  protocol_remarks_filed_date: 'Дата подачи замечаний на протокол',
-  interim_ruling_date: 'Дата вынесения определения судом первой инстанции',
-  simplified_resolution_date: 'Дата подписания резолютивной части решения (упрощённое производство)',
-  simplified_reasoned_request_date: 'Дата подачи заявления о составлении мотивированного решения',
-  simplified_reasoned_date: 'Дата составления мотивированного решения',
-  simplified_appeal_filed_date: 'Дата подачи апелляционной жалобы (упрощённое производство)',
-  simplified_appeal_ruling_date: 'Дата определения апелляционной инстанции (упрощённое производство)',
-  simplified_appeal_ruling_reasoned_date:
-    'Дата изготовления мотивированного апелляционного определения (упрощённое производство)',
-  default_judgment_service_date: 'Дата вручения ответчику копии заочного решения',
-  default_judgment_cancellation_request_date: 'Дата подачи заявления об отмене заочного решения',
-  default_judgment_refusal_date: 'Дата определения об отказе в отмене заочного решения',
-  default_judgment_cancellation_date: 'Дата определения об отмене заочного решения',
-  default_judgment_appeal_filed_date: 'Дата подачи апелляционной жалобы (заочное решение)',
-  default_judgment_appeal_ruling_date: 'Дата определения апелляционной инстанции (заочное решение)',
-  default_judgment_appeal_ruling_reasoned_date:
-    'Дата изготовления мотивированного апелляционного определения (заочное решение)',
-  default_judgment_subject: 'Кто обжалует заочное решение',
-  mirovoy_resolution_date: 'Дата объявления резолютивной части (мировой судья)',
-  mirovoy_attendance: 'Участник присутствовал в судебном заседании',
-  mirovoy_request_date: 'Дата подачи заявления о составлении мотивированного решения',
-  mirovoy_reasoned_date: 'Дата составления мотивированного решения мировым судьёй',
-  vs_ruling_date: 'Дата вынесения определения Судебной коллегии ВС РФ',
-  cassation_return_ruling_date: 'Дата определения о возврате кассационной жалобы',
-  mirovoy_appeal_ruling_reasoned_date:
-    'Дата изготовления мотивированного апелляционного определения районного суда',
-  mirovoy_appeal_ruling_date: 'Дата принятия апелляционного определения районного суда',
-  court_order_copy_received_date: 'Дата получения должником копии судебного приказа',
-  court_order_issued_date: 'Дата выдачи судебного приказа',
-  periodic_payment_period_end_date: 'Дата окончания срока, на который присуждены платежи',
-  periodic_payment_indefinite: 'Срок, на который присуждены платежи, не определён (бессрочное взыскание)',
-  child_return_reasoned_decision_date:
-    'Дата решения суда в окончательной форме (глава 22.2 ГПК)',
-  child_return_interim_ruling_date:
-    'Дата определения суда первой инстанции (глава 22.2 ГПК)',
-  adoption_reasoned_decision_date: 'Дата решения суда в окончательной форме (усыновление)',
-  arbitration_competence_ruling_received_date:
-    'Дата получения постановления третейского суда о компетенции',
-  settlement_approval_ruling_date:
-    'Дата определения об утверждении мирового соглашения',
-  foreign_state_default_judgment_service_date:
-    'Дата вручения иностранному государству копии заочного решения',
-  foreign_state_default_judgment_cancellation_request_date:
-    'Дата подачи заявления об отмене заочного решения (иностранное государство)',
-  foreign_state_default_judgment_refusal_date:
-    'Дата определения об отказе в отмене заочного решения (иностранное государство)',
-  foreign_state_default_judgment_cancellation_date:
-    'Дата определения об отмене заочного решения (заявление удовлетворено, иностранное государство)',
-  foreign_state_default_judgment_appeal_filed_date:
-    'Дата подачи апелляционной жалобы (заочное решение против иностранного государства)',
-  foreign_state_default_judgment_appeal_ruling_date:
-    'Дата определения апелляционной инстанции (заочное решение против иностранного государства)',
-  foreign_state_default_judgment_appeal_ruling_reasoned_date:
-    'Дата изготовления мотивированного апелляционного определения (заочное решение против иностранного государства)',
-  enforcement_interruptions: 'Перерывы срока предъявления (ст. 22 ФЗ № 229-ФЗ)',
-  review_ground: 'Основание пересмотра',
-  // Заглушка на случай прямого рендера без выбранного основания — на экране
-  // фактическая подпись всегда приходит из REVIEW_GROUNDS (см. renderReviewGroundFields).
-  review_circumstance_date: 'Дата обстоятельства (выберите основание выше)',
-  review_discovered_during_cassation:
-    'Обнаружено при рассмотрении кассационной/надзорной жалобы, представления',
-  review_publication_date:
-    'Дата опубликования постановления Пленума/Президиума ВС РФ в сети «Интернет»',
-  review_refusal_ruling_received_date:
-    'Дата получения копии определения об отказе в передаче жалобы для рассмотрения',
-  review_last_act_entry_into_force_date:
-    'Дата вступления в силу последнего судебного постановления по делу',
-};
+//
+// INPUT_LABELS — общий словарь с src/views.js, см. src/labels.js. Единая
+// подпись используется и в списке «что ещё уточнить» на карточке, и на самой
+// форме; отдельного фолбэка для review_circumstance_date без выбранного
+// основания больше нет — INPUT_LABELS.review_circumstance_date годится и для
+// этого случая (см. renderReviewGroundFields ниже: при выбранном основании
+// подпись всё равно берётся из REVIEW_GROUNDS[ground].date_label).
 const INPUT_HINTS = {
   appeal_filed_date: 'Если жалоба подана, укажите дату',
   appeal_ruling_date: 'Дата оглашения апелляционного определения',
