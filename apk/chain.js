@@ -10,10 +10,15 @@
 //   ч. 1 — вступление решения в законную силу (ENTRY_INTO_FORCE_APK). Момент
 //     смены статуса решения, а не срок для совершения действия, поэтому узел
 //     устроен принципиально иначе остальных — см. комментарий к нему.
-// ст. 276 — срок:
+// ст. 276 — сроки:
 //   ч. 1 — общий срок подачи кассационной жалобы (CASSATION_GENERAL_APK). Два
 //     месяца со дня вступления в силу; якорь берётся из entry_into_force_apk
 //     без дополнительной логики — см. комментарий к узлу.
+//   ч. 2 — предельный срок подачи ходатайства о восстановлении пропущенного
+//     срока (CASSATION_GENERAL_APK_RESTORATION). Тот же паттерн трёх категорий
+//     субъектов, что и у APPEAL_GENERAL_APK_RESTORATION, с одним отличием:
+//     якорь категории participating_duly_notified — день вступления в силу
+//     (через entry_into_force_apk), а не decision_full_text_date напрямую.
 // Регистрация узлов в UI-реестре ситуаций и в .ics-реестре — отдельная
 // задача (нет поля ics — оно сейчас нерабочее, ни один реестр apk/ не сканирует
 // экспорты этого модуля).
@@ -328,4 +333,105 @@ export const CASSATION_GENERAL_APK = {
 export function computeCassationGeneralApk(inputs) {
   const entry = computeEntryIntoForceApk(inputs);
   return computeSimpleTerm(CASSATION_GENERAL_APK, entry.date);
+}
+
+// --- Восстановление срока кассации (ч. 2 ст. 276 АПК РФ) ---------------------
+//
+// Тот же паттерн трёх категорий субъектов, что и у
+// APPEAL_GENERAL_APK_RESTORATION (ч. 2 ст. 259) — норма регулирует и здесь две
+// разные вещи, и узел считает только вторую:
+//   (а) уважительность причин пропуска — судебное усмотрение (п. 12
+//       Постановления Пленума ВС РФ от 30.06.2020 № 13). Не вычисляется;
+//   (б) формальный предельный срок подачи ходатайства — шесть месяцев от точки
+//       отсчёта, зависящей от категории субъекта. Это и считается.
+//
+// Категории и якоря — те же три, что в задаче 1c, с одним содержательным
+// отличием:
+//   participating_duly_notified — участвовавшее в деле лицо, надлежаще
+//     извещённое; якорь — день ВСТУПЛЕНИЯ В ЗАКОННУЮ СИЛУ (через
+//     entry_into_force_apk), а не день принятия решения, как в ст. 259 — по
+//     прямому тексту первой части ч. 2 ст. 276;
+//   article_42_person — лицо по ст. 42 АПК РФ; якорь — та же
+//     learned_of_violation_date, что и в образце (ч. 2 ст. 276, вторая часть);
+//   participating_improperly_notified — участвовавшее в деле лицо, ненадлежаще
+//     извещённое; та же learned_of_violation_date, но основание — не текст
+//     самой ч. 2 ст. 276, а п. 10 Постановления № 13.
+//
+// Арифметика у всех трёх одна: шесть месяцев с переносом последнего дня на
+// рабочий (ч. 4 ст. 113, ч. 2, 4 ст. 114 АПК РФ).
+
+export const CASSATION_GENERAL_APK_RESTORATION = {
+  id: 'cassation_general_apk_restoration',
+  title: 'Восстановление срока подачи кассационной жалобы (предельный срок, АПК)',
+  duration: { value: 6, unit: 'month' },
+  anchor: { offset_start: 1 },
+  weekend_shift: true,
+  logic:
+    'Предельный срок для подачи ходатайства о восстановлении пропущенного срока ' +
+    'кассационного обжалования (ч. 2 ст. 276 АПК РФ). Не решает вопрос о наличии ' +
+    'уважительных причин пропуска — это оценивает суд (п. 12 Постановления Пленума ' +
+    'ВС РФ от 30.06.2020 № 13); считает только крайнюю дату подачи ходатайства. ' +
+    'Для участвовавшего в деле лица, надлежаще извещённого о разбирательстве, — ' +
+    '6 месяцев со дня вступления решения в законную силу (ч. 2 ст. 276 АПК РФ). ' +
+    'Для лица, указанного в ст. 42 АПК РФ, и для участвовавшего в деле лица, ' +
+    'ненадлежаще извещённого о времени и месте заседания (п. 10 Постановления ' +
+    '№ 13), — 6 месяцев со дня, когда лицо узнало или должно было узнать о ' +
+    'нарушении своих прав.',
+  midnight_rule:
+    'ч. 5, 6 ст. 114 АПК РФ — процессуальное действие может быть совершено, а ' +
+    'ходатайство сдано на почту, до 24:00 последнего дня срока.',
+  norm_versions: [
+    {
+      id: 'current',
+      from: null,
+      to: null,
+      anchor: { offset_start: 1 },
+      norm: {
+        primary: 'ч. 2 ст. 276 АПК РФ',
+        calculation: ['ч. 4 ст. 113', 'ч. 2, 4 ст. 114 АПК РФ'],
+        clarification: 'п. 10, 12 Постановления Пленума ВС РФ от 30.06.2020 № 13; ст. 42 АПК РФ',
+      },
+    },
+  ],
+};
+
+const CASSATION_RESTORATION_SUBJECT_CATEGORIES = new Set([
+  'participating_duly_notified',
+  'article_42_person',
+  'participating_improperly_notified',
+]);
+
+/**
+ * Предельный срок подачи ходатайства о восстановлении срока кассационного
+ * обжалования по ч. 2 ст. 276 АПК РФ. Структура — как у
+ * computeAppealGeneralApkRestoration (задача 1c), но якорь категории
+ * participating_duly_notified — день вступления в силу (через
+ * computeEntryIntoForceApk), а не decision_full_text_date напрямую.
+ *
+ * @param {{
+ *   subject_category: 'participating_duly_notified' | 'article_42_person' | 'participating_improperly_notified',
+ *   learned_of_violation_date?: string,
+ * } & Partial<Parameters<typeof computeEntryIntoForceApk>[0]>} inputs
+ */
+export function computeCassationGeneralApkRestoration(inputs) {
+  const category = inputs?.subject_category;
+  if (!CASSATION_RESTORATION_SUBJECT_CATEGORIES.has(category)) {
+    throw new Error(
+      `subject_category должен быть одним из: ${[...CASSATION_RESTORATION_SUBJECT_CATEGORIES].join(', ')}`,
+    );
+  }
+
+  let anchorInput;
+  if (category === 'participating_duly_notified') {
+    const entry = computeEntryIntoForceApk(inputs);
+    anchorInput = entry.date;
+  } else {
+    anchorInput = inputs.learned_of_violation_date;
+    if (anchorInput == null) {
+      throw new Error(`Для категории ${category} обязательна learned_of_violation_date`);
+    }
+  }
+
+  const calc = computeSimpleTerm(CASSATION_GENERAL_APK_RESTORATION, anchorInput);
+  return { ...calc, subject_category: category };
 }

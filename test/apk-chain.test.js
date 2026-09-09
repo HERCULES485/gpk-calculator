@@ -1,7 +1,8 @@
 // Тесты узлов модуля АПК: ст. 259 ч. 1 — общий месячный срок (задача 1b),
 // ст. 259 ч. 2 — предельный срок ходатайства о восстановлении (задача 1c),
 // ст. 180 ч. 1 — вступление решения в законную силу (задача 2a),
-// ст. 276 ч. 1 — общий срок кассационной жалобы (задача 3a).
+// ст. 276 ч. 1 — общий срок кассационной жалобы (задача 3a),
+// ст. 276 ч. 2 — предельный срок ходатайства о восстановлении (задача 3b).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,6 +15,8 @@ import {
   computeEntryIntoForceApk,
   computeCassationGeneralApk,
   CASSATION_GENERAL_APK,
+  computeCassationGeneralApkRestoration,
+  CASSATION_GENERAL_APK_RESTORATION,
 } from '../apk/chain.js';
 
 test('appeal_general_apk считается от decision_full_text_date (обычная дата, без переноса)', () => {
@@ -353,4 +356,130 @@ test('кассация АПК: ошибка валидации entry_into_force_
 test('кассация АПК: объём задачи 3a — без restoration_norm и без ics', () => {
   assert.equal(CASSATION_GENERAL_APK.restoration_norm, undefined);
   assert.equal(CASSATION_GENERAL_APK.ics, undefined);
+});
+
+// --- Восстановление срока кассации (ч. 2 ст. 276 АПК РФ) ---------------------
+
+test('восстановление кассации АПК: участвовавшее лицо, надлежаще извещённое — 6 месяцев со дня ВСТУПЛЕНИЯ В СИЛУ', () => {
+  // Якорь — день вступления в силу (через entry_into_force_apk), а не день
+  // принятия решения (decision_full_text_date), как в ст. 259.
+  const decision = '2025-02-10';
+  const entry = computeEntryIntoForceApk({ appeal_filed: false, decision_full_text_date: decision });
+  assert.equal(entry.date, '2025-03-11');
+
+  const term = computeCassationGeneralApkRestoration({
+    subject_category: 'participating_duly_notified',
+    appeal_filed: false,
+    decision_full_text_date: decision,
+  });
+  assert.equal(term.anchor, entry.date);
+  assert.equal(term.anchor, '2025-03-11');
+  assert.notEqual(term.anchor, decision); // не decision_full_text_date напрямую
+  assert.equal(term.raw_deadline, '2025-09-11');
+  assert.equal(term.deadline, '2025-09-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 6, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 2 ст. 276 АПК РФ');
+});
+
+test('восстановление кассации АПК: лицо по ст. 42 — 6 месяцев со дня, когда узнало о нарушении прав', () => {
+  const term = computeCassationGeneralApkRestoration({
+    subject_category: 'article_42_person',
+    learned_of_violation_date: '2025-06-10',
+  });
+  assert.equal(term.anchor, '2025-06-10');
+  assert.equal(term.raw_deadline, '2025-12-10');
+  assert.equal(term.deadline, '2025-12-10');
+  assert.equal(term.shifted, false);
+});
+
+test('восстановление кассации АПК: ненадлежаще извещённое лицо считается от СВОЕЙ learned_of_violation_date, а не от даты вступления в силу', () => {
+  const term = computeCassationGeneralApkRestoration({
+    subject_category: 'participating_improperly_notified',
+    learned_of_violation_date: '2024-11-12',
+  });
+  assert.equal(term.anchor, '2024-11-12');
+  assert.equal(term.deadline, '2025-05-12');
+  assert.notEqual(term.anchor, '2025-03-11'); // не якорь из теста participating_duly_notified
+});
+
+test('восстановление кассации АПК: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeCassationGeneralApkRestoration({
+    subject_category: 'article_42_person',
+    learned_of_violation_date: '2025-01-05',
+  });
+  // 05.01.2025 + 6 месяцев = 05.07.2025 (суббота) -> перенос на 07.07.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-07-05');
+  assert.equal(term.deadline, '2025-07-07');
+  assert.equal(term.shifted, true);
+});
+
+test('восстановление кассации АПК: правило "нет такого числа" (ч. 2 ст. 114 АПК РФ) — 31 октября -> 30 апреля', () => {
+  const term = computeCassationGeneralApkRestoration({
+    subject_category: 'article_42_person',
+    learned_of_violation_date: '2025-10-31',
+  });
+  assert.equal(term.raw_deadline, '2026-04-30');
+  assert.equal(term.deadline, '2026-04-30');
+  assert.equal(term.shifted, false);
+});
+
+test('восстановление кассации АПК: subject_category отсутствует или неизвестна — ошибка со списком допустимых значений', () => {
+  const expected =
+    /participating_duly_notified.*article_42_person.*participating_improperly_notified/;
+  assert.throws(() => computeCassationGeneralApkRestoration({}), expected);
+  assert.throws(
+    () =>
+      computeCassationGeneralApkRestoration({
+        subject_category: 'unknown_category',
+        learned_of_violation_date: '2025-06-10',
+      }),
+    expected,
+  );
+});
+
+test('восстановление кассации АПК: participating_duly_notified без данных для entry_into_force_apk — ошибка всплывает наружу', () => {
+  // subject_category валиден, но appeal_filed отсутствует — это ошибка
+  // computeEntryIntoForceApk, а не собственная валидация узла восстановления;
+  // проверяем, что делегирование работает (по аналогии с задачей 3a).
+  assert.throws(
+    () => computeCassationGeneralApkRestoration({ subject_category: 'participating_duly_notified' }),
+    /appeal_filed/,
+  );
+  assert.throws(
+    () =>
+      computeCassationGeneralApkRestoration({
+        subject_category: 'participating_duly_notified',
+        appeal_filed: false,
+      }),
+    /decision_full_text_date/,
+  );
+});
+
+test('восстановление кассации АПК: категории со ст. 42 без learned_of_violation_date — ошибка', () => {
+  for (const category of ['article_42_person', 'participating_improperly_notified']) {
+    assert.throws(
+      () => computeCassationGeneralApkRestoration({ subject_category: category }),
+      /learned_of_violation_date/,
+      `категория ${category}: должна требовать learned_of_violation_date`,
+    );
+  }
+});
+
+test('восстановление кассации АПК: результат несёт subject_category, совпадающий с переданной', () => {
+  const byCategory = {
+    participating_duly_notified: { appeal_filed: false, decision_full_text_date: '2025-02-10' },
+    article_42_person: { learned_of_violation_date: '2025-06-10' },
+    participating_improperly_notified: { learned_of_violation_date: '2024-11-12' },
+  };
+  for (const [category, dates] of Object.entries(byCategory)) {
+    const term = computeCassationGeneralApkRestoration({ subject_category: category, ...dates });
+    assert.equal(term.subject_category, category);
+    assert.equal(term.id, 'cassation_general_apk_restoration');
+  }
+});
+
+test('восстановление кассации АПК: объём задачи 3b — без restoration_norm и без ics', () => {
+  assert.equal(CASSATION_GENERAL_APK_RESTORATION.restoration_norm, undefined);
+  assert.equal(CASSATION_GENERAL_APK_RESTORATION.ics, undefined);
 });
