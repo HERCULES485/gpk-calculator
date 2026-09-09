@@ -1,5 +1,6 @@
-// Тесты узлов ст. 259 АПК РФ: ч. 1 — общий месячный срок (задача 1b),
-// ч. 2 — предельный срок ходатайства о восстановлении (задача 1c).
+// Тесты узлов модуля АПК: ст. 259 ч. 1 — общий месячный срок (задача 1b),
+// ст. 259 ч. 2 — предельный срок ходатайства о восстановлении (задача 1c),
+// ст. 180 ч. 1 — вступление решения в законную силу (задача 2a).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -9,6 +10,7 @@ import {
   APPEAL_GENERAL_APK,
   computeAppealGeneralApkRestoration,
   APPEAL_GENERAL_APK_RESTORATION,
+  computeEntryIntoForceApk,
 } from '../apk/chain.js';
 
 test('appeal_general_apk считается от decision_full_text_date (обычная дата, без переноса)', () => {
@@ -159,4 +161,107 @@ test('восстановление АПК: результат несёт subject
 test('восстановление АПК: объём задачи 1c — без restoration_norm и без ics', () => {
   assert.equal(APPEAL_GENERAL_APK_RESTORATION.restoration_norm, undefined);
   assert.equal(APPEAL_GENERAL_APK_RESTORATION.ics, undefined);
+});
+
+// --- Вступление в законную силу (ч. 1 ст. 180 АПК РФ) ------------------------
+
+test('вступление в силу АПК: жалоба не подана — день, следующий за дедлайном апелляции', () => {
+  const entry = computeEntryIntoForceApk({
+    appeal_filed: false,
+    decision_full_text_date: '2025-03-10',
+  });
+  // Дедлайн апелляции — 10.04.2025 (четверг, переноса нет), вступление — 11.04 (пятница).
+  assert.equal(entry.date, '2025-04-11');
+  assert.equal(entry.id, 'entry_into_force_apk');
+  assert.equal(entry.based_on, 'appeal_general_apk');
+});
+
+test('вступление в силу АПК: дедлайн апелляции в пятницу — вступление в СУББОТУ, без переноса на понедельник', () => {
+  // Ключевой тест: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ) относится
+  // к последнему дню срока и уже применён внутри appeal_general_apk. К самой
+  // дате вступления в силу он не применяется второй раз — она может прийтись
+  // на выходной.
+  const appeal = computeAppealGeneralApk({ decision_full_text_date: '2025-03-11' });
+  assert.equal(appeal.deadline, '2025-04-11'); // пятница
+  assert.equal(appeal.shifted, false);
+
+  const entry = computeEntryIntoForceApk({
+    appeal_filed: false,
+    decision_full_text_date: '2025-03-11',
+  });
+  assert.equal(entry.date, '2025-04-12'); // суббота — переноса нет
+  assert.equal(new Date(`${entry.date}T00:00:00Z`).getUTCDay(), 6, 'должна быть суббота');
+  assert.notEqual(entry.date, '2025-04-14'); // не понедельник
+});
+
+test('вступление в силу АПК: считается от ПЕРЕНЕСЁННОГО дедлайна апелляции, а не от сырой даты', () => {
+  // 05.03.2025 + 1 месяц = 05.04.2025 (суббота) -> дедлайн переносится на
+  // 07.04.2025 (понедельник). Вступление считается от перенесённого дня.
+  const appeal = computeAppealGeneralApk({ decision_full_text_date: '2025-03-05' });
+  assert.equal(appeal.raw_deadline, '2025-04-05');
+  assert.equal(appeal.deadline, '2025-04-07');
+  assert.equal(appeal.shifted, true);
+
+  const entry = computeEntryIntoForceApk({
+    appeal_filed: false,
+    decision_full_text_date: '2025-03-05',
+  });
+  assert.equal(entry.date, '2025-04-08'); // вторник = перенесённый дедлайн + 1
+  assert.notEqual(entry.date, '2025-04-06'); // не сырой дедлайн + 1
+});
+
+test('вступление в силу АПК: жалоба подана и решение оставлено без изменения — дата постановления апелляции как есть', () => {
+  const entry = computeEntryIntoForceApk({
+    appeal_filed: true,
+    appeal_outcome: 'affirmed',
+    appellate_ruling_date: '2025-08-20',
+    // Дата решения первой инстанции для этой ветки не используется.
+    decision_full_text_date: '2025-03-11',
+  });
+  assert.equal(entry.date, '2025-08-20');
+  assert.equal(entry.based_on, 'appellate_ruling_date');
+  assert.notEqual(entry.date, '2025-04-12'); // не результат ветки «жалоба не подана»
+});
+
+test('вступление в силу АПК: appeal_filed не передан — ошибка', () => {
+  assert.throws(
+    () => computeEntryIntoForceApk({ decision_full_text_date: '2025-03-11' }),
+    /appeal_filed/,
+  );
+});
+
+test('вступление в силу АПК: appeal_filed=false без decision_full_text_date — ошибка', () => {
+  assert.throws(
+    () => computeEntryIntoForceApk({ appeal_filed: false }),
+    /decision_full_text_date/,
+  );
+});
+
+test('вступление в силу АПК: жалоба подана без подтверждения исхода — ошибка о неподдерживаемом случае', () => {
+  const expected = /отменено\/изменено.*не поддерживается|appeal_outcome/;
+  // Исход не указан вовсе.
+  assert.throws(
+    () => computeEntryIntoForceApk({ appeal_filed: true, appellate_ruling_date: '2025-08-20' }),
+    expected,
+  );
+  // Исход указан, но не 'affirmed' — угадывать нельзя.
+  for (const outcome of ['reversed', 'modified', 'unknown']) {
+    assert.throws(
+      () =>
+        computeEntryIntoForceApk({
+          appeal_filed: true,
+          appeal_outcome: outcome,
+          appellate_ruling_date: '2025-08-20',
+        }),
+      expected,
+      `исход ${outcome}: должен приводить к ошибке, а не к догадке`,
+    );
+  }
+});
+
+test('вступление в силу АПК: appeal_filed=true, исход affirmed, но без appellate_ruling_date — ошибка', () => {
+  assert.throws(
+    () => computeEntryIntoForceApk({ appeal_filed: true, appeal_outcome: 'affirmed' }),
+    /appellate_ruling_date/,
+  );
 });
