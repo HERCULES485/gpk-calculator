@@ -1,6 +1,7 @@
 // Тесты узлов модуля АПК: ст. 259 ч. 1 — общий месячный срок (задача 1b),
 // ст. 259 ч. 2 — предельный срок ходатайства о восстановлении (задача 1c),
-// ст. 180 ч. 1 — вступление решения в законную силу (задача 2a).
+// ст. 180 ч. 1 — вступление решения в законную силу (задача 2a),
+// ст. 276 ч. 1 — общий срок кассационной жалобы (задача 3a).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,6 +12,8 @@ import {
   computeAppealGeneralApkRestoration,
   APPEAL_GENERAL_APK_RESTORATION,
   computeEntryIntoForceApk,
+  computeCassationGeneralApk,
+  CASSATION_GENERAL_APK,
 } from '../apk/chain.js';
 
 test('appeal_general_apk считается от decision_full_text_date (обычная дата, без переноса)', () => {
@@ -264,4 +267,90 @@ test('вступление в силу АПК: appeal_filed=true, исход aff
     () => computeEntryIntoForceApk({ appeal_filed: true, appeal_outcome: 'affirmed' }),
     /appellate_ruling_date/,
   );
+});
+
+// --- Кассационная жалоба, общий срок (ч. 1 ст. 276 АПК РФ) -------------------
+
+test('кассация АПК: жалоба на решение первой инстанции не подавалась — 2 месяца от вступления в силу', () => {
+  // Решение 10.03.2025 -> апелляция (месяц) деадлайн 10.04.2025 (четверг, без
+  // переноса) -> вступление в силу 11.04.2025 -> кассация (2 месяца) 11.06.2025.
+  const decision = '2025-03-10';
+  const appeal = computeAppealGeneralApk({ decision_full_text_date: decision });
+  assert.equal(appeal.deadline, '2025-04-10');
+  const entry = computeEntryIntoForceApk({ appeal_filed: false, decision_full_text_date: decision });
+  assert.equal(entry.date, '2025-04-11');
+
+  const cassation = computeCassationGeneralApk({
+    appeal_filed: false,
+    decision_full_text_date: decision,
+  });
+  assert.equal(cassation.anchor, '2025-04-11');
+  assert.equal(cassation.raw_deadline, '2025-06-11');
+  assert.equal(cassation.deadline, '2025-06-11');
+  assert.equal(cassation.shifted, false);
+  assert.equal(cassation.norm.primary, 'ч. 1 ст. 276 АПК РФ');
+});
+
+test('кассация АПК: жалоба подана и решение оставлено без изменения — 2 месяца от даты постановления апелляции', () => {
+  const cassation = computeCassationGeneralApk({
+    appeal_filed: true,
+    appeal_outcome: 'affirmed',
+    appellate_ruling_date: '2025-08-20',
+  });
+  assert.equal(cassation.anchor, '2025-08-20');
+  assert.equal(cassation.raw_deadline, '2025-10-20');
+  assert.equal(cassation.deadline, '2025-10-20');
+  assert.equal(cassation.shifted, false);
+});
+
+test('кассация АПК: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const cassation = computeCassationGeneralApk({
+    appeal_filed: true,
+    appeal_outcome: 'affirmed',
+    appellate_ruling_date: '2025-01-08',
+  });
+  // 08.01.2025 + 2 месяца = 08.03.2025 (суббота) -> перенос на 10.03.2025 (понедельник).
+  assert.equal(cassation.raw_deadline, '2025-03-08');
+  assert.equal(cassation.deadline, '2025-03-10');
+  assert.equal(cassation.shifted, true);
+});
+
+test('кассация АПК: правило "нет такого числа" (ч. 2 ст. 114 АПК РФ) — 31 декабря -> 28 февраля', () => {
+  const cassation = computeCassationGeneralApk({
+    appeal_filed: true,
+    appeal_outcome: 'affirmed',
+    appellate_ruling_date: '2024-12-31',
+  });
+  // В феврале 2025 (невисокосный) нет 31-го числа — срок истекает в последний
+  // день месяца.
+  assert.equal(cassation.raw_deadline, '2025-02-28');
+  assert.equal(cassation.deadline, '2025-02-28');
+  assert.equal(cassation.shifted, false);
+});
+
+test('кассация АПК: ошибка валидации entry_into_force_apk всплывает наружу, а не проглатывается', () => {
+  // appeal_filed отсутствует — это ошибка computeEntryIntoForceApk, а не
+  // собственная валидация кассации; проверяем, что делегирование работает.
+  assert.throws(
+    () => computeCassationGeneralApk({ decision_full_text_date: '2025-03-11' }),
+    /appeal_filed/,
+  );
+  assert.throws(
+    () => computeCassationGeneralApk({ appeal_filed: false }),
+    /decision_full_text_date/,
+  );
+  assert.throws(
+    () =>
+      computeCassationGeneralApk({
+        appeal_filed: true,
+        appeal_outcome: 'reversed',
+        appellate_ruling_date: '2025-08-20',
+      }),
+    /отменено\/изменено.*не поддерживается|appeal_outcome/,
+  );
+});
+
+test('кассация АПК: объём задачи 3a — без restoration_norm и без ics', () => {
+  assert.equal(CASSATION_GENERAL_APK.restoration_norm, undefined);
+  assert.equal(CASSATION_GENERAL_APK.ics, undefined);
 });
