@@ -4,7 +4,8 @@
 // ст. 276 ч. 1 — общий срок кассационной жалобы (задача 3a),
 // ст. 276 ч. 2 — предельный срок ходатайства о восстановлении (задача 3b),
 // ст. 291.2 ч. 1 — вступление в силу после кассации, якорь (задача 4a),
-// ст. 291.2 ч. 1 — общий срок кассации в СК ВС РФ (задача 4b).
+// ст. 291.2 ч. 1 — общий срок кассации в СК ВС РФ (задача 4b),
+// ст. 291.2 ч. 2 — предельный срок ходатайства о восстановлении (задача 4c).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -22,6 +23,8 @@ import {
   computeEntryIntoForceAfterCassationApk,
   computeCassationVsApk,
   CASSATION_VS_APK,
+  computeCassationVsApkRestoration,
+  CASSATION_VS_APK_RESTORATION,
 } from '../apk/chain.js';
 
 test('appeal_general_apk считается от decision_full_text_date (обычная дата, без переноса)', () => {
@@ -663,4 +666,129 @@ test('кассация в СК ВС РФ АПК: ошибка валидации
 test('кассация в СК ВС РФ АПК: объём задачи 4b — без restoration_norm и без ics', () => {
   assert.equal(CASSATION_VS_APK.restoration_norm, undefined);
   assert.equal(CASSATION_VS_APK.ics, undefined);
+});
+
+// --- Восстановление срока кассации в Судебную коллегию ВС РФ (ч. 2 ст. 291.2 АПК РФ) ---
+
+test('восстановление кассации в СК ВС РФ АПК: участвовавшее лицо — 6 месяцев со дня вступления в силу после кассации', () => {
+  const decision = '2025-06-10';
+  const cassation = computeCassationGeneralApk({ appeal_filed: false, decision_full_text_date: decision });
+  assert.equal(cassation.deadline, '2025-09-11');
+  const entry = computeEntryIntoForceAfterCassationApk({
+    cassation_filed: false,
+    appeal_filed: false,
+    decision_full_text_date: decision,
+  });
+  assert.equal(entry.date, '2025-09-12');
+
+  const term = computeCassationVsApkRestoration({
+    subject_category: 'participating_duly_notified',
+    cassation_filed: false,
+    appeal_filed: false,
+    decision_full_text_date: decision,
+  });
+  assert.equal(term.anchor, entry.date);
+  assert.equal(term.anchor, '2025-09-12');
+  assert.equal(term.raw_deadline, '2026-03-12');
+  assert.equal(term.deadline, '2026-03-12');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 6, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 2 ст. 291.2 АПК РФ');
+});
+
+test('восстановление кассации в СК ВС РФ АПК: лицо по ст. 42 — 6 месяцев со дня, когда узнало о нарушении прав', () => {
+  const term = computeCassationVsApkRestoration({
+    subject_category: 'article_42_person',
+    learned_of_violation_date: '2025-06-10',
+  });
+  assert.equal(term.anchor, '2025-06-10');
+  assert.equal(term.raw_deadline, '2025-12-10');
+  assert.equal(term.deadline, '2025-12-10');
+  assert.equal(term.shifted, false);
+});
+
+test('восстановление кассации в СК ВС РФ АПК: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeCassationVsApkRestoration({
+    subject_category: 'article_42_person',
+    learned_of_violation_date: '2025-01-05',
+  });
+  // 05.01.2025 + 6 месяцев = 05.07.2025 (суббота) -> перенос на 07.07.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-07-05');
+  assert.equal(term.deadline, '2025-07-07');
+  assert.equal(term.shifted, true);
+});
+
+test('восстановление кассации в СК ВС РФ АПК: правило "нет такого числа" (ч. 2 ст. 114 АПК РФ) — 31 октября -> 30 апреля', () => {
+  const term = computeCassationVsApkRestoration({
+    subject_category: 'article_42_person',
+    learned_of_violation_date: '2025-10-31',
+  });
+  assert.equal(term.raw_deadline, '2026-04-30');
+  assert.equal(term.deadline, '2026-04-30');
+  assert.equal(term.shifted, false);
+});
+
+test('восстановление кассации в СК ВС РФ АПК: subject_category отсутствует или неизвестна — ошибка со списком ИЗ ДВУХ допустимых значений', () => {
+  const expected = /participating_duly_notified.*article_42_person/;
+  assert.throws(
+    () =>
+      computeCassationVsApkRestoration({
+        subject_category: 'participating_improperly_notified',
+        learned_of_violation_date: '2025-06-10',
+      }),
+    expected,
+  );
+
+  // subject_category отсутствует — тот же список, и явно без третьей категории:
+  // текста "participating_improperly_notified" в сообщении быть не должно.
+  try {
+    computeCassationVsApkRestoration({});
+    assert.fail('ожидалась ошибка');
+  } catch (err) {
+    assert.match(err.message, expected);
+    assert.ok(!err.message.includes('participating_improperly_notified'));
+  }
+});
+
+test('восстановление кассации в СК ВС РФ АПК: participating_duly_notified без данных для entry_into_force_after_cassation_apk — ошибка всплывает наружу (минимум два уровня цепочки)', () => {
+  // Уровень 1: cassation_filed отсутствует — ошибка computeEntryIntoForceAfterCassationApk.
+  assert.throws(
+    () => computeCassationVsApkRestoration({ subject_category: 'participating_duly_notified' }),
+    /cassation_filed/,
+  );
+  // Уровень 2: cassation_filed=false, но appeal_filed отсутствует — ошибка
+  // computeEntryIntoForceApk, всплывающая сквозь cassation_general_apk и
+  // entry_into_force_after_cassation_apk.
+  assert.throws(
+    () =>
+      computeCassationVsApkRestoration({
+        subject_category: 'participating_duly_notified',
+        cassation_filed: false,
+      }),
+    /appeal_filed/,
+  );
+});
+
+test('восстановление кассации в СК ВС РФ АПК: article_42_person без learned_of_violation_date — ошибка', () => {
+  assert.throws(
+    () => computeCassationVsApkRestoration({ subject_category: 'article_42_person' }),
+    /learned_of_violation_date/,
+  );
+});
+
+test('восстановление кассации в СК ВС РФ АПК: результат несёт subject_category, совпадающий с переданной', () => {
+  const byCategory = {
+    participating_duly_notified: { cassation_filed: false, appeal_filed: false, decision_full_text_date: '2025-06-10' },
+    article_42_person: { learned_of_violation_date: '2025-06-10' },
+  };
+  for (const [category, dates] of Object.entries(byCategory)) {
+    const term = computeCassationVsApkRestoration({ subject_category: category, ...dates });
+    assert.equal(term.subject_category, category);
+    assert.equal(term.id, 'cassation_vs_apk_restoration');
+  }
+});
+
+test('восстановление кассации в СК ВС РФ АПК: объём задачи 4c — без restoration_norm и без ics', () => {
+  assert.equal(CASSATION_VS_APK_RESTORATION.restoration_norm, undefined);
+  assert.equal(CASSATION_VS_APK_RESTORATION.ics, undefined);
 });
