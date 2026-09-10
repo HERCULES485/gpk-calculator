@@ -3,7 +3,8 @@
 // ст. 180 ч. 1 — вступление решения в законную силу (задача 2a),
 // ст. 276 ч. 1 — общий срок кассационной жалобы (задача 3a),
 // ст. 276 ч. 2 — предельный срок ходатайства о восстановлении (задача 3b),
-// ст. 291.2 ч. 1 — вступление в силу после кассации, якорь (задача 4a).
+// ст. 291.2 ч. 1 — вступление в силу после кассации, якорь (задача 4a),
+// ст. 291.2 ч. 1 — общий срок кассации в СК ВС РФ (задача 4b).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,6 +20,8 @@ import {
   computeCassationGeneralApkRestoration,
   CASSATION_GENERAL_APK_RESTORATION,
   computeEntryIntoForceAfterCassationApk,
+  computeCassationVsApk,
+  CASSATION_VS_APK,
 } from '../apk/chain.js';
 
 test('appeal_general_apk считается от decision_full_text_date (обычная дата, без переноса)', () => {
@@ -574,4 +577,90 @@ test('вступление в силу после кассации АПК: cassa
     () => computeEntryIntoForceAfterCassationApk({ cassation_filed: true }),
     /district_cassation_ruling_date/,
   );
+});
+
+// --- Кассационная жалоба в Судебную коллегию ВС РФ, общий срок (ч. 1 ст. 291.2 АПК РФ) ---
+
+test('кассация в СК ВС РФ АПК: окружная кассация не подавалась — 2 месяца от вступления в силу после кассации', () => {
+  // Решение 10.06.2025 -> дедлайн кассации 11.09.2025 (четверг, без переноса)
+  // -> вступление в силу после кассации 12.09.2025 -> кассация в СК ВС РФ
+  // (2 месяца) 12.11.2025.
+  const decision = '2025-06-10';
+  const cassation = computeCassationGeneralApk({ appeal_filed: false, decision_full_text_date: decision });
+  assert.equal(cassation.deadline, '2025-09-11');
+  const entry = computeEntryIntoForceAfterCassationApk({
+    cassation_filed: false,
+    appeal_filed: false,
+    decision_full_text_date: decision,
+  });
+  assert.equal(entry.date, '2025-09-12');
+
+  const cassationVs = computeCassationVsApk({
+    cassation_filed: false,
+    appeal_filed: false,
+    decision_full_text_date: decision,
+  });
+  assert.equal(cassationVs.anchor, '2025-09-12');
+  assert.equal(cassationVs.raw_deadline, '2025-11-12');
+  assert.equal(cassationVs.deadline, '2025-11-12');
+  assert.equal(cassationVs.shifted, false);
+  assert.equal(cassationVs.norm.primary, 'ч. 1 ст. 291.2 АПК РФ');
+});
+
+test('кассация в СК ВС РФ АПК: окружная кассация подавалась — 2 месяца от даты постановления окружной кассации', () => {
+  const cassationVs = computeCassationVsApk({
+    cassation_filed: true,
+    district_cassation_ruling_date: '2025-08-20',
+  });
+  assert.equal(cassationVs.anchor, '2025-08-20');
+  assert.equal(cassationVs.raw_deadline, '2025-10-20');
+  assert.equal(cassationVs.deadline, '2025-10-20');
+  assert.equal(cassationVs.shifted, false);
+});
+
+test('кассация в СК ВС РФ АПК: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const cassationVs = computeCassationVsApk({
+    cassation_filed: true,
+    district_cassation_ruling_date: '2025-01-08',
+  });
+  // 08.01.2025 + 2 месяца = 08.03.2025 (суббота) -> перенос на 10.03.2025 (понедельник).
+  assert.equal(cassationVs.raw_deadline, '2025-03-08');
+  assert.equal(cassationVs.deadline, '2025-03-10');
+  assert.equal(cassationVs.shifted, true);
+});
+
+test('кассация в СК ВС РФ АПК: правило "нет такого числа" (ч. 2 ст. 114 АПК РФ) — 31 декабря -> 28 февраля', () => {
+  const cassationVs = computeCassationVsApk({
+    cassation_filed: true,
+    district_cassation_ruling_date: '2024-12-31',
+  });
+  assert.equal(cassationVs.raw_deadline, '2025-02-28');
+  assert.equal(cassationVs.deadline, '2025-02-28');
+  assert.equal(cassationVs.shifted, false);
+});
+
+test('кассация в СК ВС РФ АПК: ошибка валидации нижестоящих узлов всплывает наружу (минимум два уровня цепочки)', () => {
+  // Уровень 1: cassation_filed отсутствует — ошибка computeEntryIntoForceAfterCassationApk.
+  assert.throws(
+    () => computeCassationVsApk({ appeal_filed: false, decision_full_text_date: '2025-06-10' }),
+    /cassation_filed/,
+  );
+  // Уровень 2: cassation_filed=false, но appeal_filed отсутствует — ошибка
+  // computeEntryIntoForceApk, всплывающая сквозь cassation_general_apk и
+  // entry_into_force_after_cassation_apk.
+  assert.throws(
+    () => computeCassationVsApk({ cassation_filed: false }),
+    /appeal_filed/,
+  );
+  // Уровень 3: appeal_filed=false, но decision_full_text_date отсутствует —
+  // ошибка computeAppealGeneralApk, всплывающая сквозь все промежуточные узлы.
+  assert.throws(
+    () => computeCassationVsApk({ cassation_filed: false, appeal_filed: false }),
+    /decision_full_text_date/,
+  );
+});
+
+test('кассация в СК ВС РФ АПК: объём задачи 4b — без restoration_norm и без ics', () => {
+  assert.equal(CASSATION_VS_APK.restoration_norm, undefined);
+  assert.equal(CASSATION_VS_APK.ics, undefined);
 });
