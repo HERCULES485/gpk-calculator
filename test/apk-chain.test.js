@@ -2,7 +2,8 @@
 // ст. 259 ч. 2 — предельный срок ходатайства о восстановлении (задача 1c),
 // ст. 180 ч. 1 — вступление решения в законную силу (задача 2a),
 // ст. 276 ч. 1 — общий срок кассационной жалобы (задача 3a),
-// ст. 276 ч. 2 — предельный срок ходатайства о восстановлении (задача 3b).
+// ст. 276 ч. 2 — предельный срок ходатайства о восстановлении (задача 3b),
+// ст. 291.2 ч. 1 — вступление в силу после кассации, якорь (задача 4a).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,6 +18,7 @@ import {
   CASSATION_GENERAL_APK,
   computeCassationGeneralApkRestoration,
   CASSATION_GENERAL_APK_RESTORATION,
+  computeEntryIntoForceAfterCassationApk,
 } from '../apk/chain.js';
 
 test('appeal_general_apk считается от decision_full_text_date (обычная дата, без переноса)', () => {
@@ -482,4 +484,94 @@ test('восстановление кассации АПК: результат �
 test('восстановление кассации АПК: объём задачи 3b — без restoration_norm и без ics', () => {
   assert.equal(CASSATION_GENERAL_APK_RESTORATION.restoration_norm, undefined);
   assert.equal(CASSATION_GENERAL_APK_RESTORATION.ics, undefined);
+});
+
+// --- Вступление в силу после кассации (ч. 1 ст. 291.2 АПК РФ, якорь) --------
+
+test('вступление в силу после кассации АПК: окружная кассация не подавалась — день, следующий за дедлайном cassation_general_apk', () => {
+  const decision = '2025-06-10';
+  const cassation = computeCassationGeneralApk({ appeal_filed: false, decision_full_text_date: decision });
+  assert.equal(cassation.deadline, '2025-09-11'); // четверг, без переноса
+
+  const entry = computeEntryIntoForceAfterCassationApk({
+    cassation_filed: false,
+    appeal_filed: false,
+    decision_full_text_date: decision,
+  });
+  assert.equal(entry.date, '2025-09-12'); // пятница
+  assert.equal(entry.id, 'entry_into_force_after_cassation_apk');
+  assert.equal(entry.based_on, 'cassation_general_apk');
+});
+
+test('вступление в силу после кассации АПК: дедлайн кассации сам в пятницу — вступление в СУББОТУ, без переноса на понедельник', () => {
+  const decision = '2025-01-10';
+  const cassation = computeCassationGeneralApk({ appeal_filed: false, decision_full_text_date: decision });
+  assert.equal(cassation.deadline, '2025-04-11'); // пятница
+  assert.equal(cassation.shifted, false);
+
+  const entry = computeEntryIntoForceAfterCassationApk({
+    cassation_filed: false,
+    appeal_filed: false,
+    decision_full_text_date: decision,
+  });
+  assert.equal(entry.date, '2025-04-12'); // суббота — переноса нет
+  assert.equal(new Date(`${entry.date}T00:00:00Z`).getUTCDay(), 6, 'должна быть суббота');
+  assert.notEqual(entry.date, '2025-04-14'); // не понедельник
+});
+
+test('вступление в силу после кассации АПК: считается от ПЕРЕНЕСЁННОГО дедлайна кассации, а не от raw_deadline', () => {
+  const decision = '2025-02-10';
+  const cassation = computeCassationGeneralApk({ appeal_filed: false, decision_full_text_date: decision });
+  assert.equal(cassation.raw_deadline, '2025-05-11'); // воскресенье
+  assert.equal(cassation.deadline, '2025-05-12'); // перенесено на понедельник
+  assert.equal(cassation.shifted, true);
+
+  const entry = computeEntryIntoForceAfterCassationApk({
+    cassation_filed: false,
+    appeal_filed: false,
+    decision_full_text_date: decision,
+  });
+  assert.equal(entry.date, '2025-05-13'); // вторник = перенесённый дедлайн + 1
+  assert.notEqual(entry.date, '2025-05-12'); // не raw_deadline + 1
+});
+
+test('вступление в силу после кассации АПК: окружная кассация подавалась — дата постановления как есть', () => {
+  const entry = computeEntryIntoForceAfterCassationApk({
+    cassation_filed: true,
+    district_cassation_ruling_date: '2025-11-05',
+    // Данные для ветки А для этой ветки не используются.
+    appeal_filed: false,
+    decision_full_text_date: '2025-06-10',
+  });
+  assert.equal(entry.date, '2025-11-05');
+  assert.equal(entry.based_on, 'district_cassation_ruling_date');
+  assert.notEqual(entry.date, '2025-09-12'); // не результат ветки «кассация не подавалась»
+});
+
+test('вступление в силу после кассации АПК: cassation_filed не передан — ошибка', () => {
+  assert.throws(
+    () => computeEntryIntoForceAfterCassationApk({ appeal_filed: false, decision_full_text_date: '2025-06-10' }),
+    /cassation_filed/,
+  );
+});
+
+test('вступление в силу после кассации АПК: cassation_filed=false, но не хватает данных для cassation_general_apk — ошибка всплывает от нижестоящего узла', () => {
+  // appeal_filed отсутствует — это ошибка entry_into_force_apk (через
+  // cassation_general_apk), а не собственная валидация этого узла;
+  // проверяем, что делегирование по цепочке работает, а не проглатывается.
+  assert.throws(
+    () => computeEntryIntoForceAfterCassationApk({ cassation_filed: false }),
+    /appeal_filed/,
+  );
+  assert.throws(
+    () => computeEntryIntoForceAfterCassationApk({ cassation_filed: false, appeal_filed: false }),
+    /decision_full_text_date/,
+  );
+});
+
+test('вступление в силу после кассации АПК: cassation_filed=true без district_cassation_ruling_date — ошибка', () => {
+  assert.throws(
+    () => computeEntryIntoForceAfterCassationApk({ cassation_filed: true }),
+    /district_cassation_ruling_date/,
+  );
 });

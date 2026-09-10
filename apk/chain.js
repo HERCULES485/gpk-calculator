@@ -359,6 +359,12 @@ export function computeCassationGeneralApk(inputs) {
 //
 // Арифметика у всех трёх одна: шесть месяцев с переносом последнего дня на
 // рабочий (ч. 4 ст. 113, ч. 2, 4 ст. 114 АПК РФ).
+//
+// ст. 291.2 — якорь (не срок):
+//   ч. 1 — вступление в силу «последнего обжалуемого судебного акта» после
+//     окружной кассации (ENTRY_INTO_FORCE_AFTER_CASSATION_APK). Только якорная
+//     дата для будущего срока на кассацию в Судебную коллегию ВС РФ; сама
+//     ст. 291.2 (срок + восстановление) — отдельные задачи после этой.
 
 export const CASSATION_GENERAL_APK_RESTORATION = {
   id: 'cassation_general_apk_restoration',
@@ -434,4 +440,81 @@ export function computeCassationGeneralApkRestoration(inputs) {
 
   const calc = computeSimpleTerm(CASSATION_GENERAL_APK_RESTORATION, anchorInput);
   return { ...calc, subject_category: category };
+}
+
+// --- Вступление в силу после кассации (ч. 1 ст. 291.2 АПК РФ, якорь) --------
+//
+// Это НЕ узел ст. 291.2 целиком — только якорная дата для будущего срока на
+// кассацию в Судебную коллегию ВС РФ. Сама ст. 291.2 (срок + восстановление)
+// — отдельные задачи, следующие после этой.
+//
+// «Последний обжалуемый акт» (ч. 1 ст. 291.2) — то, что уже прошло полный
+// цикл апелляция → окружная кассация: либо акт первой/апелляционной
+// инстанции (если окружную кассацию не подавали), либо постановление
+// окружной кассации (если подавали).
+//
+// Ключевое упрощение по сравнению с entry_into_force_apk (ч. 1 ст. 180): там
+// для ветки «жалоба подана» требовалось знать исход (оставлено без изменения
+// / отменено / изменено), потому что от исхода зависело, какой акт вступает
+// в силу. Здесь такой развилки нет — постановление окружной кассации
+// вступает в силу безусловно, со дня принятия, независимо от того, что оно
+// решило (ч. 5 ст. 289 АПК РФ). Поэтому у этого узла нет аналога полю
+// appeal_outcome.
+//
+// Две ветки:
+//   окружная кассация не подавалась — день, следующий за (уже перенесённым
+//     через нерабочий день) дедлайном cassation_general_apk. Перенос не
+//     применяется второй раз — та же логика, что и в entry_into_force_apk
+//     (ч. 4 ст. 114 АПК регулирует последний день самого срока на кассацию,
+//     а он уже корректно вычислен внутри cassation_general_apk);
+//   окружная кассация подавалась — дата принятия постановления окружной
+//     кассации, передаётся как есть (внешний факт, без условия на исход).
+
+export const ENTRY_INTO_FORCE_AFTER_CASSATION_APK = {
+  id: 'entry_into_force_after_cassation_apk',
+  title: 'Вступление в законную силу последнего обжалуемого акта после кассации (АПК)',
+  norm: {
+    primary: 'ч. 1 ст. 291.2 АПК РФ',
+    calculation: ['ч. 5 ст. 289 АПК РФ'],
+  },
+};
+
+/**
+ * Дата вступления в законную силу "последнего обжалуемого судебного акта"
+ * для целей исчисления срока на кассацию в Судебную коллегию ВС РФ
+ * (ч. 1 ст. 291.2 АПК РФ). Две ветки:
+ *  - окружная кассация не подавалась: день, следующий за (уже перенесённым)
+ *    дедлайном cassation_general_apk;
+ *  - окружная кассация подавалась: дата принятия её постановления, передаётся
+ *    как есть — вступает в силу безусловно (ч. 5 ст. 289 АПК РФ), без
+ *    развилки по исходу (в отличие от entry_into_force_apk).
+ *
+ * @param {{
+ *   cassation_filed: boolean,
+ *   district_cassation_ruling_date?: string,
+ * } & Parameters<typeof computeCassationGeneralApk>[0]} inputs
+ */
+export function computeEntryIntoForceAfterCassationApk(inputs) {
+  if (inputs?.cassation_filed == null) {
+    throw new Error('Обязательно явное cassation_filed (true/false)');
+  }
+
+  if (inputs.cassation_filed === false) {
+    const cassation = computeCassationGeneralApk(inputs);
+    const date = toISO(addDays(cassation.deadline, 1));
+    return {
+      id: ENTRY_INTO_FORCE_AFTER_CASSATION_APK.id,
+      date,
+      based_on: 'cassation_general_apk',
+    };
+  }
+
+  if (inputs.district_cassation_ruling_date == null) {
+    throw new Error('Для cassation_filed=true обязательна district_cassation_ruling_date');
+  }
+  return {
+    id: ENTRY_INTO_FORCE_AFTER_CASSATION_APK.id,
+    date: inputs.district_cassation_ruling_date,
+    based_on: 'district_cassation_ruling_date',
+  };
 }
