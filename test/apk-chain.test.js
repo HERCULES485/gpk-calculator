@@ -5,12 +5,15 @@
 // ст. 276 ч. 2 — предельный срок ходатайства о восстановлении (задача 3b),
 // ст. 291.2 ч. 1 — вступление в силу после кассации, якорь (задача 4a),
 // ст. 291.2 ч. 1 — общий срок кассации в СК ВС РФ (задача 4b),
-// ст. 291.2 ч. 2 — предельный срок ходатайства о восстановлении (задача 4c).
+// ст. 291.2 ч. 2 — предельный срок ходатайства о восстановлении (задача 4c),
+// ст. 188 ч. 3 — частная жалоба на определение первой инстанции (задача 5a).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  computePrivateComplaintFirstInstanceApk,
+  PRIVATE_COMPLAINT_FIRST_INSTANCE_APK,
   computeAppealGeneralApk,
   APPEAL_GENERAL_APK,
   computeAppealGeneralApkRestoration,
@@ -791,4 +794,48 @@ test('восстановление кассации в СК ВС РФ АПК: р
 test('восстановление кассации в СК ВС РФ АПК: объём задачи 4c — без restoration_norm и без ics', () => {
   assert.equal(CASSATION_VS_APK_RESTORATION.restoration_norm, undefined);
   assert.equal(CASSATION_VS_APK_RESTORATION.ics, undefined);
+});
+
+// --- Частная жалоба на определение суда первой инстанции (ч. 3 ст. 188 АПК РФ) ---
+
+test('private_complaint_first_instance_apk считается от ruling_issued_date (обычная дата, без переноса)', () => {
+  const term = computePrivateComplaintFirstInstanceApk({ ruling_issued_date: '2025-03-11' });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11'); // 11.04.2025 — пятница, рабочий день
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'ч. 3 ст. 188 АПК РФ');
+});
+
+test('private_complaint_first_instance_apk: правило "нет такого числа" (ч. 2 ст. 114 АПК РФ) — 31 января -> последний день февраля', () => {
+  const term = computePrivateComplaintFirstInstanceApk({ ruling_issued_date: '2025-01-31' });
+  // В феврале 2025 (невисокосный) нет 31-го числа — срок истекает в последний
+  // день месяца.
+  assert.equal(term.raw_deadline, '2025-02-28');
+  assert.equal(term.deadline, '2025-02-28');
+  assert.equal(term.shifted, false);
+});
+
+test('private_complaint_first_instance_apk: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computePrivateComplaintFirstInstanceApk({ ruling_issued_date: '2025-03-05' });
+  // 05.03.2025 + 1 месяц = 05.04.2025 (суббота) -> перенос на 07.04.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-04-05');
+  assert.equal(term.deadline, '2025-04-07');
+  assert.equal(term.shifted, true);
+});
+
+test('private_complaint_first_instance_apk: без ruling_issued_date — ошибка, упоминающая именно это поле', () => {
+  assert.throws(() => computePrivateComplaintFirstInstanceApk({}), /ruling_issued_date/);
+  // Явно убеждаемся, что сообщение не про decision_full_text_date — поля разные.
+  try {
+    computePrivateComplaintFirstInstanceApk({});
+    assert.fail('ожидалась ошибка');
+  } catch (err) {
+    assert.ok(!err.message.includes('decision_full_text_date'));
+  }
+});
+
+test('private_complaint_first_instance_apk: объём задачи 5a — без restoration_norm и без ics', () => {
+  assert.equal(PRIVATE_COMPLAINT_FIRST_INSTANCE_APK.restoration_norm, undefined);
+  assert.equal(PRIVATE_COMPLAINT_FIRST_INSTANCE_APK.ics, undefined);
 });
