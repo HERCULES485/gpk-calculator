@@ -27,6 +27,11 @@
 //     ВС РФ (CASSATION_VS_APK). Два месяца со дня вступления в силу; якорь
 //     берётся из entry_into_force_after_cassation_apk без дополнительной
 //     логики — та же архитектура, что у cassation_general_apk (ст. 276).
+//   ч. 2 — предельный срок подачи ходатайства о восстановлении пропущенного
+//     срока (CASSATION_VS_APK_RESTORATION). Паттерн категорий субъектов
+//     (skill apk-hard-restoration-deadline), но с отступлением: здесь только
+//     ДВЕ категории, не три — третья (ненадлежащее извещение) для этой статьи
+//     не подтверждена отдельным разъяснением Пленума.
 // Регистрация узлов в UI-реестре ситуаций и в .ics-реестре — отдельная
 // задача (нет поля ics — оно сейчас нерабочее, ни один реестр apk/ не сканирует
 // экспорты этого модуля).
@@ -577,4 +582,98 @@ export const CASSATION_VS_APK = {
 export function computeCassationVsApk(inputs) {
   const entry = computeEntryIntoForceAfterCassationApk(inputs);
   return computeSimpleTerm(CASSATION_VS_APK, entry.date);
+}
+
+// --- Восстановление срока кассации в Судебную коллегию ВС РФ (ч. 2 ст. 291.2 АПК РФ) ---
+//
+// Паттерн из skill apk-hard-restoration-deadline (уже дважды реализован: ст. 259
+// ч. 2, ст. 276 ч. 2), с сознательным отступлением: здесь ТОЛЬКО ДВЕ категории
+// субъекта, не три. Третья категория (участвовавшее в деле лицо, ненадлежаще
+// извещённое о времени и месте заседания) в ст. 259 и 276 появлялась из
+// отдельного разъяснения Пленума (п. 14 Постановления № 12 / п. 10
+// Постановления № 13) — для ст. 291.2 такое разъяснение не найдено ни в тексте
+// самой статьи, ни в Постановлении № 13. Не добавлять её без прямого
+// подтверждения в норме или разъяснении.
+//
+// Две категории:
+//   participating_duly_notified — участвовавшее в деле лицо; якорь — день
+//     вступления в законную силу обжалуемого акта (через
+//     entry_into_force_after_cassation_apk), первая часть ч. 2 ст. 291.2;
+//   article_42_person — лицо по ст. 42 АПК РФ; якорь — learned_of_violation_date,
+//     вторая часть ч. 2 ст. 291.2.
+//
+// Арифметика — шесть месяцев с переносом последнего дня на рабочий (ч. 4
+// ст. 113, ч. 2, 4 ст. 114 АПК РФ), как у аналогичных узлов ст. 259 и 276.
+
+export const CASSATION_VS_APK_RESTORATION = {
+  id: 'cassation_vs_apk_restoration',
+  title: 'Восстановление срока подачи кассационной жалобы в Судебную коллегию ВС РФ (предельный срок, АПК)',
+  duration: { value: 6, unit: 'month' },
+  anchor: { offset_start: 1 },
+  weekend_shift: true,
+  logic:
+    'Предельный срок для подачи ходатайства о восстановлении пропущенного срока ' +
+    'кассационного обжалования в Судебную коллегию ВС РФ (ч. 2 ст. 291.2 АПК РФ). ' +
+    'Не решает вопрос о наличии уважительных причин пропуска — это оценивает суд; ' +
+    'считает только крайнюю дату подачи ходатайства. Для участвовавшего в деле ' +
+    'лица — 6 месяцев со дня вступления обжалуемого акта в законную силу. Для ' +
+    'лица, указанного в ст. 42 АПК РФ, — 6 месяцев со дня, когда лицо узнало или ' +
+    'должно было узнать о нарушении своих прав. В отличие от аналогичных узлов ' +
+    'для ст. 259 и 276, здесь только две категории — третья (ненадлежащее ' +
+    'извещение) не подтверждена для этой статьи отдельным разъяснением Пленума.',
+  midnight_rule:
+    'ч. 5, 6 ст. 114 АПК РФ — процессуальное действие может быть совершено, а ' +
+    'ходатайство сдано на почту, до 24:00 последнего дня срока.',
+  norm_versions: [
+    {
+      id: 'current',
+      from: null,
+      to: null,
+      anchor: { offset_start: 1 },
+      norm: {
+        primary: 'ч. 2 ст. 291.2 АПК РФ',
+        calculation: ['ч. 4 ст. 113', 'ч. 2, 4 ст. 114 АПК РФ'],
+        clarification: 'ст. 42 АПК РФ',
+      },
+    },
+  ],
+};
+
+const CASSATION_VS_RESTORATION_SUBJECT_CATEGORIES = new Set([
+  'participating_duly_notified',
+  'article_42_person',
+]);
+
+/**
+ * Предельный срок подачи ходатайства о восстановлении срока кассационного
+ * обжалования в Судебную коллегию ВС РФ по ч. 2 ст. 291.2 АПК РФ. Две
+ * категории (не три — см. комментарий выше). Якорь категории
+ * participating_duly_notified — через computeEntryIntoForceAfterCassationApk.
+ *
+ * @param {{
+ *   subject_category: 'participating_duly_notified' | 'article_42_person',
+ *   learned_of_violation_date?: string,
+ * } & Partial<Parameters<typeof computeEntryIntoForceAfterCassationApk>[0]>} inputs
+ */
+export function computeCassationVsApkRestoration(inputs) {
+  const category = inputs?.subject_category;
+  if (!CASSATION_VS_RESTORATION_SUBJECT_CATEGORIES.has(category)) {
+    throw new Error(
+      `subject_category должен быть одним из: ${[...CASSATION_VS_RESTORATION_SUBJECT_CATEGORIES].join(', ')}`,
+    );
+  }
+
+  let anchorInput;
+  if (category === 'participating_duly_notified') {
+    const entry = computeEntryIntoForceAfterCassationApk(inputs);
+    anchorInput = entry.date;
+  } else {
+    anchorInput = inputs.learned_of_violation_date;
+    if (anchorInput == null) {
+      throw new Error(`Для категории ${category} обязательна learned_of_violation_date`);
+    }
+  }
+
+  const calc = computeSimpleTerm(CASSATION_VS_APK_RESTORATION, anchorInput);
+  return { ...calc, subject_category: category };
 }
