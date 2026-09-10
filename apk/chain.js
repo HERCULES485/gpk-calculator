@@ -19,6 +19,14 @@
 //     субъектов, что и у APPEAL_GENERAL_APK_RESTORATION, с одним отличием:
 //     якорь категории participating_duly_notified — день вступления в силу
 //     (через entry_into_force_apk), а не decision_full_text_date напрямую.
+// ст. 291.2 — якорь и срок:
+//   ч. 1 (якорь) — вступление в силу последнего обжалуемого акта после
+//     окружной кассации (ENTRY_INTO_FORCE_AFTER_CASSATION_APK). Не срок, по
+//     той же причине, что и ENTRY_INTO_FORCE_APK (ст. 180).
+//   ч. 1 (срок) — общий срок подачи кассационной жалобы в Судебную коллегию
+//     ВС РФ (CASSATION_VS_APK). Два месяца со дня вступления в силу; якорь
+//     берётся из entry_into_force_after_cassation_apk без дополнительной
+//     логики — та же архитектура, что у cassation_general_apk (ст. 276).
 // Регистрация узлов в UI-реестре ситуаций и в .ics-реестре — отдельная
 // задача (нет поля ics — оно сейчас нерабочее, ни один реестр apk/ не сканирует
 // экспорты этого модуля).
@@ -517,4 +525,56 @@ export function computeEntryIntoForceAfterCassationApk(inputs) {
     date: inputs.district_cassation_ruling_date,
     based_on: 'district_cassation_ruling_date',
   };
+}
+
+// --- Кассационная жалоба в Судебную коллегию ВС РФ, общий срок (ч. 1 ст. 291.2 АПК РФ) ---
+//
+// Та же архитектура, что у cassation_general_apk (ст. 276): полноценный
+// процессуальный срок (в отличие от entry_into_force_after_cassation_apk,
+// который сроком не является) — общие правила исчисления (ч. 4 ст. 113,
+// ч. 2, 4 ст. 114 АПК РФ) применяются без исключений, перенос через нерабочий
+// день работает как обычно.
+//
+// Якорь — результат entry_into_force_after_cassation_apk, без дополнительной
+// логики поверх.
+
+export const CASSATION_VS_APK = {
+  id: 'cassation_vs_apk',
+  title: 'Кассационная жалоба в Судебную коллегию Верховного Суда РФ (АПК)',
+  duration: { value: 2, unit: 'month' },
+  anchor: { offset_start: 1 },
+  weekend_shift: true,
+  logic:
+    'Два месяца со дня вступления в силу последнего обжалуемого судебного ' +
+    'акта, принятого по данному делу (ч. 1 ст. 291.2 АПК РФ). Якорь ' +
+    'вычисляется отдельным узлом (entry_into_force_after_cassation_apk) без ' +
+    'дополнительной логики здесь.',
+  midnight_rule:
+    'ч. 5, 6 ст. 114 АПК РФ — процессуальное действие может быть совершено, а ' +
+    'жалоба сдана на почту, до 24:00 последнего дня срока.',
+  norm_versions: [
+    {
+      id: 'current',
+      from: null,
+      to: null,
+      anchor: { offset_start: 1 },
+      norm: {
+        primary: 'ч. 1 ст. 291.2 АПК РФ',
+        calculation: ['ч. 4 ст. 113', 'ч. 2, 4 ст. 114 АПК РФ'],
+      },
+    },
+  ],
+};
+
+/**
+ * Срок подачи кассационной жалобы в Судебную коллегию ВС РФ по ч. 1
+ * ст. 291.2 АПК РФ — два месяца со дня вступления в силу последнего
+ * обжалуемого акта. Якорь берётся из entry_into_force_after_cassation_apk,
+ * принимает те же входные данные (делегирует валидацию ему).
+ *
+ * @param {Parameters<typeof computeEntryIntoForceAfterCassationApk>[0]} inputs
+ */
+export function computeCassationVsApk(inputs) {
+  const entry = computeEntryIntoForceAfterCassationApk(inputs);
+  return computeSimpleTerm(CASSATION_VS_APK, entry.date);
 }
