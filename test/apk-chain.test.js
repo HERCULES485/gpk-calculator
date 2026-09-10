@@ -6,7 +6,9 @@
 // ст. 291.2 ч. 1 — вступление в силу после кассации, якорь (задача 4a),
 // ст. 291.2 ч. 1 — общий срок кассации в СК ВС РФ (задача 4b),
 // ст. 291.2 ч. 2 — предельный срок ходатайства о восстановлении (задача 4c),
-// ст. 188 ч. 3 — частная жалоба на определение первой инстанции (задача 5a).
+// ст. 188 ч. 3 — частная жалоба на определение первой инстанции (задача 5a),
+// ст. 188 ч. 4 — частная жалоба на определение апелляционной инстанции (задача 5b),
+// ст. 188 ч. 6 — частная жалоба на определение кассационной инстанции (задача 5b).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -28,6 +30,10 @@ import {
   CASSATION_VS_APK,
   computeCassationVsApkRestoration,
   CASSATION_VS_APK_RESTORATION,
+  computePrivateComplaintAppellateApk,
+  PRIVATE_COMPLAINT_APPELLATE_APK,
+  computePrivateComplaintCassationApk,
+  PRIVATE_COMPLAINT_CASSATION_APK,
 } from '../apk/chain.js';
 
 test('appeal_general_apk считается от decision_full_text_date (обычная дата, без переноса)', () => {
@@ -838,4 +844,78 @@ test('private_complaint_first_instance_apk: без ruling_issued_date — оши
 test('private_complaint_first_instance_apk: объём задачи 5a — без restoration_norm и без ics', () => {
   assert.equal(PRIVATE_COMPLAINT_FIRST_INSTANCE_APK.restoration_norm, undefined);
   assert.equal(PRIVATE_COMPLAINT_FIRST_INSTANCE_APK.ics, undefined);
+});
+
+// --- Частная жалоба на определение суда апелляционной инстанции (ч. 4 ст. 188 АПК РФ) ---
+// Даты те же, что в задаче 5a (ч. 3 ст. 188) — арифметика идентична: та же
+// длительность (месяц) и тот же тип якоря (день вынесения определения буквально).
+
+test('private_complaint_appellate_apk считается от ruling_issued_date (обычная дата, без переноса)', () => {
+  const term = computePrivateComplaintAppellateApk({ ruling_issued_date: '2025-03-11' });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11'); // 11.04.2025 — пятница, рабочий день
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'ч. 4 ст. 188 АПК РФ');
+});
+
+test('private_complaint_appellate_apk: правило "нет такого числа" (ч. 2 ст. 114 АПК РФ) — 31 января -> последний день февраля', () => {
+  const term = computePrivateComplaintAppellateApk({ ruling_issued_date: '2025-01-31' });
+  assert.equal(term.raw_deadline, '2025-02-28');
+  assert.equal(term.deadline, '2025-02-28');
+  assert.equal(term.shifted, false);
+});
+
+test('private_complaint_appellate_apk: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computePrivateComplaintAppellateApk({ ruling_issued_date: '2025-03-05' });
+  // 05.03.2025 + 1 месяц = 05.04.2025 (суббота) -> перенос на 07.04.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-04-05');
+  assert.equal(term.deadline, '2025-04-07');
+  assert.equal(term.shifted, true);
+});
+
+test('private_complaint_appellate_apk: без ruling_issued_date — ошибка', () => {
+  assert.throws(() => computePrivateComplaintAppellateApk({}), /ruling_issued_date/);
+});
+
+test('private_complaint_appellate_apk: объём задачи 5b — без restoration_norm и без ics', () => {
+  assert.equal(PRIVATE_COMPLAINT_APPELLATE_APK.restoration_norm, undefined);
+  assert.equal(PRIVATE_COMPLAINT_APPELLATE_APK.ics, undefined);
+});
+
+// --- Частная жалоба на определение суда кассационной инстанции (ч. 6 ст. 188 АПК РФ) ---
+// Даты те же, что в задаче 5a (ч. 3 ст. 188) — арифметика идентична: та же
+// длительность (месяц) и тот же тип якоря (день вынесения определения буквально).
+
+test('private_complaint_cassation_apk считается от ruling_issued_date (обычная дата, без переноса)', () => {
+  const term = computePrivateComplaintCassationApk({ ruling_issued_date: '2025-03-11' });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11'); // 11.04.2025 — пятница, рабочий день
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'ч. 6 ст. 188 АПК РФ');
+});
+
+test('private_complaint_cassation_apk: правило "нет такого числа" (ч. 2 ст. 114 АПК РФ) — 31 января -> последний день февраля', () => {
+  const term = computePrivateComplaintCassationApk({ ruling_issued_date: '2025-01-31' });
+  assert.equal(term.raw_deadline, '2025-02-28');
+  assert.equal(term.deadline, '2025-02-28');
+  assert.equal(term.shifted, false);
+});
+
+test('private_complaint_cassation_apk: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computePrivateComplaintCassationApk({ ruling_issued_date: '2025-03-05' });
+  // 05.03.2025 + 1 месяц = 05.04.2025 (суббота) -> перенос на 07.04.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-04-05');
+  assert.equal(term.deadline, '2025-04-07');
+  assert.equal(term.shifted, true);
+});
+
+test('private_complaint_cassation_apk: без ruling_issued_date — ошибка', () => {
+  assert.throws(() => computePrivateComplaintCassationApk({}), /ruling_issued_date/);
+});
+
+test('private_complaint_cassation_apk: объём задачи 5b — без restoration_norm и без ics', () => {
+  assert.equal(PRIVATE_COMPLAINT_CASSATION_APK.restoration_norm, undefined);
+  assert.equal(PRIVATE_COMPLAINT_CASSATION_APK.ics, undefined);
 });

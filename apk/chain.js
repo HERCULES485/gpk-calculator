@@ -1,11 +1,15 @@
 // Узлы модуля АПК: апелляционное обжалование и вступление решения в силу.
 //
-// ст. 188 — срок:
+// ст. 188 — сроки:
 //   ч. 3 — частная жалоба на определение суда первой инстанции
 //     (PRIVATE_COMPLAINT_FIRST_INSTANCE_APK). Первый узел новой категории —
 //     обжалование определений, а не решений; якорь считается от дня
 //     вынесения определения буквально, без оговорки об изготовлении в полном
 //     объёме (в отличие от APPEAL_GENERAL_APK).
+//   ч. 4 — частная жалоба на определение суда апелляционной инстанции
+//     (PRIVATE_COMPLAINT_APPELLATE_APK). Та же механика, что у ч. 3.
+//   ч. 6 — частная жалоба на определение суда кассационной инстанции
+//     (PRIVATE_COMPLAINT_CASSATION_APK). Та же механика, что у ч. 3 и ч. 4.
 // ст. 259 — сроки:
 //   ч. 1 — общий месячный срок подачи жалобы (APPEAL_GENERAL_APK);
 //   ч. 2 — предельный срок подачи ходатайства о восстановлении пропущенного
@@ -748,4 +752,102 @@ export function computePrivateComplaintFirstInstanceApk(inputs) {
     throw new Error('Обязательна дата вынесения определения (ruling_issued_date)');
   }
   return computeSimpleTerm(PRIVATE_COMPLAINT_FIRST_INSTANCE_APK, inputs.ruling_issued_date);
+}
+
+// --- Частная жалоба на определение суда апелляционной инстанции (ч. 4 ст. 188 АПК РФ) ---
+//
+// Точная копия механики private_complaint_first_instance_apk (ч. 3 ст. 188):
+// якорь — день вынесения определения буквально, месяц, тот же
+// ruling_issued_date. Отличается только инстанция, чьё определение
+// обжалуется, и текст цитаты.
+
+export const PRIVATE_COMPLAINT_APPELLATE_APK = {
+  id: 'private_complaint_appellate_apk',
+  title: 'Частная жалоба на определение суда апелляционной инстанции (АПК)',
+  duration: { value: 1, unit: 'month' },
+  anchor: { offset_start: 1 },
+  weekend_shift: true,
+  logic:
+    'Месяц со дня вынесения определения арбитражного суда апелляционной ' +
+    'инстанции (ч. 4 ст. 188 АПК РФ). Та же механика, что у обжалования ' +
+    'определения первой инстанции (ч. 3 ст. 188) — якорь от дня вынесения ' +
+    'буквально. Течение — со дня, следующего за днём вынесения (ч. 4 ст. 113 ' +
+    'АПК РФ); истекает в соответствующее число следующего месяца (ч. 2 ' +
+    'ст. 114 АПК РФ).',
+  midnight_rule:
+    'ч. 5, 6 ст. 114 АПК РФ — процессуальное действие может быть совершено, а ' +
+    'жалоба сдана на почту, до 24:00 последнего дня срока.',
+  norm_versions: [
+    {
+      id: 'current',
+      from: null,
+      to: null,
+      anchor: { offset_start: 1 },
+      norm: {
+        primary: 'ч. 4 ст. 188 АПК РФ',
+        calculation: ['ч. 4 ст. 113', 'ч. 2, 4 ст. 114 АПК РФ'],
+      },
+    },
+  ],
+};
+
+/**
+ * Срок подачи частной жалобы на определение арбитражного суда
+ * апелляционной инстанции по ч. 4 ст. 188 АПК РФ — один месяц со дня
+ * вынесения определения.
+ *
+ * @param {{ruling_issued_date: string}} inputs
+ */
+export function computePrivateComplaintAppellateApk(inputs) {
+  if (inputs?.ruling_issued_date == null) {
+    throw new Error('Обязательна дата вынесения определения (ruling_issued_date)');
+  }
+  return computeSimpleTerm(PRIVATE_COMPLAINT_APPELLATE_APK, inputs.ruling_issued_date);
+}
+
+// --- Частная жалоба на определение суда кассационной инстанции (ч. 6 ст. 188 АПК РФ) ---
+//
+// Та же механика, что у ч. 3 и ч. 4 ст. 188 — якорь от дня вынесения
+// определения буквально, месяц, тот же ruling_issued_date.
+
+export const PRIVATE_COMPLAINT_CASSATION_APK = {
+  id: 'private_complaint_cassation_apk',
+  title: 'Частная жалоба на определение суда кассационной инстанции (АПК)',
+  duration: { value: 1, unit: 'month' },
+  anchor: { offset_start: 1 },
+  weekend_shift: true,
+  logic:
+    'Месяц со дня вынесения определения арбитражного суда кассационной ' +
+    'инстанции, в порядке, установленном ст. 291 АПК РФ (ч. 6 ст. 188 АПК РФ). ' +
+    'Та же механика, что и у остальных частей ст. 188 — якорь от дня вынесения ' +
+    'буквально.',
+  midnight_rule:
+    'ч. 5, 6 ст. 114 АПК РФ — процессуальное действие может быть совершено, а ' +
+    'жалоба сдана на почту, до 24:00 последнего дня срока.',
+  norm_versions: [
+    {
+      id: 'current',
+      from: null,
+      to: null,
+      anchor: { offset_start: 1 },
+      norm: {
+        primary: 'ч. 6 ст. 188 АПК РФ',
+        calculation: ['ч. 4 ст. 113', 'ч. 2, 4 ст. 114 АПК РФ', 'ст. 291 АПК РФ'],
+      },
+    },
+  ],
+};
+
+/**
+ * Срок подачи частной жалобы на определение арбитражного суда
+ * кассационной инстанции по ч. 6 ст. 188 АПК РФ — один месяц со дня
+ * вынесения определения, в порядке, установленном ст. 291 АПК РФ.
+ *
+ * @param {{ruling_issued_date: string}} inputs
+ */
+export function computePrivateComplaintCassationApk(inputs) {
+  if (inputs?.ruling_issued_date == null) {
+    throw new Error('Обязательна дата вынесения определения (ruling_issued_date)');
+  }
+  return computeSimpleTerm(PRIVATE_COMPLAINT_CASSATION_APK, inputs.ruling_issued_date);
 }
