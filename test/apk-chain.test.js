@@ -9,7 +9,8 @@
 // ст. 188 ч. 3 — частная жалоба на определение первой инстанции (задача 5a),
 // ст. 188 ч. 4 — частная жалоба на определение апелляционной инстанции (задача 5b),
 // ст. 188 ч. 6 — частная жалоба на определение кассационной инстанции (задача 5b),
-// ст. 188 ч. 5 — жалоба на постановление апелляции по жалобе на определение (задача 5c).
+// ст. 188 ч. 5 — жалоба на постановление апелляции по жалобе на определение (задача 5c),
+// ст. 321 ч. 1, 3, 4 — предъявление исполнительного листа, базовый срок и перерыв (задача 6b).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -37,6 +38,8 @@ import {
   PRIVATE_COMPLAINT_CASSATION_APK,
   computePrivateComplaintAppellatePostanovlenieApk,
   PRIVATE_COMPLAINT_APPELLATE_POSTANOVLENIE_APK,
+  computeEnforcementPresentationApk,
+  ENFORCEMENT_PRESENTATION_APK,
 } from '../apk/chain.js';
 
 test('appeal_general_apk считается от decision_full_text_date (обычная дата, без переноса)', () => {
@@ -977,4 +980,217 @@ test('private_complaint_appellate_postanovlenie_apk: без appellate_postanovle
 test('private_complaint_appellate_postanovlenie_apk: объём задачи 5c — без restoration_norm и без ics', () => {
   assert.equal(PRIVATE_COMPLAINT_APPELLATE_POSTANOVLENIE_APK.restoration_norm, undefined);
   assert.equal(PRIVATE_COMPLAINT_APPELLATE_POSTANOVLENIE_APK.ics, undefined);
+});
+
+// --- Предъявление исполнительного листа к исполнению, базовый срок и перерыв (ч. 1, 3, 4 ст. 321 АПК РФ) ---
+// Базовые даты подобраны так, чтобы 3-летний срок не требовал переноса через
+// нерабочий день — перенос проверяется отдельным кейсом, чтобы не смешивать
+// выбор якоря с арифметикой переноса.
+
+test('исполнительный лист АПК: case_type=entry_into_force — 3 года со дня вступления в силу', () => {
+  const term = computeEnforcementPresentationApk({
+    case_type: 'entry_into_force',
+    entry_into_force_date: '2022-06-18',
+  });
+  assert.equal(term.anchor, '2022-06-18');
+  assert.equal(term.raw_deadline, '2025-06-18');
+  assert.equal(term.deadline, '2025-06-18');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 3, unit: 'year' });
+  assert.equal(term.interruptible, true);
+  assert.equal(term.norm.primary, 'ч. 1 ст. 321 АПК РФ');
+  // Без событий перерыва история не заводится (см. withInterruptions в ядре).
+  assert.equal(term.interruptions, undefined);
+  assert.equal(term.base_anchor, undefined);
+});
+
+test('исполнительный лист АПК: case_type=immediate_execution — 3 года от даты акта, без двойного сдвига', () => {
+  const term = computeEnforcementPresentationApk({
+    case_type: 'immediate_execution',
+    immediate_execution_decision_date: '2022-11-20',
+  });
+  // «Со следующего дня после дня принятия» — это общее правило ч. 4 ст. 113,
+  // уже заложенное в offset_start: 1, а не дополнительный сдвиг сверх него:
+  // якорь равен самой дате акта, а не дате+1.
+  assert.equal(term.anchor, '2022-11-20');
+  assert.equal(term.raw_deadline, '2025-11-20');
+  assert.equal(term.deadline, '2025-11-20');
+  assert.equal(term.shifted, false);
+  assert.equal(term.offset_start, 1);
+});
+
+test('исполнительный лист АПК: case_type=deferred_installment_end — 3 года со дня окончания отсрочки', () => {
+  const term = computeEnforcementPresentationApk({
+    case_type: 'deferred_installment_end',
+    deferred_installment_end_date: '2023-05-06',
+  });
+  assert.equal(term.anchor, '2023-05-06');
+  assert.equal(term.raw_deadline, '2026-05-06');
+  assert.equal(term.deadline, '2026-05-06');
+  assert.equal(term.shifted, false);
+});
+
+test('исполнительный лист АПК: три ветки case_type берут каждая свою дату, не путая поля', () => {
+  // Все три поля заполнены одновременно и различны — выбор якоря определяется
+  // только case_type.
+  const dates = {
+    entry_into_force_date: '2022-06-18',
+    immediate_execution_decision_date: '2022-11-20',
+    deferred_installment_end_date: '2023-05-06',
+  };
+  assert.equal(
+    computeEnforcementPresentationApk({ case_type: 'entry_into_force', ...dates }).anchor,
+    '2022-06-18',
+  );
+  assert.equal(
+    computeEnforcementPresentationApk({ case_type: 'immediate_execution', ...dates }).anchor,
+    '2022-11-20',
+  );
+  assert.equal(
+    computeEnforcementPresentationApk({ case_type: 'deferred_installment_end', ...dates }).anchor,
+    '2023-05-06',
+  );
+});
+
+test('исполнительный лист АПК: перерыв предъявлением к исполнению (ч. 3 ст. 321) — новый срок от даты события', () => {
+  const term = computeEnforcementPresentationApk({
+    case_type: 'entry_into_force',
+    entry_into_force_date: '2022-06-18',
+    enforcement_interruptions: [{ type: 'presentment', date: '2023-09-14' }],
+  });
+  assert.equal(term.anchor, '2023-09-14'); // якорь сдвинут на событие
+  assert.equal(term.raw_deadline, '2026-09-14');
+  assert.equal(term.deadline, '2026-09-14');
+  assert.equal(term.shifted, false);
+  // Базовый якорь сохранён для истории на карточке.
+  assert.equal(term.base_anchor, '2022-06-18');
+  assert.equal(term.interruptions.length, 1);
+  assert.equal(term.interruptions[0].ignored, undefined);
+  assert.equal(term.interruption_norm, 'ч. 3, 4 ст. 321 АПК РФ');
+});
+
+test('исполнительный лист АПК: перерыв частичным исполнением (ч. 3 ст. 321)', () => {
+  const term = computeEnforcementPresentationApk({
+    case_type: 'entry_into_force',
+    entry_into_force_date: '2022-06-18',
+    enforcement_interruptions: [{ type: 'partial_execution', date: '2024-02-20' }],
+  });
+  assert.equal(term.anchor, '2024-02-20');
+  assert.equal(term.raw_deadline, '2027-02-20');
+  assert.equal(term.deadline, '2027-02-20');
+  assert.equal(term.base_anchor, '2022-06-18');
+  assert.equal(term.interruptions[0].ignored, undefined);
+});
+
+test('исполнительный лист АПК: возврат листа (ч. 4 ст. 321) — валидное основание, новый срок со дня ВОЗВРАЩЕНИЯ', () => {
+  const term = computeEnforcementPresentationApk({
+    case_type: 'entry_into_force',
+    entry_into_force_date: '2022-06-18',
+    enforcement_interruptions: [{ type: 'returned_no_assets', date: '2024-07-15' }],
+  });
+  // Основание принято, а не отклонено как неизвестное.
+  assert.equal(term.interruptions.length, 1);
+  assert.equal(term.interruptions[0].ignored, undefined);
+  assert.equal(term.interruptions[0].type, 'returned_no_assets');
+  // Новый срок считается от даты возвращения листа (ч. 4 ст. 321 АПК РФ),
+  // а не от даты направления постановления, как в ч. 3 ст. 22 ФЗ № 229-ФЗ.
+  assert.equal(term.anchor, '2024-07-15');
+  assert.equal(term.deadline, '2027-07-15');
+  assert.match(term.logic, /со дня возвращения/);
+  assert.match(term.logic, /а не со дня направления постановления/);
+});
+
+test('исполнительный лист АПК: несколько событий — учитывается последнее по хронологии, сроки не складываются', () => {
+  const term = computeEnforcementPresentationApk({
+    case_type: 'entry_into_force',
+    entry_into_force_date: '2022-06-18',
+    // Во вводе намеренно не по порядку: последнее по дате идёт первым.
+    enforcement_interruptions: [
+      { type: 'presentment', date: '2024-07-15' },
+      { type: 'partial_execution', date: '2023-09-14' },
+      { type: 'returned_no_assets', date: '2024-02-20' },
+    ],
+  });
+  // Якорь — самое позднее событие, а не первое во вводе и не самое раннее.
+  assert.equal(term.anchor, '2024-07-15');
+  assert.equal(term.deadline, '2027-07-15');
+  // Перезапуск, а не накопление: ровно три года от последнего события,
+  // а не 3 × 3 года и не сумма интервалов.
+  assert.notEqual(term.deadline, '2033-07-15');
+  // История отсортирована по дате по возрастанию.
+  assert.deepEqual(
+    term.interruptions.map((e) => e.date),
+    ['2023-09-14', '2024-02-20', '2024-07-15'],
+  );
+});
+
+test('исполнительный лист АПК: событие раньше базового якоря игнорируется и видно в истории', () => {
+  const term = computeEnforcementPresentationApk({
+    case_type: 'entry_into_force',
+    entry_into_force_date: '2022-06-18',
+    enforcement_interruptions: [{ type: 'presentment', date: '2021-01-15' }],
+  });
+  // Дедлайн не сдвинут — прерывать ещё не начавшийся срок нечем.
+  assert.equal(term.anchor, '2022-06-18');
+  assert.equal(term.deadline, '2025-06-18');
+  // Но событие не выброшено молча.
+  assert.equal(term.interruptions.length, 1);
+  assert.equal(term.interruptions[0].ignored, true);
+  assert.equal(term.interruptions[0].ignored_reason, 'before_anchor');
+});
+
+test('исполнительный лист АПК: перенос через нерабочий день для 3-летнего срока (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeEnforcementPresentationApk({
+    case_type: 'entry_into_force',
+    entry_into_force_date: '2023-01-11',
+  });
+  // 11.01.2023 + 3 года = 11.01.2026 (воскресенье) -> перенос на 12.01.2026.
+  assert.equal(term.raw_deadline, '2026-01-11');
+  assert.equal(term.deadline, '2026-01-12');
+  assert.equal(term.shifted, true);
+});
+
+test('исполнительный лист АПК: case_type отсутствует или неизвестен — ошибка со списком допустимых значений', () => {
+  const expected = /entry_into_force.*immediate_execution.*deferred_installment_end/;
+  assert.throws(
+    () => computeEnforcementPresentationApk({ entry_into_force_date: '2022-06-18' }),
+    expected,
+  );
+  assert.throws(
+    () =>
+      computeEnforcementPresentationApk({
+        case_type: 'unknown_case',
+        entry_into_force_date: '2022-06-18',
+      }),
+    expected,
+  );
+});
+
+test('исполнительный лист АПК: для каждой ветки — своя ошибка о недостающем поле', () => {
+  assert.throws(
+    () => computeEnforcementPresentationApk({ case_type: 'entry_into_force' }),
+    /entry_into_force_date/,
+  );
+  assert.throws(
+    () => computeEnforcementPresentationApk({ case_type: 'immediate_execution' }),
+    /immediate_execution_decision_date/,
+  );
+  assert.throws(
+    () => computeEnforcementPresentationApk({ case_type: 'deferred_installment_end' }),
+    /deferred_installment_end_date/,
+  );
+  // Дата соседней ветки не подходит: ошибка называет именно нужное поле.
+  assert.throws(
+    () =>
+      computeEnforcementPresentationApk({
+        case_type: 'immediate_execution',
+        entry_into_force_date: '2022-06-18',
+      }),
+    /immediate_execution_decision_date/,
+  );
+});
+
+test('исполнительный лист АПК: объём задачи 6b — без restoration_norm и без ics', () => {
+  assert.equal(ENFORCEMENT_PRESENTATION_APK.restoration_norm, undefined);
+  assert.equal(ENFORCEMENT_PRESENTATION_APK.ics, undefined);
 });

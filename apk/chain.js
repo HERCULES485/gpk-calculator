@@ -14,6 +14,14 @@
 //     (PRIVATE_COMPLAINT_APPELLATE_POSTANOVLENIE_APK). Якорь — день вступления
 //     в силу такого постановления, но по факту равен дате его принятия
 //     (ч. 5 ст. 271 АПК РФ) — отдельного узла "вступление в силу" не нужно.
+// ст. 321 — срок с перерывом:
+//   ч. 1, 3, 4 — предъявление исполнительного листа к исполнению
+//     (ENFORCEMENT_PRESENTATION_APK). Первый узел модуля с механикой перерыва
+//     (core/engine/interruption.js) и первый с тремя альтернативными базовыми
+//     якорями по дискриминатору case_type. Основания перерыва — свой набор
+//     АПК (ENFORCEMENT_INTERRUPTION_TYPES_APK), не ГПК-шный по ФЗ № 229-ФЗ.
+//     Вне объёма узла: ч. 2 и ч. 5 (исключение периода без перезапуска —
+//     механики для этого в ядре нет) и ст. 322 (восстановление).
 // ст. 259 — сроки:
 //   ч. 1 — общий месячный срок подачи жалобы (APPEAL_GENERAL_APK);
 //   ч. 2 — предельный срок подачи ходатайства о восстановлении пропущенного
@@ -54,6 +62,7 @@
 // поля должно однозначно указывать на АПК-семантику.
 
 import { addDays } from '../core/engine/engine.js';
+import { computeInterruptibleTerm } from '../core/engine/interruption.js';
 import { computeSimpleTerm, toISO } from '../core/engine/term.js';
 
 export const APPEAL_GENERAL_APK = {
@@ -927,5 +936,155 @@ export function computePrivateComplaintAppellatePostanovlenieApk(inputs) {
   return computeSimpleTerm(
     PRIVATE_COMPLAINT_APPELLATE_POSTANOVLENIE_APK,
     inputs.appellate_postanovlenie_date,
+  );
+}
+
+// --- Предъявление исполнительного листа к исполнению (ч. 1, 3, 4 ст. 321 АПК РФ) ---
+//
+// Первый узел модуля АПК с механикой перерыва срока: используется
+// computeInterruptibleTerm из core/engine/interruption.js целиком, без ручной
+// пересборки результата. Ядро предметно-независимо — допустимые основания
+// перерыва и текст нормы передаются параметрами отсюда.
+//
+// ТРИ АЛЬТЕРНАТИВНЫХ БАЗОВЫХ ЯКОРЯ (ч. 1 п. 1) — дискриминатор case_type,
+// у каждого своё входное поле с сырой датой:
+//   entry_into_force — со дня вступления судебного акта в законную силу
+//     (entry_into_force_date). Дата НЕ выводится через entry_into_force_apk:
+//     исполнительный лист выдаётся не только по решениям с цепочкой апелляции,
+//     это общий факт дела, поэтому сырой ввод;
+//   immediate_execution — по акту, подлежащему немедленному исполнению
+//     (immediate_execution_decision_date);
+//   deferred_installment_end — со дня окончания срока отсрочки или рассрочки
+//     исполнения (deferred_installment_end_date).
+// Арифметика у всех трёх одна: якорь = сырая дата события, offset_start: 1.
+// Формулировка «со следующего дня после дня принятия» у второй ветки — это
+// то же общее правило ч. 4 ст. 113 АПК, проговорённое в тексте нормы явно, а
+// не дополнительный сдвиг сверх offset_start: 1. Два сдвига не складываются.
+//
+// ТРИ ОСНОВАНИЯ ПЕРЕРЫВА (ч. 3–4) — свой набор для АПК, не переиспользование
+// ГПК-шного INTERRUPTION_TYPES (тот ссылается на ФЗ № 229-ФЗ, у АПК
+// самостоятельная норма). Возврат листа (ч. 4) смоделирован третьим
+// основанием перерыва: по поведению это ровно то же самое (applyInterruptions
+// берёт дату события новым якорем), хотя в тексте статьи оформлено отдельной
+// частью, а не в перечне ч. 3.
+//
+// РАСХОЖДЕНИЕ С ФЗ № 229-ФЗ, которое нельзя потерять: у ФЗ-229 (ч. 3 ст. 22)
+// аналогичное основание исчисляется СО ДНЯ НАПРАВЛЕНИЯ ПОСТАНОВЛЕНИЯ об
+// окончании производства, у АПК (ч. 4 ст. 321) — СО ДНЯ ВОЗВРАЩЕНИЯ листа.
+// Это разные даты; ГПК-формулировка здесь за основу не берётся.
+//
+// ВНЕ ОБЪЁМА УЗЛА: ч. 2 и ч. 5 ст. 321 (время приостановления исполнения и
+// вычет периода при отзыве листа взыскателем) — это исключение периода без
+// перезапуска срока, принципиально иная арифметика, механики для неё нет ни в
+// ядре, ни в ГПК-домене. Также вне объёма ст. 322 и ч. 1 п. 2 (три месяца
+// после восстановления) — отдельная задача.
+
+export const ENFORCEMENT_INTERRUPTION_TYPES_APK = [
+  {
+    id: 'presentment',
+    title: 'Предъявление исполнительного листа к исполнению',
+    norm: 'ч. 3 ст. 321 АПК РФ',
+  },
+  {
+    id: 'partial_execution',
+    title: 'Частичное исполнение судебного акта должником',
+    norm: 'ч. 3 ст. 321 АПК РФ',
+  },
+  {
+    id: 'returned_no_assets',
+    title: 'Возврат исполнительного листа взыскателю в связи с невозможностью исполнения',
+    norm: 'ч. 4 ст. 321 АПК РФ',
+  },
+];
+
+export const ENFORCEMENT_INTERRUPTION_TYPE_IDS_APK = new Set(
+  ENFORCEMENT_INTERRUPTION_TYPES_APK.map((t) => t.id),
+);
+
+export const ENFORCEMENT_PRESENTATION_APK = {
+  id: 'enforcement_presentation_apk',
+  title: 'Предъявление исполнительного листа к исполнению (АПК)',
+  duration: { value: 3, unit: 'year' },
+  anchor: { offset_start: 1 },
+  weekend_shift: true,
+  interruptible: true,
+  logic:
+    'Три года с одной из трёх альтернативных точек отсчёта (ч. 1 ст. 321 АПК РФ): ' +
+    'со дня вступления судебного акта в законную силу; со дня, следующего за днём ' +
+    'принятия акта, подлежащего немедленному исполнению; со дня окончания срока ' +
+    'отсрочки или рассрочки исполнения. Срок прерывается предъявлением листа к ' +
+    'исполнению или частичным исполнением (ч. 3 ст. 321 АПК РФ), а также — с иной ' +
+    'датой, чем у ФЗ № 229-ФЗ, — возвратом листа взыскателю в связи с ' +
+    'невозможностью исполнения: здесь новый срок считается со дня возвращения ' +
+    'листа (ч. 4 ст. 321 АПК РФ), а не со дня направления постановления, как в ' +
+    'ФЗ № 229-ФЗ. Исключение периода без перезапуска (ч. 2, 5 ст. 321 АПК РФ) — ' +
+    'отдельная, ещё не реализованная механика, этим узлом не покрывается.',
+  midnight_rule:
+    'ч. 5, 6 ст. 114 АПК РФ — процессуальное действие может быть совершено, а ' +
+    'документ сдан на почту, до 24:00 последнего дня срока.',
+  norm_versions: [
+    {
+      id: 'current',
+      from: null,
+      to: null,
+      anchor: { offset_start: 1 },
+      norm: {
+        primary: 'ч. 1 ст. 321 АПК РФ',
+        calculation: ['ч. 4 ст. 113', 'ч. 1, 4 ст. 114 АПК РФ'],
+      },
+    },
+  ],
+};
+
+/**
+ * Срок предъявления исполнительного листа к исполнению (ч. 1, 3, 4 ст. 321
+ * АПК РФ). Три альтернативных базовых якоря по case_type, перерыв по трём
+ * основаниям (в т.ч. возврат листа как третье основание, ч. 4).
+ *
+ * @param {{
+ *   case_type: 'entry_into_force' | 'immediate_execution' | 'deferred_installment_end',
+ *   entry_into_force_date?: string,
+ *   immediate_execution_decision_date?: string,
+ *   deferred_installment_end_date?: string,
+ *   enforcement_interruptions?: Array<{type: string, date: string}>,
+ * }} inputs
+ */
+export function computeEnforcementPresentationApk(inputs) {
+  const caseType = inputs?.case_type;
+  let baseAnchor;
+  if (caseType === 'entry_into_force') {
+    baseAnchor = inputs.entry_into_force_date;
+    if (baseAnchor == null) {
+      throw new Error('Для case_type="entry_into_force" обязательна entry_into_force_date');
+    }
+  } else if (caseType === 'immediate_execution') {
+    baseAnchor = inputs.immediate_execution_decision_date;
+    if (baseAnchor == null) {
+      throw new Error(
+        'Для case_type="immediate_execution" обязательна immediate_execution_decision_date',
+      );
+    }
+  } else if (caseType === 'deferred_installment_end') {
+    baseAnchor = inputs.deferred_installment_end_date;
+    if (baseAnchor == null) {
+      throw new Error(
+        'Для case_type="deferred_installment_end" обязательна deferred_installment_end_date',
+      );
+    }
+  } else {
+    throw new Error(
+      'case_type должен быть одним из: entry_into_force, immediate_execution, deferred_installment_end',
+    );
+  }
+
+  return computeInterruptibleTerm(
+    ENFORCEMENT_PRESENTATION_APK,
+    baseAnchor,
+    inputs.enforcement_interruptions,
+    ENFORCEMENT_INTERRUPTION_TYPE_IDS_APK,
+    {
+      norm: 'ч. 3, 4 ст. 321 АПК РФ',
+      logic: ENFORCEMENT_PRESENTATION_APK.logic,
+    },
   );
 }
