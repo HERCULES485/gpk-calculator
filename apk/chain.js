@@ -14,14 +14,18 @@
 //     (PRIVATE_COMPLAINT_APPELLATE_POSTANOVLENIE_APK). Якорь — день вступления
 //     в силу такого постановления, но по факту равен дате его принятия
 //     (ч. 5 ст. 271 АПК РФ) — отдельного узла "вступление в силу" не нужно.
-// ст. 321 — срок с перерывом:
+// ст. 321 — срок с перерывом и исключением периода:
 //   ч. 1, 3, 4 — предъявление исполнительного листа к исполнению
 //     (ENFORCEMENT_PRESENTATION_APK). Первый узел модуля с механикой перерыва
 //     (core/engine/interruption.js) и первый с тремя альтернативными базовыми
 //     якорями по дискриминатору case_type. Основания перерыва — свой набор
 //     АПК (ENFORCEMENT_INTERRUPTION_TYPES_APK), не ГПК-шный по ФЗ № 229-ФЗ.
-//     Вне объёма узла: ч. 2 и ч. 5 (исключение периода без перезапуска —
-//     механики для этого в ядре нет) и ст. 322 (восстановление).
+//   ч. 2, 5 — исключение периода из того же срока (тот же узел): время
+//     приостановления исполнения и период до окончания исполнения по вине
+//     взыскателя не засчитываются в срок. Первый узел кодовой базы с механикой
+//     исключения периода (core/engine/exclusion.js) — срок не перезапускается,
+//     дедлайн отодвигается на суммарную длину периодов.
+//     Вне объёма узла: ст. 322 (восстановление).
 // ст. 259 — сроки:
 //   ч. 1 — общий месячный срок подачи жалобы (APPEAL_GENERAL_APK);
 //   ч. 2 — предельный срок подачи ходатайства о восстановлении пропущенного
@@ -62,6 +66,7 @@
 // поля должно однозначно указывать на АПК-семантику.
 
 import { addDays } from '../core/engine/engine.js';
+import { exclusionEvents, withExclusions } from '../core/engine/exclusion.js';
 import { computeInterruptibleTerm } from '../core/engine/interruption.js';
 import { computeSimpleTerm, toISO } from '../core/engine/term.js';
 
@@ -973,11 +978,18 @@ export function computePrivateComplaintAppellatePostanovlenieApk(inputs) {
 // окончании производства, у АПК (ч. 4 ст. 321) — СО ДНЯ ВОЗВРАЩЕНИЯ листа.
 // Это разные даты; ГПК-формулировка здесь за основу не берётся.
 //
-// ВНЕ ОБЪЁМА УЗЛА: ч. 2 и ч. 5 ст. 321 (время приостановления исполнения и
-// вычет периода при отзыве листа взыскателем) — это исключение периода без
-// перезапуска срока, принципиально иная арифметика, механики для неё нет ни в
-// ядре, ни в ГПК-домене. Также вне объёма ст. 322 и ч. 1 п. 2 (три месяца
-// после восстановления) — отдельная задача.
+// ИСКЛЮЧЕНИЕ ПЕРИОДА (ч. 2, 5) — вторая, независимая от перерыва механика на
+// этом же узле: период не засчитывается в срок, но срок не перезапускается,
+// время до и после периода складывается (core/engine/exclusion.js). Основания
+// разведены по двум входным полям: у ч. 2 (приостановление исполнения)
+// основание приостановления на арифметику не влияет и на входе не ожидается
+// вовсе, у ч. 5 оно обязательно и проверяется по каталогу
+// ENFORCEMENT_EXCLUSION_TYPES_APK — иначе под вычет по ошибке попал бы период
+// окончания исполнения по основанию, которое ч. 5 не называет (например,
+// фактическое исполнение).
+//
+// ВНЕ ОБЪЁМА УЗЛА: ст. 322 и ч. 1 п. 2 (три месяца после восстановления
+// пропущенного срока) — отдельная задача.
 
 export const ENFORCEMENT_INTERRUPTION_TYPES_APK = [
   {
@@ -1001,6 +1013,69 @@ export const ENFORCEMENT_INTERRUPTION_TYPE_IDS_APK = new Set(
   ENFORCEMENT_INTERRUPTION_TYPES_APK.map((t) => t.id),
 );
 
+// Основания окончания исполнения, при которых период вычитается из срока
+// (ч. 5 ст. 321 АПК РФ) — исчерпывающий перечень самой части: окончание
+// исполнения по любому другому основанию (в первую очередь фактическое
+// исполнение) под ч. 5 не подпадает и вычету не подлежит.
+export const ENFORCEMENT_EXCLUSION_TYPES_APK = [
+  {
+    id: 'withdrawal_by_claimant_apk',
+    title: 'Отзыв исполнительного листа взыскателем',
+    norm: 'ч. 5 ст. 321 АПК РФ',
+  },
+  {
+    id: 'claimant_obstruction_apk',
+    title: 'Действия взыскателя, препятствующие исполнению',
+    norm: 'ч. 5 ст. 321 АПК РФ',
+  },
+];
+
+export const ENFORCEMENT_EXCLUSION_TYPE_IDS_APK = new Set(
+  ENFORCEMENT_EXCLUSION_TYPES_APK.map((t) => t.id),
+);
+
+// Тип, которым помечается период приостановления (ч. 2): на входе он не
+// ожидается — основание приостановления на арифметику не влияет, — но в
+// истории результата периоды двух частей статьи лежат вперемешку, и без
+// метки было бы не видно, какой период по какому основанию исключён.
+const SUSPENSION_TYPE_APK = 'suspension_apk';
+
+const EXCLUSION_LOGIC_SUSPENSION_APK =
+  'Время, на которое исполнение судебного акта приостанавливалось, не ' +
+  'засчитывается в срок предъявления исполнительного листа к исполнению ' +
+  '(ч. 2 ст. 321 АПК РФ).';
+
+const EXCLUSION_LOGIC_EXECUTION_ENDED_APK =
+  'Период со дня предъявления исполнительного листа к исполнению до дня ' +
+  'окончания по нему исполнения в связи с отзывом листа взыскателем либо ' +
+  'совершением взыскателем действий, препятствующих исполнению, вычитается ' +
+  'из срока предъявления (ч. 5 ст. 321 АПК РФ).';
+
+const EXCLUSION_LOGIC_TAIL_APK =
+  'Периоды суммируются (в отличие от перерыва, где учитывается только ' +
+  'последнее событие) и прибавляются к дедлайну, уже посчитанному с учётом ' +
+  'перерыва по ч. 3, 4; последний день срока при необходимости переносится ' +
+  'на ближайший рабочий (ч. 4 ст. 114 АПК РФ).';
+
+// Норма и логика результата зависят от того, какие части статьи реально
+// сработали: при одном лишь приостановлении цитировать ч. 5 (и наоборот) было
+// бы неверно — пользователь увидел бы в обосновании норму, которая к его
+// случаю не применялась.
+function exclusionConfigApk(suspensionApplied, executionEndedApplied) {
+  const parts = [];
+  const logic = [];
+  if (suspensionApplied) {
+    parts.push('2');
+    logic.push(EXCLUSION_LOGIC_SUSPENSION_APK);
+  }
+  if (executionEndedApplied) {
+    parts.push('5');
+    logic.push(EXCLUSION_LOGIC_EXECUTION_ENDED_APK);
+  }
+  logic.push(EXCLUSION_LOGIC_TAIL_APK);
+  return { norm: `ч. ${parts.join(', ')} ст. 321 АПК РФ`, logic: logic.join(' ') };
+}
+
 export const ENFORCEMENT_PRESENTATION_APK = {
   id: 'enforcement_presentation_apk',
   title: 'Предъявление исполнительного листа к исполнению (АПК)',
@@ -1017,8 +1092,11 @@ export const ENFORCEMENT_PRESENTATION_APK = {
     'датой, чем у ФЗ № 229-ФЗ, — возвратом листа взыскателю в связи с ' +
     'невозможностью исполнения: здесь новый срок считается со дня возвращения ' +
     'листа (ч. 4 ст. 321 АПК РФ), а не со дня направления постановления, как в ' +
-    'ФЗ № 229-ФЗ. Исключение периода без перезапуска (ч. 2, 5 ст. 321 АПК РФ) — ' +
-    'отдельная, ещё не реализованная механика, этим узлом не покрывается.',
+    'ФЗ № 229-ФЗ. Время приостановления исполнения (ч. 2 ст. 321 АПК РФ) и период ' +
+    'до окончания исполнения по отзыву листа взыскателем либо по его действиям, ' +
+    'препятствующим исполнению (ч. 5 ст. 321 АПК РФ), в срок не засчитываются: ' +
+    'срок при этом не перезапускается, дедлайн отодвигается на суммарную длину ' +
+    'таких периодов.',
   midnight_rule:
     'ч. 5, 6 ст. 114 АПК РФ — процессуальное действие может быть совершено, а ' +
     'документ сдан на почту, до 24:00 последнего дня срока.',
@@ -1037,9 +1115,15 @@ export const ENFORCEMENT_PRESENTATION_APK = {
 };
 
 /**
- * Срок предъявления исполнительного листа к исполнению (ч. 1, 3, 4 ст. 321
+ * Срок предъявления исполнительного листа к исполнению (ч. 1–5 ст. 321
  * АПК РФ). Три альтернативных базовых якоря по case_type, перерыв по трём
- * основаниям (в т.ч. возврат листа как третье основание, ч. 4).
+ * основаниям (в т.ч. возврат листа как третье основание, ч. 4) и исключение
+ * периодов приостановления (ч. 2) и окончания исполнения по вине взыскателя
+ * (ч. 5).
+ *
+ * Порядок применения: сначала перерыв (сдвиг якоря), затем исключение периодов
+ * поверх уже посчитанного дедлайна — см. архитектурное допущение в
+ * core/engine/exclusion.js (withExclusions).
  *
  * @param {{
  *   case_type: 'entry_into_force' | 'immediate_execution' | 'deferred_installment_end',
@@ -1047,6 +1131,8 @@ export const ENFORCEMENT_PRESENTATION_APK = {
  *   immediate_execution_decision_date?: string,
  *   deferred_installment_end_date?: string,
  *   enforcement_interruptions?: Array<{type: string, date: string}>,
+ *   suspension_periods?: Array<{start: string, end: string}>,
+ *   execution_ended_periods?: Array<{type: string, start: string, end: string}>,
  * }} inputs
  */
 export function computeEnforcementPresentationApk(inputs) {
@@ -1077,7 +1163,7 @@ export function computeEnforcementPresentationApk(inputs) {
     );
   }
 
-  return computeInterruptibleTerm(
+  const interrupted = computeInterruptibleTerm(
     ENFORCEMENT_PRESENTATION_APK,
     baseAnchor,
     inputs.enforcement_interruptions,
@@ -1086,5 +1172,21 @@ export function computeEnforcementPresentationApk(inputs) {
       norm: 'ч. 3, 4 ст. 321 АПК РФ',
       logic: ENFORCEMENT_PRESENTATION_APK.logic,
     },
+  );
+
+  const suspension = exclusionEvents(inputs.suspension_periods, {
+    fixedType: SUSPENSION_TYPE_APK,
+  });
+  const executionEnded = exclusionEvents(inputs.execution_ended_periods, {
+    validTypeIds: ENFORCEMENT_EXCLUSION_TYPE_IDS_APK,
+  });
+
+  return withExclusions(
+    interrupted,
+    [suspension, executionEnded],
+    exclusionConfigApk(
+      suspension.some((e) => !e.ignored),
+      executionEnded.some((e) => !e.ignored),
+    ),
   );
 }
