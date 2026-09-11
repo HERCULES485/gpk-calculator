@@ -33,6 +33,8 @@ import {
   computeEnforcementPresentationAfterRestorationApk,
   computeNadzorGeneralApk,
   computeNadzorGeneralApkRestoration,
+  computeNewCircumstancesReviewApk,
+  computeNewCircumstancesReviewApkRestoration,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -49,6 +51,8 @@ import {
   ENFORCEMENT_PRESENTATION_AFTER_RESTORATION_APK,
   NADZOR_GENERAL_APK,
   NADZOR_GENERAL_APK_RESTORATION,
+  NEW_CIRCUMSTANCES_REVIEW_APK,
+  NEW_CIRCUMSTANCES_REVIEW_APK_RESTORATION,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -372,6 +376,19 @@ const NODE_REQUIREMENTS = {
     // nadzor_general_apk, не через граф), а не результат другого узла.
     deps: restorationDeps(() => ['last_contested_act_entry_into_force_date']),
     compute: (i) => computeNadzorGeneralApkRestoration(i),
+  },
+  new_circumstances_review_apk: {
+    node: NEW_CIRCUMSTANCES_REVIEW_APK,
+    deps: () => ['circumstances_discovered_date'],
+    compute: (i) => computeNewCircumstancesReviewApk(i),
+  },
+  // Простой deps без restorationDeps(): узел не ветвится по subject_category
+  // (его здесь нет) — единственный вход и у общего срока, и у восстановления
+  // один и тот же circumstances_discovered_date.
+  new_circumstances_review_apk_restoration: {
+    node: NEW_CIRCUMSTANCES_REVIEW_APK_RESTORATION,
+    deps: () => ['circumstances_discovered_date'],
+    compute: (i) => computeNewCircumstancesReviewApkRestoration(i),
   },
 };
 

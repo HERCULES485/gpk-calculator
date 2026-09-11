@@ -92,6 +92,17 @@ export const SITUATIONS_APK = [
     fields: ['subject_category', 'learned_of_violation_date'],
     nodes: ['nadzor_general_apk', 'nadzor_general_apk_restoration'],
   },
+  {
+    id: 'new_circumstances',
+    label: 'Пересмотр по новым или вновь открывшимся обстоятельствам',
+    // Единственное поле ветви — дата появления/открытия обстоятельств: без
+    // дискриминатора оснований пересмотра (ст. 311 не моделируется, см.
+    // apk/chain.js). Уточняющих полей нет — restoration-узел здесь не несёт
+    // категории субъекта, в отличие от 259/276/291.2/308.1.
+    primary_field: 'circumstances_discovered_date',
+    fields: [],
+    nodes: ['new_circumstances_review_apk', 'new_circumstances_review_apk_restoration'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';
