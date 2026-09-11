@@ -1049,7 +1049,7 @@ export const ENFORCEMENT_EXCLUSION_TYPE_IDS_APK = new Set(
 // ожидается — основание приостановления на арифметику не влияет, — но в
 // истории результата периоды двух частей статьи лежат вперемешку, и без
 // метки было бы не видно, какой период по какому основанию исключён.
-const SUSPENSION_TYPE_APK = 'suspension_apk';
+export const SUSPENSION_TYPE_APK = 'suspension_apk';
 
 const EXCLUSION_LOGIC_SUSPENSION_APK =
   'Время, на которое исполнение судебного акта приостанавливалось, не ' +

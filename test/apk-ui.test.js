@@ -312,11 +312,23 @@ test('АПК buildView: узлы-события дают карточку kind="
     assert.equal(card.kind, 'event');
     assert.match(card.date, /^\d{4}-\d{2}-\d{2}$/);
     assert.ok(card.based_on, `у события "${id}" нет based_on`);
-    assert.ok(card.norm);
     // Это не срок: ни дедлайна, ни длительности у события нет.
     assert.equal(card.deadline, undefined);
     assert.equal(card.duration, undefined);
   }
+  // Норма читается из константы узла. У узлов-событий она лежит плоско
+  // (norm.primary), без norm_versions, в отличие от узлов-сроков — значение
+  // закреплено точным текстом, а не просто «непустая строка»: пустая или
+  // undefined норма на карточке выглядит как отсутствие ссылки на закон.
+  assert.equal(
+    view.cards.find((c) => c.id === 'entry_into_force_apk').norm,
+    'ч. 1 ст. 180 АПК РФ',
+  );
+  const afterCassation = view.cards.find(
+    (c) => c.id === 'entry_into_force_after_cassation_apk',
+  );
+  assert.equal(afterCassation.norm, 'ч. 1 ст. 291.2 АПК РФ');
+  assert.deepEqual(afterCassation.details.calculation, ['ч. 5 ст. 289 АПК РФ']);
   // Ветвь «акт вышестоящей инстанции введён датой» даёт другое основание.
   const filed = buildView(
     {

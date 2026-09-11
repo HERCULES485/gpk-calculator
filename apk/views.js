@@ -47,6 +47,7 @@ import {
   ENFORCEMENT_PRESENTATION_AFTER_RESTORATION_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
+  SUSPENSION_TYPE_APK,
   RESTORATION_SUBJECT_CATEGORIES,
   CASSATION_RESTORATION_SUBJECT_CATEGORIES,
   CASSATION_VS_RESTORATION_SUBJECT_CATEGORIES,
@@ -73,11 +74,13 @@ const INTERRUPTION_TITLE_BY_ID_APK = Object.fromEntries(
 
 // Период приостановления (ч. 2 ст. 321) в каталог оснований не входит: у него
 // основание на арифметику не влияет и на входе не ожидается вовсе, тип
-// проставляется расчётом. Подпись для истории нужна всё равно — она здесь.
+// проставляется расчётом. Подпись для истории нужна всё равно — она здесь, а
+// сам идентификатор берётся из chain.js, чтобы строка не разъехалась с тем,
+// чем расчёт реально помечает такие периоды.
 const SUSPENSION_LABEL_APK = 'Приостановление исполнения (ч. 2 ст. 321 АПК РФ)';
 
 const EXCLUSION_TITLE_BY_ID_APK = {
-  suspension_apk: SUSPENSION_LABEL_APK,
+  [SUSPENSION_TYPE_APK]: SUSPENSION_LABEL_APK,
   ...Object.fromEntries(ENFORCEMENT_EXCLUSION_TYPES_APK.map((t) => [t.id, t.title])),
 };
 
