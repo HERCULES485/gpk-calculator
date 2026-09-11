@@ -192,7 +192,7 @@ export const APPEAL_GENERAL_APK_RESTORATION = {
   ],
 };
 
-const RESTORATION_SUBJECT_CATEGORIES = new Set([
+export const RESTORATION_SUBJECT_CATEGORIES = new Set([
   'participating_duly_notified',
   'article_42_person',
   'participating_improperly_notified',
@@ -453,7 +453,7 @@ export const CASSATION_GENERAL_APK_RESTORATION = {
   ],
 };
 
-const CASSATION_RESTORATION_SUBJECT_CATEGORIES = new Set([
+export const CASSATION_RESTORATION_SUBJECT_CATEGORIES = new Set([
   'participating_duly_notified',
   'article_42_person',
   'participating_improperly_notified',
@@ -678,7 +678,7 @@ export const CASSATION_VS_APK_RESTORATION = {
   ],
 };
 
-const CASSATION_VS_RESTORATION_SUBJECT_CATEGORIES = new Set([
+export const CASSATION_VS_RESTORATION_SUBJECT_CATEGORIES = new Set([
   'participating_duly_notified',
   'article_42_person',
 ]);
