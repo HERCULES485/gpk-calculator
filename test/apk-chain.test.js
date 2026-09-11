@@ -10,7 +10,8 @@
 // ст. 188 ч. 4 — частная жалоба на определение апелляционной инстанции (задача 5b),
 // ст. 188 ч. 6 — частная жалоба на определение кассационной инстанции (задача 5b),
 // ст. 188 ч. 5 — жалоба на постановление апелляции по жалобе на определение (задача 5c),
-// ст. 321 ч. 1, 3, 4 — предъявление исполнительного листа, базовый срок и перерыв (задача 6b).
+// ст. 321 ч. 1, 3, 4 — предъявление исполнительного листа, базовый срок и перерыв (задача 6b),
+// ст. 321 ч. 2, 5 — исключение периода из срока предъявления (задача 6c).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -40,6 +41,7 @@ import {
   PRIVATE_COMPLAINT_APPELLATE_POSTANOVLENIE_APK,
   computeEnforcementPresentationApk,
   ENFORCEMENT_PRESENTATION_APK,
+  ENFORCEMENT_EXCLUSION_TYPES_APK,
 } from '../apk/chain.js';
 
 test('appeal_general_apk считается от decision_full_text_date (обычная дата, без переноса)', () => {
@@ -1193,4 +1195,278 @@ test('исполнительный лист АПК: для каждой ветк
 test('исполнительный лист АПК: объём задачи 6b — без restoration_norm и без ics', () => {
   assert.equal(ENFORCEMENT_PRESENTATION_APK.restoration_norm, undefined);
   assert.equal(ENFORCEMENT_PRESENTATION_APK.ics, undefined);
+});
+
+// Задача 6c — исключение периода из срока предъявления (ч. 2, 5 ст. 321 АПК РФ).
+// Базовый случай для всех сценариев ниже: вступление в силу 18.06.2022 →
+// дедлайн 18.06.2025 (проверено тестами задачи 6b).
+const ENFORCEMENT_BASE_APK = {
+  case_type: 'entry_into_force',
+  entry_into_force_date: '2022-06-18',
+};
+
+test('исполнительный лист АПК: приостановление исполнения (ч. 2 ст. 321) — дедлайн отодвинут на длину периода', () => {
+  const term = computeEnforcementPresentationApk({
+    ...ENFORCEMENT_BASE_APK,
+    // 01.03.2023 → 10.05.2023 = 70 календарных дней (end − start, без +1).
+    suspension_periods: [{ start: '2023-03-01', end: '2023-05-10' }],
+  });
+  assert.equal(term.pre_exclusion_deadline, '2025-06-18');
+  assert.equal(term.excluded_days, 70);
+  assert.equal(term.deadline, '2025-08-27');
+  // Срок не перезапущен: якорь остался прежним, сдвинут только дедлайн.
+  assert.equal(term.anchor, '2022-06-18');
+  assert.equal(term.excluded_periods.length, 1);
+  assert.equal(term.excluded_periods[0].type, 'suspension_apk');
+  assert.equal(term.excluded_periods[0].days, 70);
+  // Сработала только ч. 2 — ч. 5 в обосновании не цитируется.
+  assert.equal(term.exclusion_norm, 'ч. 2 ст. 321 АПК РФ');
+  assert.match(term.exclusion_logic, /приостанавливалось/);
+  assert.doesNotMatch(term.exclusion_logic, /ч\. 5 ст\. 321/);
+});
+
+test('исполнительный лист АПК: отзыв листа взыскателем (ч. 5 ст. 321) — период вычитается из срока', () => {
+  const term = computeEnforcementPresentationApk({
+    ...ENFORCEMENT_BASE_APK,
+    // 01.06.2023 → 15.08.2023 = 75 дней.
+    execution_ended_periods: [
+      { type: 'withdrawal_by_claimant_apk', start: '2023-06-01', end: '2023-08-15' },
+    ],
+  });
+  assert.equal(term.excluded_days, 75);
+  assert.equal(term.deadline, '2025-09-01');
+  assert.equal(term.excluded_periods[0].type, 'withdrawal_by_claimant_apk');
+  // Сработала только ч. 5 — ч. 2 в обосновании не цитируется.
+  assert.equal(term.exclusion_norm, 'ч. 5 ст. 321 АПК РФ');
+  assert.doesNotMatch(term.exclusion_logic, /ч\. 2 ст\. 321/);
+});
+
+test('исполнительный лист АПК: действия взыскателя, препятствующие исполнению (ч. 5 ст. 321) — то же основание вычета, другой тип', () => {
+  const term = computeEnforcementPresentationApk({
+    ...ENFORCEMENT_BASE_APK,
+    execution_ended_periods: [
+      { type: 'claimant_obstruction_apk', start: '2023-06-01', end: '2023-08-15' },
+    ],
+  });
+  // Арифметика та же, что у отзыва листа: различается только тип в истории.
+  assert.equal(term.excluded_days, 75);
+  assert.equal(term.deadline, '2025-09-01');
+  assert.equal(term.excluded_periods[0].type, 'claimant_obstruction_apk');
+  assert.equal(term.exclusion_norm, 'ч. 5 ст. 321 АПК РФ');
+});
+
+test('исполнительный лист АПК: период по ч. 2 и период по ч. 5 суммируются, а не заменяют друг друга', () => {
+  const term = computeEnforcementPresentationApk({
+    ...ENFORCEMENT_BASE_APK,
+    suspension_periods: [{ start: '2023-03-01', end: '2023-05-10' }], // 70 дней
+    execution_ended_periods: [
+      { type: 'withdrawal_by_claimant_apk', start: '2023-06-01', end: '2023-08-15' }, // 75 дней
+    ],
+  });
+  // 70 + 75 = 145 — сумма, а не длина последнего периода (обратное правило по
+  // сравнению с перерывом, где из нескольких событий берётся только последнее).
+  assert.equal(term.excluded_days, 145);
+  assert.equal(term.deadline, '2025-11-10');
+  assert.notEqual(term.deadline, '2025-09-01');
+  assert.equal(term.excluded_periods.length, 2);
+  // Сработали обе части — цитируются обе.
+  assert.equal(term.exclusion_norm, 'ч. 2, 5 ст. 321 АПК РФ');
+  assert.match(term.exclusion_logic, /приостанавливалось/);
+  assert.match(term.exclusion_logic, /отзывом листа взыскателем/);
+});
+
+test('исполнительный лист АПК: два приостановления в разное время — тоже суммируются', () => {
+  const term = computeEnforcementPresentationApk({
+    ...ENFORCEMENT_BASE_APK,
+    // Во вводе намеренно не по порядку: более поздний период идёт первым.
+    suspension_periods: [
+      { start: '2024-01-10', end: '2024-02-09' }, // 30 дней
+      { start: '2023-03-01', end: '2023-05-10' }, // 70 дней
+    ],
+  });
+  assert.equal(term.excluded_days, 100);
+  assert.equal(term.deadline, '2025-09-26');
+  // История отсортирована по дате начала по возрастанию.
+  assert.deepEqual(
+    term.excluded_periods.map((p) => p.start),
+    ['2023-03-01', '2024-01-10'],
+  );
+});
+
+test('исполнительный лист АПК: основание окончания исполнения вне ч. 5 не вычитается из срока', () => {
+  const notInPartFive = {
+    type: 'actual_execution', // фактическое исполнение — ч. 5 такого основания не называет
+    start: '2024-01-10',
+    end: '2024-02-09',
+  };
+  const alone = computeEnforcementPresentationApk({
+    ...ENFORCEMENT_BASE_APK,
+    execution_ended_periods: [notInPartFive],
+  });
+  // Дедлайн как без периодов вовсе, полей исключения в результате не появилось.
+  assert.equal(alone.deadline, '2025-06-18');
+  assert.equal(alone.excluded_days, undefined);
+  assert.equal(alone.pre_exclusion_deadline, undefined);
+
+  // Рядом с принятым периодом видно, что запись не выброшена молча.
+  const withValid = computeEnforcementPresentationApk({
+    ...ENFORCEMENT_BASE_APK,
+    suspension_periods: [{ start: '2023-03-01', end: '2023-05-10' }],
+    execution_ended_periods: [notInPartFive],
+  });
+  assert.equal(withValid.excluded_days, 70); // прибавлен только валидный период
+  const ignored = withValid.excluded_periods.find((p) => p.ignored);
+  assert.equal(ignored.ignored_reason, 'unknown_type');
+  assert.equal(ignored.type, 'actual_execution');
+  assert.equal(ignored.days, null);
+});
+
+test('исполнительный лист АПК: период без даты начала или конца игнорируется и виден в истории', () => {
+  const noEnd = computeEnforcementPresentationApk({
+    ...ENFORCEMENT_BASE_APK,
+    suspension_periods: [
+      { start: '2023-03-01' },
+      { start: '2024-01-10', end: '2024-02-09' }, // 30 дней
+    ],
+  });
+  assert.equal(noEnd.excluded_days, 30);
+  assert.equal(noEnd.deadline, '2025-07-18');
+  assert.equal(noEnd.excluded_periods.find((p) => p.ignored).ignored_reason, 'no_end_date');
+
+  const noStart = computeEnforcementPresentationApk({
+    ...ENFORCEMENT_BASE_APK,
+    suspension_periods: [{ end: '2023-05-10' }, { start: '2024-01-10', end: '2024-02-09' }],
+  });
+  assert.equal(noStart.excluded_days, 30);
+  assert.equal(noStart.excluded_periods.find((p) => p.ignored).ignored_reason, 'no_start_date');
+});
+
+test('исполнительный лист АПК: период с концом раньше начала игнорируется', () => {
+  const term = computeEnforcementPresentationApk({
+    ...ENFORCEMENT_BASE_APK,
+    suspension_periods: [
+      { start: '2023-05-10', end: '2023-03-01' },
+      { start: '2024-01-10', end: '2024-02-09' }, // 30 дней
+    ],
+  });
+  assert.equal(term.excluded_days, 30);
+  assert.equal(term.deadline, '2025-07-18');
+  const ignored = term.excluded_periods.find((p) => p.ignored);
+  assert.equal(ignored.ignored_reason, 'end_before_start');
+  assert.equal(ignored.days, null);
+});
+
+test('исполнительный лист АПК: период, выходящий за пределы посчитанного дедлайна, учитывается целиком', () => {
+  const term = computeEnforcementPresentationApk({
+    ...ENFORCEMENT_BASE_APK,
+    // Период начинается до дедлайна 18.06.2025 и кончается после него.
+    suspension_periods: [{ start: '2025-05-01', end: '2025-08-01' }],
+  });
+  // Вычитается вся длина периода (92 дня), без урезания по дате дедлайна.
+  assert.equal(term.excluded_days, 92);
+  assert.equal(term.deadline, '2025-09-18');
+});
+
+test('исполнительный лист АПК: пересечение исключаемых периодов останавливает расчёт', () => {
+  const overlapping = /пересекаются/;
+  // Пересечение между ч. 2 и ч. 5 — проверяется по объединённому списку.
+  assert.throws(
+    () =>
+      computeEnforcementPresentationApk({
+        ...ENFORCEMENT_BASE_APK,
+        suspension_periods: [{ start: '2023-03-01', end: '2023-05-10' }],
+        execution_ended_periods: [
+          { type: 'withdrawal_by_claimant_apk', start: '2023-05-09', end: '2023-08-15' },
+        ],
+      }),
+    overlapping,
+  );
+  // Пересечение внутри одного списка — так же.
+  assert.throws(
+    () =>
+      computeEnforcementPresentationApk({
+        ...ENFORCEMENT_BASE_APK,
+        suspension_periods: [
+          { start: '2023-03-01', end: '2023-05-10' },
+          { start: '2023-04-01', end: '2023-04-20' },
+        ],
+      }),
+    overlapping,
+  );
+  // Стык встык пересечением не считается: день окончания периода уже снова
+  // считается днём течения срока, поэтому он же может быть днём начала
+  // следующего периода — 70 + 97 дней складываются без двойного счёта.
+  const touching = computeEnforcementPresentationApk({
+    ...ENFORCEMENT_BASE_APK,
+    suspension_periods: [{ start: '2023-03-01', end: '2023-05-10' }],
+    execution_ended_periods: [
+      { type: 'withdrawal_by_claimant_apk', start: '2023-05-10', end: '2023-08-15' },
+    ],
+  });
+  assert.equal(touching.excluded_days, 167);
+});
+
+test('исполнительный лист АПК: перерыв (ч. 3, 4) применяется первым, исключение периода — поверх нового дедлайна', () => {
+  const term = computeEnforcementPresentationApk({
+    ...ENFORCEMENT_BASE_APK,
+    enforcement_interruptions: [{ type: 'presentment', date: '2024-07-15' }],
+    suspension_periods: [{ start: '2023-03-01', end: '2023-05-10' }], // 70 дней
+  });
+  // Сначала перерыв: якорь — дата события, дедлайн 15.07.2027.
+  assert.equal(term.base_anchor, '2022-06-18');
+  assert.equal(term.anchor, '2024-07-15');
+  assert.equal(term.pre_exclusion_deadline, '2027-07-15');
+  // Затем 70 дней прибавляются к дедлайну, посчитанному уже с учётом перерыва,
+  // а не к базовому дедлайну 18.06.2025 (тогда было бы 27.08.2025).
+  assert.equal(term.deadline, '2027-09-23');
+  assert.notEqual(term.deadline, '2025-08-27');
+  // Обе истории сохраняются рядом: события перерыва и исключённые периоды.
+  assert.equal(term.interruptions.length, 1);
+  assert.equal(term.excluded_periods.length, 1);
+});
+
+test('исполнительный лист АПК: перенос через нерабочий день выполняется повторно, уже после добавления периода', () => {
+  const term = computeEnforcementPresentationApk({
+    ...ENFORCEMENT_BASE_APK,
+    // 18.06.2025 (среда, рабочий) + 3 дня = 21.06.2025 — суббота.
+    suspension_periods: [{ start: '2023-03-01', end: '2023-03-04' }],
+  });
+  assert.equal(term.pre_exclusion_deadline, '2025-06-18');
+  assert.equal(term.raw_deadline, '2025-06-21');
+  assert.equal(term.deadline, '2025-06-23'); // понедельник
+  assert.equal(term.shifted, true);
+});
+
+test('исполнительный лист АПК: без исключаемых периодов результат прежний, новых полей нет', () => {
+  const term = computeEnforcementPresentationApk({
+    ...ENFORCEMENT_BASE_APK,
+    suspension_periods: [],
+    execution_ended_periods: [],
+  });
+  assert.equal(term.deadline, '2025-06-18');
+  assert.equal(term.excluded_periods, undefined);
+  assert.equal(term.excluded_days, undefined);
+  assert.equal(term.pre_exclusion_deadline, undefined);
+  assert.equal(term.exclusion_norm, undefined);
+  assert.equal(term.exclusion_logic, undefined);
+});
+
+test('исполнительный лист АПК: null/undefined вместо списков периодов трактуются как пустой список', () => {
+  const term = computeEnforcementPresentationApk({
+    ...ENFORCEMENT_BASE_APK,
+    suspension_periods: null,
+    execution_ended_periods: undefined,
+  });
+  assert.equal(term.deadline, '2025-06-18');
+  assert.equal(term.excluded_days, undefined);
+});
+
+test('исполнительный лист АПК: каталог оснований ч. 5 — ровно два основания, оба со ссылкой на ч. 5', () => {
+  assert.deepEqual(
+    ENFORCEMENT_EXCLUSION_TYPES_APK.map((t) => t.id),
+    ['withdrawal_by_claimant_apk', 'claimant_obstruction_apk'],
+  );
+  for (const type of ENFORCEMENT_EXCLUSION_TYPES_APK) {
+    assert.equal(type.norm, 'ч. 5 ст. 321 АПК РФ');
+  }
 });
