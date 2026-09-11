@@ -12,6 +12,12 @@ import { readFileSync } from 'node:fs';
 import { SITUATIONS_APK, DEFAULT_SITUATION_APK } from '../apk/situations.js';
 import { INPUT_LABELS_APK } from '../apk/labels.js';
 import { TERM_REGISTRY_APK, ICS_PRODID, ICS_UID_DOMAIN } from '../apk/term-registry.js';
+import { buildView, RESTORATION_SUBJECT_CATEGORIES_APK } from '../apk/views.js';
+import {
+  RESTORATION_SUBJECT_CATEGORIES,
+  CASSATION_RESTORATION_SUBJECT_CATEGORIES,
+  CASSATION_VS_RESTORATION_SUBJECT_CATEGORIES,
+} from '../apk/chain.js';
 import {
   situationById,
   allSituationNodes,
@@ -149,4 +155,255 @@ test('АПК реестр сроков: идентификаторы проду�
   assert.equal(typeof ICS_UID_DOMAIN, 'string');
   assert.ok(ICS_UID_DOMAIN.length > 0);
   assert.notEqual(ICS_UID_DOMAIN, 'gpk-calculator');
+});
+
+// --- buildView (задача UI.3) --------------------------------------------------
+
+// Данные, поднимающие все 14 узлов разом. Ветви дискриминаторов выбраны так,
+// чтобы цепочка считалась целиком: жалоба не подана → вступление в силу от
+// срока апелляции, окружная кассация не подавалась → якорь кассации в ВС РФ от
+// срока окружной кассации.
+const ALL_NODES_INPUTS_APK = {
+  decision_full_text_date: '2025-03-11',
+  appeal_filed: false,
+  cassation_filed: false,
+  subject_category: 'article_42_person',
+  learned_of_violation_date: '2025-05-20',
+  first_instance_ruling_date: '2025-04-01',
+  appellate_ruling_issued_date: '2025-05-05',
+  cassation_ruling_issued_date: '2025-06-10',
+  appellate_postanovlenie_date: '2025-07-15',
+  case_type: 'entry_into_force',
+  entry_into_force_date: '2022-06-18',
+  restoration_ruling_date: '2025-03-11',
+};
+
+const TODAY_APK = '2025-01-01'; // раньше всех дедлайнов — ничего не истекло
+
+test('АПК buildView: на полном наборе данных считаются все 14 узлов, incomplete пуст', () => {
+  const view = buildView(ALL_NODES_INPUTS_APK, { today: TODAY_APK });
+  assert.equal(view.cards.length, 14);
+  assert.equal(view.incomplete.length, 0);
+  assert.deepEqual(view.stubs, []);
+  // Форма возврата совпадает с ГПК-шной: cards/incomplete/stubs.
+  assert.deepEqual(Object.keys(view).sort(), ['cards', 'incomplete', 'stubs']);
+  // Каждый узел chain.js представлен ровно одной карточкой.
+  assert.deepEqual(
+    view.cards.map((c) => c.id).sort(),
+    [...CHAIN_NODE_IDS].sort(),
+  );
+  // Ни одной карточки-ошибки на валидных данных.
+  assert.equal(
+    view.cards.filter((c) => c.kind === 'error').length,
+    0,
+  );
+  // Три частные жалобы ст. 188 считаются от РАЗНЫХ дат, а не от одной:
+  // развилка с общим именем входа ruling_issued_date решена на слое
+  // представления, а не потерей различий.
+  const complaints = ['first_instance', 'appellate', 'cassation'].map(
+    (part) => view.cards.find((c) => c.id === `private_complaint_${part}_apk`).deadline,
+  );
+  assert.equal(new Set(complaints).size, 3);
+});
+
+test('АПК buildView: пересечение периодов даёт карточку-ошибку, остальные узлы считаются', () => {
+  const view = buildView(
+    {
+      ...ALL_NODES_INPUTS_APK,
+      suspension_periods: [{ start: '2023-03-01', end: '2023-05-10' }],
+      execution_ended_periods: [
+        { type: 'withdrawal_by_claimant_apk', start: '2023-05-09', end: '2023-08-15' },
+      ],
+    },
+    { today: TODAY_APK },
+  );
+  // Расчёт не падает целиком: 14 карточек на месте, ошибочная — ровно одна.
+  assert.equal(view.cards.length, 14);
+  const errors = view.cards.filter((c) => c.kind === 'error');
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].id, 'enforcement_presentation_apk');
+  assert.ok(errors[0].message.length > 0);
+  // Сообщение ядра прокинуто как есть, а не заменено общей формулировкой.
+  assert.match(errors[0].message, /пересекаются/);
+  assert.equal(errors[0].deadline, undefined);
+  // Соседний узел ст. 321 (после восстановления) на это не реагирует.
+  const neighbour = view.cards.find(
+    (c) => c.id === 'enforcement_presentation_after_restoration_apk',
+  );
+  assert.equal(neighbour.kind, 'term');
+  assert.ok(neighbour.deadline);
+});
+
+test('АПК buildView: категория субъекта, неприменимая к узлу, даёт карточку not_applicable', () => {
+  const view = buildView(
+    {
+      ...ALL_NODES_INPUTS_APK,
+      // Валидна для ст. 259 ч. 2 и ст. 276 ч. 2, но не для ст. 291.2 ч. 2.
+      subject_category: 'participating_improperly_notified',
+    },
+    { today: TODAY_APK },
+  );
+  const vs = view.cards.find((c) => c.id === 'cassation_vs_apk_restoration');
+  assert.equal(vs.kind, 'not_applicable');
+  assert.ok(vs.reason.length > 0);
+  // Причина объясняет, а не просто сообщает «неприменимо».
+  assert.match(vs.reason, /291\.2/);
+  assert.equal(vs.deadline, undefined);
+  // Два других узла восстановления той же категорией считаются нормально.
+  for (const id of ['appeal_general_apk_restoration', 'cassation_general_apk_restoration']) {
+    const card = view.cards.find((c) => c.id === id);
+    assert.equal(card.kind, 'term');
+    assert.ok(card.deadline);
+  }
+});
+
+test('АПК категории субъекта: каталог подписей покрывает ровно наборы модели', () => {
+  // Идентификаторы категорий живут в chain.js и оттуда же импортируются
+  // слоем представления; здесь проверяется, что у каждой категории модели есть
+  // подпись для интерфейса и что лишних подписей нет.
+  const inModel = new Set([
+    ...RESTORATION_SUBJECT_CATEGORIES,
+    ...CASSATION_RESTORATION_SUBJECT_CATEGORIES,
+    ...CASSATION_VS_RESTORATION_SUBJECT_CATEGORIES,
+  ]);
+  const inCatalog = RESTORATION_SUBJECT_CATEGORIES_APK.map((c) => c.id);
+  assert.deepEqual([...inCatalog].sort(), [...inModel].sort());
+  for (const category of RESTORATION_SUBJECT_CATEGORIES_APK) {
+    assert.ok(category.label.length > 0, `у категории "${category.id}" нет подписи`);
+  }
+  // Узкий набор ст. 291.2 — подмножество общего, а не независимый список.
+  for (const id of CASSATION_VS_RESTORATION_SUBJECT_CATEGORIES) {
+    assert.ok(RESTORATION_SUBJECT_CATEGORIES.has(id));
+  }
+  assert.ok(
+    CASSATION_VS_RESTORATION_SUBJECT_CATEGORIES.size < RESTORATION_SUBJECT_CATEGORIES.size,
+  );
+});
+
+test('АПК buildView: любая категория модели даёт срок либо честное "неприменимо"', () => {
+  const RESTORATION_NODES = [
+    'appeal_general_apk_restoration',
+    'cassation_general_apk_restoration',
+    'cassation_vs_apk_restoration',
+  ];
+  for (const category of RESTORATION_SUBJECT_CATEGORIES_APK.map((c) => c.id)) {
+    const view = buildView(
+      { ...ALL_NODES_INPUTS_APK, subject_category: category },
+      { today: TODAY_APK },
+    );
+    for (const id of RESTORATION_NODES) {
+      const card = view.cards.find((c) => c.id === id);
+      // Узел либо посчитан, либо честно помечен неприменимым — но никогда не
+      // падает в карточку-ошибку: значит throw из chain.js на неизвестной
+      // категории до сборки карточки не доходит.
+      assert.ok(
+        card.kind === 'term' || card.kind === 'not_applicable',
+        `узел "${id}" при категории "${category}" дал kind="${card.kind}"`,
+      );
+      if (card.kind === 'term') assert.ok(card.deadline);
+    }
+  }
+});
+
+test('АПК buildView: узлы-события дают карточку kind="event" с датой и основанием', () => {
+  const view = buildView(ALL_NODES_INPUTS_APK, { today: TODAY_APK });
+  for (const id of ['entry_into_force_apk', 'entry_into_force_after_cassation_apk']) {
+    const card = view.cards.find((c) => c.id === id);
+    assert.equal(card.kind, 'event');
+    assert.match(card.date, /^\d{4}-\d{2}-\d{2}$/);
+    assert.ok(card.based_on, `у события "${id}" нет based_on`);
+    // Это не срок: ни дедлайна, ни длительности у события нет.
+    assert.equal(card.deadline, undefined);
+    assert.equal(card.duration, undefined);
+  }
+  // Норма читается из константы узла. У узлов-событий она лежит плоско
+  // (norm.primary), без norm_versions, в отличие от узлов-сроков — значение
+  // закреплено точным текстом, а не просто «непустая строка»: пустая или
+  // undefined норма на карточке выглядит как отсутствие ссылки на закон.
+  assert.equal(
+    view.cards.find((c) => c.id === 'entry_into_force_apk').norm,
+    'ч. 1 ст. 180 АПК РФ',
+  );
+  const afterCassation = view.cards.find(
+    (c) => c.id === 'entry_into_force_after_cassation_apk',
+  );
+  assert.equal(afterCassation.norm, 'ч. 1 ст. 291.2 АПК РФ');
+  assert.deepEqual(afterCassation.details.calculation, ['ч. 5 ст. 289 АПК РФ']);
+  // Ветвь «акт вышестоящей инстанции введён датой» даёт другое основание.
+  const filed = buildView(
+    {
+      ...ALL_NODES_INPUTS_APK,
+      appeal_filed: true,
+      appeal_outcome: 'affirmed',
+      appellate_ruling_date: '2025-06-02',
+    },
+    { today: TODAY_APK },
+  );
+  const entry = filed.cards.find((c) => c.id === 'entry_into_force_apk');
+  assert.equal(entry.date, '2025-06-02');
+  assert.equal(entry.based_on, 'appellate_ruling_date');
+});
+
+test('АПК buildView: без данных все 14 узлов уходят в incomplete, расчёт не вызывается', () => {
+  const view = buildView({}, { today: TODAY_APK });
+  assert.equal(view.incomplete.length, 14);
+  // Ни одной карточки вообще: если бы compute-функции вызывались на пустых
+  // данных, они бросили бы, и мы увидели бы карточки kind="error".
+  assert.equal(view.cards.length, 0);
+  for (const node of view.incomplete) {
+    assert.equal(node.status, 'not_computed');
+    assert.ok(node.reason.length > 0);
+    assert.ok(node.missing_inputs.length > 0);
+    // У каждого недостающего поля есть человекочитаемая подпись.
+    for (const field of node.missing_inputs) {
+      assert.ok(field.label, `у поля "${field.id}" нет подписи в labels.js`);
+    }
+  }
+  // buildView без аргументов тоже не падает.
+  assert.doesNotThrow(() => buildView());
+});
+
+test('АПК buildView: на узле ст. 321 одновременно видны история перерывов и история периодов', () => {
+  const view = buildView(
+    {
+      ...ALL_NODES_INPUTS_APK,
+      enforcement_interruptions: [{ type: 'presentment', date: '2024-07-15' }],
+      suspension_periods: [{ start: '2023-03-01', end: '2023-05-10' }], // 70 дней
+      execution_ended_periods: [
+        // Основание вне ч. 5 — период отклоняется, но остаётся виден в истории.
+        { type: 'actual_execution', start: '2024-09-01', end: '2024-10-01' },
+      ],
+    },
+    { today: TODAY_APK },
+  );
+  const card = view.cards.find((c) => c.id === 'enforcement_presentation_apk');
+
+  // Перерыв: якорь сдвинут на событие, исходный сохранён, событие подписано.
+  assert.equal(card.interruptible, true);
+  assert.equal(card.base_anchor, '2022-06-18');
+  assert.equal(card.restarted_from, '2024-07-15');
+  assert.equal(card.interruptions.length, 1);
+  assert.ok(card.interruptions[0].label.length > 0);
+  assert.notEqual(card.interruptions[0].label, 'Основание не распознано');
+
+  // Исключение периодов: принятый период вычтен, отклонённый виден с причиной.
+  assert.equal(card.excluded_days, 70);
+  assert.equal(card.pre_exclusion_deadline, '2027-07-15');
+  assert.equal(card.deadline, '2027-09-23');
+  assert.equal(card.excluded_periods.length, 2);
+  const accepted = card.excluded_periods.find((p) => !p.ignored);
+  assert.equal(accepted.days, 70);
+  assert.match(accepted.label, /Приостановление/);
+  const rejected = card.excluded_periods.find((p) => p.ignored);
+  assert.equal(rejected.ignored_reason, 'unknown_type');
+  assert.match(rejected.ignored_text, /не подпадает под ч\. 5/);
+
+  // Итоговая строка называет обе даты и число дней.
+  assert.match(card.exclusion_summary, /70/);
+  assert.match(card.exclusion_summary, /2027-07-15/);
+  assert.match(card.exclusion_summary, /2027-09-23/);
+
+  // Нормы обеих механик — в подробностях карточки, рядом и не затирая друг друга.
+  assert.match(card.details.interruption_norm, /ч\. 3, 4 ст\. 321/);
+  assert.match(card.details.exclusion_norm, /ч\. 2 ст\. 321/);
 });
