@@ -21,19 +21,10 @@ import { buildView, RESTORATION_SUBJECT_CATEGORIES_APK } from './views.js';
 import { SITUATIONS_APK, DEFAULT_SITUATION_APK } from './situations.js';
 import { INPUT_LABELS_APK } from './labels.js';
 import { ENFORCEMENT_INTERRUPTION_TYPES_APK, ENFORCEMENT_EXCLUSION_TYPES_APK } from './chain.js';
-import {
-  TERM_REGISTRY_APK,
-  ICS_PRODID,
-  ICS_UID_DOMAIN,
-  reminderOffsets,
-} from './term-registry.js';
+import { reminderOffsets } from './term-registry.js';
+import { buildICS, icsTermsFromView, exportableCards } from './ics.js';
 
 // --- Из ядра, без изменений ---------------------------------------------------
-import {
-  buildICS as coreBuildICS,
-  icsTermsFromView as coreIcsTermsFromView,
-  exportableCards as coreExportableCards,
-} from '../core/export/ics.js';
 import { situationById } from '../core/view/situations.js';
 import { applyDateEdit, dateFieldError, isoToRu, ruToISO } from '../core/ui/date-field.js';
 import {
@@ -49,19 +40,6 @@ import {
 const ICS_FILENAME = 'apk-sroki.ics';
 const ICS_TYPE_FILE = 'text/calendar';
 const ICS_TYPE_DOWNLOAD = 'text/calendar;charset=utf-8';
-
-// Предметная обвязка над генератором ядра. У ГПК такие обёртки живут отдельным
-// файлом (src/ics.js), у АПК отдельного файла нет — реестр и идентификаторы
-// продукта подставляются здесь, сигнатуры при этом те же.
-const buildICS = (terms, options) =>
-  coreBuildICS(terms, {
-    ...options,
-    prodId: ICS_PRODID,
-    uidDomain: ICS_UID_DOMAIN,
-    offsets: reminderOffsets,
-  });
-const icsTermsFromView = (view) => coreIcsTermsFromView(view, TERM_REGISTRY_APK);
-const exportableCards = (view) => coreExportableCards(view, TERM_REGISTRY_APK);
 
 // --- Поля ввода: вид виджета по полю ------------------------------------------
 //
@@ -472,14 +450,23 @@ function basedOnText(basedOn) {
   return BASED_ON_TEXT_APK[basedOn] ?? basedOn;
 }
 
+// Текст ошибки идёт напрямую из core/engine/exclusion.js (ядро трогать нельзя)
+// и содержит даты в ISO — единственный способ показать их в принятом на
+// странице формате ДД.ММ.ГГГГ без изменения самого сообщения.
+const ISO_DATE_RE = /\d{4}-\d{2}-\d{2}/g;
+
+export function isoDatesToRu(text) {
+  return text.replace(ISO_DATE_RE, (iso) => isoToRu(iso));
+}
+
 // Расчёт отказал на введённых данных: пересечение исключаемых периодов либо
 // неподдерживаемый исход апелляции. Текст берём из модели как есть — он уже
-// объясняет причину и что поправить.
+// объясняет причину и что поправить, но даты в нём приводим к формату страницы.
 function renderErrorCard(card) {
   const c = el('div', 'card calc-error');
   c.appendChild(el('div', 'kicker', 'Расчёт невозможен'));
   c.appendChild(el('h2', null, card.title));
-  c.appendChild(el('div', 'calc-error-text', card.message));
+  c.appendChild(el('div', 'calc-error-text', isoDatesToRu(card.message)));
   return c;
 }
 
@@ -533,6 +520,22 @@ function renderInterruptionHistory(card) {
   return box;
 }
 
+/**
+ * Итоговая строка исключения периодов — пересобрана из отдельных полей карточки
+ * (excluded_days/pre_exclusion_deadline/deadline) с русским текстом и датами в
+ * ДД.ММ.ГГГГ, а не взята из card.exclusion_summary как готовый текст: там даты
+ * в ISO (apk/views.js менять нельзя), а числа те же самые — пересборка не
+ * зависит от того, не изменится ли формулировка в views.js.
+ * @returns {string|null} null, если периоды не исключались (полей нет).
+ */
+export function formatExclusionSummary(card) {
+  if (card.excluded_days == null) return null;
+  return (
+    `Исключено ${card.excluded_days} ${pluralDays(card.excluded_days)}: дедлайн отодвинут ` +
+    `с ${isoToRu(card.pre_exclusion_deadline)} на ${isoToRu(card.deadline)}.`
+  );
+}
+
 function renderExclusionHistory(card) {
   const box = el('div', 'interruption-history');
   box.appendChild(el('div', 'interruption-history-title', 'Периоды, не засчитываемые в срок'));
@@ -550,8 +553,8 @@ function renderExclusionHistory(card) {
     list.appendChild(item);
   }
   box.appendChild(list);
-  // Итоговая строка собрана в apk/views.js — здесь она только выводится.
-  if (card.exclusion_summary) box.appendChild(el('div', 'hint', card.exclusion_summary));
+  const summary = formatExclusionSummary(card);
+  if (summary) box.appendChild(el('div', 'hint', summary));
   return box;
 }
 
