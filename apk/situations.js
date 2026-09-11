@@ -1,0 +1,87 @@
+// Ситуации АПК — разбиение узлов и полей ввода по ветвям для переключателя в UI.
+//
+// Как и у ГПК (src/situations.js), это чисто представление: расчёт от выбранной
+// ситуации не зависит, переключатель решает только, что рисовать. Механика
+// (situationById, allSituationNodes, checkSituationCoverage) — общая, лежит в
+// core/view/situations.js и принимает этот массив параметром; здесь только
+// данные АПК.
+//
+// Разбиение — по фактическому графу узлов, а не по номерам статей. Узлы ветви
+// decision_chain связаны транзитивно через якоря (апелляция → вступление в силу
+// → кассация округа → вступление в силу после кассации → кассация в ВС РФ), и
+// восстановления сроков висят на тех же якорях: у категории субъекта
+// participating_duly_notified точка отсчёта берётся из узла-события этой же
+// цепочки, поэтому в отрыве от неё восстановление не считается. Узлы ст. 188 и
+// ст. 321 с этой цепочкой не делят ни одного поля — это самостоятельные треки,
+// как судебный приказ и периодические платежи у ГПК.
+//
+// В `fields` — одиночные поля ввода ветви (даты, булевы дискриминаторы, enum-ы).
+// Повторяемых списков узла предъявления исполнительного листа
+// (enforcement_interruptions, suspension_periods, execution_ended_periods) здесь
+// намеренно нет: по образцу ГПК они привязаны не к ситуации, а к карточке —
+// перерывы по признаку `interruptible` самого срока, периоды исключения — к
+// единственному узлу, к которому применима ч. 2, 5 ст. 321 АПК РФ.
+
+export const SITUATIONS_APK = [
+  {
+    id: 'decision_chain',
+    label: 'Решение арбитражного суда: обжалование',
+    // Основное поле ветви — как reasoned_decision_date у общей ветви ГПК: от его
+    // заполненности зависит показ остальных дат цепочки.
+    primary_field: 'decision_full_text_date',
+    fields: [
+      'appeal_filed',
+      'appeal_outcome',
+      'appellate_ruling_date',
+      'cassation_filed',
+      'district_cassation_ruling_date',
+      'subject_category',
+      'learned_of_violation_date',
+    ],
+    nodes: [
+      'appeal_general_apk',
+      'appeal_general_apk_restoration',
+      'entry_into_force_apk',
+      'cassation_general_apk',
+      'cassation_general_apk_restoration',
+      'entry_into_force_after_cassation_apk',
+      'cassation_vs_apk',
+      'cassation_vs_apk_restoration',
+    ],
+  },
+  {
+    id: 'rulings',
+    label: 'Обжалование определений (ст. 188 АПК РФ)',
+    // Три частные жалобы (ч. 3, 4, 6) на уровне модели принимают вход с одним и
+    // тем же именем ruling_issued_date, но это три РАЗНЫХ определения — первой
+    // инстанции, апелляции и кассации. В интерфейсе они разведены на три
+    // отдельных поля, которые слой представления подставляет в единственный вход
+    // узла при вызове; сам apk/chain.js этим не затрагивается.
+    fields: [
+      'first_instance_ruling_date',
+      'appellate_ruling_issued_date',
+      'cassation_ruling_issued_date',
+      'appellate_postanovlenie_date',
+    ],
+    nodes: [
+      'private_complaint_first_instance_apk',
+      'private_complaint_appellate_apk',
+      'private_complaint_cassation_apk',
+      'private_complaint_appellate_postanovlenie_apk',
+    ],
+  },
+  {
+    id: 'enforcement',
+    label: 'Исполнительный лист',
+    fields: [
+      'case_type',
+      'entry_into_force_date',
+      'immediate_execution_decision_date',
+      'deferred_installment_end_date',
+      'restoration_ruling_date',
+    ],
+    nodes: ['enforcement_presentation_apk', 'enforcement_presentation_after_restoration_apk'],
+  },
+];
+
+export const DEFAULT_SITUATION_APK = 'decision_chain';
