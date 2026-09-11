@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Калькулятор процессуальных сроков по АПК РФ</title>
+    <style>
+      :root {
+        --bg: #f5f6f8;
+        --card: #ffffff;
+        --ink: #1a1f2b;
+        --muted: #5b6472;
+        --line: #e2e5ea;
+        --accent: #1f5fbf;
+        --accent-soft: #eaf1fb;
+        --warn-bg: #fff6e6;
+        --warn-ink: #8a5a00;
+        --warn-line: #f0d59a;
+        --miss-bg: #fdecec;
+        --miss-ink: #a3241f;
+        --miss-line: #f0b6b2;
+        --ok: #1f7a44;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 16px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      }
+      .wrap { max-width: 760px; margin: 0 auto; padding: 28px 18px 64px; }
+      header h1 { font-size: 22px; margin: 0 0 4px; }
+      header p { margin: 0 0 24px; color: var(--muted); font-size: 14px; }
+
+      .primary {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 18px;
+        margin-bottom: 22px;
+      }
+      label { display: block; font-weight: 600; margin-bottom: 6px; }
+      .req { color: var(--accent); }
+      input[type="text"] {
+        width: 100%;
+        font-size: 16px;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        color: var(--ink);
+      }
+      input[type="text"]:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+      input.invalid { border-color: var(--miss-line); background: var(--miss-bg); }
+      .hint { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+      .field-error { color: var(--miss-ink); font-size: 13px; margin: 6px 0 0; min-height: 1px; }
+
+      .empty { color: var(--muted); font-size: 15px; padding: 8px 2px; }
+
+      .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+      .toolbar button {
+        font: inherit; font-weight: 600; font-size: 14px;
+        color: #fff; background: var(--accent); border: none;
+        padding: 9px 16px; border-radius: 8px; cursor: pointer;
+      }
+      .toolbar button:hover:not(:disabled) { background: #1a52a6; }
+      .toolbar button:disabled { background: #c3ccd8; cursor: not-allowed; }
+      .copy-status { color: var(--ok); font-size: 13px; font-weight: 600; }
+      .toolbar-note { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+
+      /* Что означает дата на карточке — над самой датой. */
+      .deadline-caption {
+        font-size: 12px; letter-spacing: .02em; text-transform: uppercase;
+        color: var(--muted); margin-top: 6px;
+      }
+      .deadline-caption.inline { margin-top: 0; text-transform: none; letter-spacing: 0; }
+
+      /* Файл .ics — запасной способ: на iOS система его почти не принимает. */
+      .toolbar-secondary { margin: 0 0 18px; }
+      .link-button {
+        font: inherit; font-size: 13px; color: var(--accent);
+        background: none; border: none; padding: 0; cursor: pointer;
+        text-decoration: underline;
+      }
+      .link-button:disabled { color: var(--muted); cursor: not-allowed; text-decoration: none; }
+      .toolbar-hint { color: var(--muted); font-size: 13px; }
+
+      /* Ссылка «в Google Календарь» у каждого рассчитанного срока. */
+      .to-calendar {
+        display: inline-block; margin-top: 10px;
+        font-size: 13px; color: var(--accent); text-decoration: none; font-weight: 600;
+      }
+      .to-calendar:hover { text-decoration: underline; }
+      .to-calendar-block { margin-top: 10px; }
+      .to-calendar-block .to-calendar { margin-top: 0; }
+      .to-calendar-note { margin-top: 4px; }
+
+      .print-only { display: none; }
+
+      /* Дисклеймер в подвале — приглушённо, не конкурирует с картой сроков. */
+      .disclaimer {
+        margin: 36px 0 0; padding-top: 14px; border-top: 1px solid var(--line);
+        color: var(--muted); font-size: 12px; line-height: 1.5; max-width: 60ch;
+      }
+
+      /* Плавное появление блоков: разворот по высоте через grid-template-rows.
+         Анимируется одноразовым keyframes только на впервые показанном блоке —
+         на уже показанных класса нет, поэтому перерисовка их не дёргает. */
+      .reveal { display: grid; grid-template-rows: 1fr; }
+      .reveal > .reveal-inner { min-height: 0; }
+      .reveal.reveal-in { animation: reveal-in 190ms ease; }
+      .reveal.reveal-in > .reveal-inner { overflow: hidden; }
+      @keyframes reveal-in {
+        from { grid-template-rows: 0fr; opacity: 0; }
+        to   { grid-template-rows: 1fr; opacity: 1; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .reveal.reveal-in { animation: none; }
+      }
+
+      .situation-switch { margin-bottom: 16px; }
+      .situations { border: none; margin: 0; padding: 0; }
+      .situations legend {
+        padding: 0; margin-bottom: 8px;
+        font-size: 12px; letter-spacing: .02em; text-transform: uppercase; color: var(--muted);
+      }
+      .situation-row { display: flex; flex-wrap: wrap; gap: 8px; }
+      label.situation {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px;
+        background: var(--card); font-size: 14px; cursor: pointer;
+      }
+      label.situation input { margin: 0; accent-color: var(--accent); }
+      label.situation:hover { border-color: var(--accent); }
+      label.situation.active {
+        border-color: var(--accent); background: var(--accent-soft);
+        color: var(--accent); font-weight: 600;
+      }
+      label.situation:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 16px 18px;
+        margin-bottom: 14px;
+      }
+      .card .kicker { font-size: 12px; letter-spacing: .02em; text-transform: uppercase; color: var(--muted); }
+      .card h2 { font-size: 17px; margin: 2px 0 8px; }
+      .deadline { font-size: 26px; font-weight: 700; letter-spacing: .01em; }
+      .deadline.missed { color: var(--miss-ink); }
+      .norm { color: var(--muted); font-size: 14px; margin-top: 4px; }
+      .badge {
+        display: inline-block; font-size: 12px; font-weight: 600;
+        padding: 2px 8px; border-radius: 999px; margin-left: 8px; vertical-align: 2px;
+      }
+      .badge.assume { background: var(--accent-soft); color: var(--accent); }
+      .badge.wd { background: #eaf6ec; color: var(--ok); }
+      .badge.info { background: #f0f2f5; color: var(--muted); }
+
+      details.more { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
+      details.more > summary {
+        cursor: pointer; color: var(--accent); font-size: 14px; font-weight: 600;
+      }
+      details.more > summary::marker { color: var(--accent); }
+      .more dl { margin: 10px 0 0; }
+      .more dt { font-size: 12px; text-transform: uppercase; letter-spacing: .02em; color: var(--muted); margin-top: 8px; }
+      .more dd { margin: 2px 0 0; font-size: 14px; }
+      .more code { background: #f0f2f5; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+
+      .note {
+        margin-top: 12px; padding: 10px 12px; border-radius: 8px;
+        background: var(--accent-soft); font-size: 14px;
+      }
+      .note .prompt { margin-top: 8px; }
+      .warn {
+        margin-top: 12px; padding: 10px 12px; border-radius: 8px;
+        background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-line);
+        font-size: 14px;
+      }
+      .miss {
+        margin-top: 10px; padding: 8px 12px; border-radius: 8px;
+        background: var(--miss-bg); color: var(--miss-ink); border: 1px solid var(--miss-line);
+        font-size: 14px; font-weight: 600;
+      }
+      /* Срок истёк, но факт пропуска не установлен — приглушённее, чем .miss. */
+      .deadline.expired { color: var(--muted); }
+      .expired-note {
+        margin-top: 10px; padding: 8px 12px; border-radius: 8px;
+        background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-line);
+        font-size: 14px;
+      }
+      /* Уровень 2 — срок суда: без рамки-акцента и без крупной даты. */
+      .card.info-card {
+        padding: 12px 14px; background: #fbfcfd; border-style: dashed;
+      }
+      .info-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+      .info-title { font-size: 14px; font-weight: 600; color: var(--muted); }
+      .info-head .badge { margin-left: 0; }
+      .info-line { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-top: 2px; }
+      .info-date { font-size: 16px; font-weight: 600; }
+      .info-date.expired { color: var(--muted); }
+      .info-line .norm { margin-top: 0; font-size: 13px; }
+      .info-card .hint { font-size: 12px; }
+      .info-card details.more > summary { font-size: 13px; }
+
+      /* Уровень 3 — событие: строка текста, без карточки. */
+      .event-line {
+        margin: 0 0 14px; padding: 10px 4px 10px 14px;
+        border-left: 3px solid var(--line);
+      }
+      .event-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+      .event-text { font-size: 16px; font-weight: 600; }
+      .event-text.done { color: var(--ok); }
+      .event-head .norm { margin-top: 0; font-size: 13px; }
+
+      /* Предупреждение в одну строку; подробности по клику. */
+      details.warn.collapsible { padding: 8px 12px; }
+      details.warn.collapsible > summary {
+        cursor: pointer; font-size: 14px; font-weight: 600; list-style-position: outside;
+      }
+      details.warn.collapsible > summary::marker { color: var(--warn-ink); }
+      details.warn.collapsible .warn-body { margin-top: 8px; }
+      details.warn.collapsible .warn-body > div + div { margin-top: 6px; }
+      details.warn.collapsible .hint { color: inherit; opacity: .85; }
+
+      .alt {
+        margin-top: 12px; padding: 12px; border-radius: 8px;
+        background: #f7f9fc; border: 1px solid var(--line); font-size: 14px;
+      }
+      .alt .row { display: flex; justify-content: space-between; gap: 12px; margin: 4px 0; }
+      .alt .recommended { color: var(--ok); font-weight: 700; }
+      .alt .why { color: var(--muted); margin-top: 6px; }
+
+      .invite {
+        background: var(--card);
+        border: 1px dashed var(--accent);
+        border-radius: 12px;
+        padding: 16px 18px;
+        margin-bottom: 14px;
+      }
+      .invite h2 { font-size: 16px; margin: 0 0 4px; }
+      .invite p.reason { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+      .invite .field { margin-top: 10px; }
+      .invite label { font-weight: 600; font-size: 14px; }
+
+      .notice-card .deadline { color: var(--muted); }
+      select {
+        width: 100%; font: inherit; font-size: 15px; padding: 9px 10px;
+        border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink);
+      }
+
+      /* Перерывы срока предъявления (ст. 22 ФЗ № 229-ФЗ): повторяемый список. */
+      .interruptions .field { margin-top: 10px; }
+      .interruptions label { font-weight: 600; font-size: 14px; }
+      .interruption-row {
+        background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+      }
+      .interruption-date-label { margin-top: 10px; }
+      .row-add, .row-remove {
+        font: inherit; font-size: 14px; padding: 8px 12px; margin-top: 10px;
+        border-radius: 8px; cursor: pointer;
+      }
+      .row-add { border: 1px dashed var(--accent); background: #fff; color: var(--accent); }
+      .row-remove { border: 1px solid var(--line); background: #fff; color: var(--muted); }
+      .row-add:hover, .row-remove:hover { border-color: var(--accent); color: var(--accent); }
+      .interruption-scope { font-size: 13px; }
+      .interruption-history {
+        margin-top: 12px; padding: 10px 12px; border-radius: 8px;
+        background: #f7f9fc; border: 1px solid var(--line); font-size: 14px;
+      }
+      .interruption-history-title {
+        font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted);
+      }
+      .interruption-list { list-style: none; margin: 6px 0 0; padding: 0; }
+      .interruption-list .interruption { margin-top: 4px; }
+      .interruption-date { font-weight: 600; margin-right: 8px; }
+      .interruption.ignored .interruption-date, .interruption.ignored .interruption-label {
+        color: var(--muted); text-decoration: line-through;
+      }
+
+      .related-stubs { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 8px; }
+      .related-stubs-title { font-size: 13px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin: 0 0 4px; }
+      .related-stubs .stub { border-top: none; padding: 8px 0 4px; }
+
+      .other-terms { margin-top: 26px; }
+      .other-terms h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin-bottom: 4px; }
+      .other-terms > p { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+      .other-terms .invite { border-style: solid; border-color: var(--line); }
+
+      .stubs { margin-top: 30px; }
+      .stubs h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+      .stub { border-top: 1px solid var(--line); padding: 12px 0; }
+      .stub h3 { font-size: 15px; margin: 0 0 4px; }
+      .stub p { margin: 0; font-size: 14px; color: var(--muted); }
+      .stub .norm { margin-top: 4px; }
+
+      .fatal { background: var(--miss-bg); color: var(--miss-ink); border: 1px solid var(--miss-line);
+               padding: 14px; border-radius: 10px; font-size: 14px; }
+      .fatal-detail { margin: 8px 0 0; white-space: pre-wrap; word-break: break-word;
+               font-size: 12px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+      /* Печать: только перечень сроков — заголовок с датой расчёта, названия,
+         даты и нормы. Ввод, переключатели, кнопки и уточнения не печатаются. */
+      @media print {
+        body { background: #fff; color: #000; font-size: 12pt; }
+        .wrap { max-width: none; padding: 0; }
+        /* Печатаем только заголовок и список сроков — весь интерфейс и сами
+           карточки скрыты, чтобы печать не повторяла неоднозначность карточек. */
+        header h1,
+        header p,
+        .situation-switch,
+        section.primary,
+        .toolbar,
+        .toolbar-note,
+        .toolbar-secondary,
+        #situation-inputs,
+        #other-terms,
+        #results,
+        .disclaimer,
+        #stubs { display: none !important; }
+
+        .print-only { display: block; }
+        /* Сокращённая пометка в конце печати — мелко и серым. */
+        .print-disclaimer { font-size: 9pt; color: #555; margin: 16px 0 0; }
+        #print-header { margin: 0 0 14px; }
+        #print-header .print-title { font-size: 14pt; font-weight: 700; }
+        /* Иерархия: дата крупная и жирная, норма мельче и серым строкой ниже. */
+        #print-list .print-item {
+          padding: 8px 0; border-bottom: 1px solid #ccc;
+          break-inside: avoid; page-break-inside: avoid;
+        }
+        .print-item-title { font-size: 11pt; color: #333; }
+        /* Вводная строка спорного срока — стилем подписи нормы (мелко, серым). */
+        .print-item .print-conflict { font-size: 10pt; color: #555; margin: 2px 0 4px; }
+        .print-item .print-date {
+          font-size: 15pt; font-weight: 700; line-height: 1.15; margin-top: 2px;
+        }
+        .print-item .print-norm { font-size: 10pt; color: #555; margin-bottom: 4px; }
+        .print-item .print-reco { font-size: 11pt; font-style: italic; margin-top: 2px; }
+      }
+
+      /* --- Периоды, не засчитываемые в срок (ч. 2, 5 ст. 321 АПК РФ) ---------
+         Виджет, которого нет в ГПК-интерфейсе: у строки две даты вместо одной,
+         поэтому нужна своя раскладка. Контейнер и кнопки переиспользуют классы
+         списка перерывов (.interruptions, .row-add, .row-remove). */
+      .period-section { margin-top: 14px; }
+      .period-section:first-of-type { margin-top: 6px; }
+      .period-section-title { font-weight: 600; font-size: 14px; margin-bottom: 2px; }
+      .period-row {
+        border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px;
+      }
+      /* Две даты в строку, на узком экране — одна под другой. */
+      .period-dates { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+      .period-dates .period-date { flex: 1 1 140px; min-width: 140px; }
+      .period-date label { display: block; font-weight: 600; font-size: 13px; }
+      .period-days {
+        align-self: center; font-size: 13px; color: var(--muted); white-space: nowrap;
+      }
+      /* Ошибка всей строки (конец раньше начала) — не привязана к одному полю. */
+      .period-row-error { color: var(--miss-ink); font-size: 13px; margin: 6px 0 0; }
+      .period-row .row-remove { margin-top: 8px; }
+
+      /* --- Карточка расчёта, отказавшего на введённых данных ----------------- */
+      .card.calc-error { border-left: 3px solid var(--miss-ink); }
+      .card.calc-error .calc-error-text {
+        background: var(--miss-bg); color: var(--miss-ink);
+        border-radius: 6px; padding: 10px 12px; font-size: 14px;
+      }
+
+      /* --- Карточка «норма к этому случаю не применяется» -------------------- */
+      .card.not-applicable { border-left: 3px solid var(--line); }
+      .card.not-applicable .na-reason { color: var(--muted); font-size: 14px; }
+    </style>
+
+    <script type="importmap">
+      { "imports": { "node:fs": "./web/fs-shim.js" } }
+    </script>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <h1>Калькулятор процессуальных сроков по АПК РФ</h1>
+        <p>
+          Калькулятор считает по производственному календарю, отличает рабочие дни
+          от календарных и учитывает переносы выходных. Для каждого срока показана
+          норма АПК и логика её исчисления.
+        </p>
+      </header>
+
+      <section class="situation-switch" id="situation"></section>
+
+      <section class="primary">
+        <label for="decision-full-text">
+          Дата изготовления решения в полном объёме <span class="req">*</span>
+        </label>
+        <input id="decision-full-text" type="text" inputmode="numeric" placeholder="ДД.ММ.ГГГГ"
+               autocomplete="off" aria-describedby="decision-full-text-hint" />
+        <p class="hint" id="decision-full-text-hint">Указана в самом решении</p>
+        <p class="field-error" id="decision-full-text-error"></p>
+      </section>
+
+      <section class="other-terms" id="situation-inputs"></section>
+
+      <div class="toolbar" id="toolbar">
+        <button id="copy-terms" type="button" disabled>Скопировать сроки</button>
+        <button id="print-terms" type="button" disabled>Распечатать</button>
+        <span class="copy-status" id="copy-status" role="status" aria-live="polite"></span>
+      </div>
+      <p class="toolbar-secondary">
+        <button id="download-ics" type="button" class="link-button" disabled>Скачать .ics</button>
+        <span class="toolbar-hint">— файл для Outlook и других календарей</span>
+      </p>
+      <p class="toolbar-note">
+        Перенос в календарь ставит сроки с напоминаниями заранее — чтобы не пропустить дату.
+      </p>
+
+      <div class="print-only" id="print-header"></div>
+      <div class="print-only" id="print-list"></div>
+
+      <main id="results">
+        <p class="empty">Введите дату изготовления решения — появятся рассчитанные сроки.</p>
+      </main>
+
+      <section class="other-terms" id="other-terms"></section>
+
+      <footer class="disclaimer">
+        Калькулятор даёт справочный расчёт на основе текста АПК РФ и разъяснений
+        Пленума Верховного Суда. Он не заменяет консультацию юриста и не является
+        юридической консультацией. Перед подачей документов проверяйте сроки по
+        первоисточникам — расчёт может не учитывать особенности конкретного дела.
+      </footer>
+
+      <!-- В печати — сокращённая пометка в конце (полный текст скрыт). -->
+      <p class="print-only print-disclaimer">Справочный расчёт, не заменяет консультацию юриста</p>
+    </div>
+
+    <script type="module">
+      // Календарь загружается до импорта приложения — шим node:fs отдаёт эти
+      // данные синхронно (см. web/fs-shim.js). Механика загрузки и оба разбора
+      // отказа — те же, что на странице ГПК: они домен-независимы.
+      const boot = document.getElementById('results');
+      function showFatal(message, detail) {
+        boot.textContent = '';
+        const box = document.createElement('div');
+        box.className = 'fatal';
+        box.append(message);
+        if (detail) {
+          const pre = document.createElement('pre');
+          pre.className = 'fatal-detail';
+          pre.textContent = detail;
+          box.append(pre);
+        }
+        boot.append(box);
+      }
+
+      // Случай 1: не удалось загрузить calendar_data.json — почти всегда страницу
+      // открыли как файл (file://), а не через веб-сервер.
+      let calendarJson;
+      try {
+        const res = await fetch('./core/calendar/calendar_data.json');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        calendarJson = await res.text();
+      } catch (e) {
+        showFatal(
+          'Не удалось загрузить calendar_data.json. Откройте страницу через ' +
+            'локальный веб-сервер (например python3 -m http.server), а не как файл (file://).',
+          String((e && e.message) || e),
+        );
+        throw e;
+      }
+      globalThis.__CALENDAR_JSON__ = calendarJson;
+
+      // Случай 2: календарь загружен, но приложение не инициализировалось —
+      // это ошибка в скрипте (синтаксис/рантайм), а не в сервере. Показываем
+      // текст ошибки без ложного совета про сервер и пробрасываем в консоль.
+      try {
+        await import('./apk/app.js');
+      } catch (e) {
+        showFatal(
+          'Календарь загружен, но приложение не запустилось — ошибка в скрипте, ' +
+            'а не в сервере. Текст ошибки (см. также консоль браузера):',
+          String((e && e.stack) || (e && e.message) || e),
+        );
+        throw e;
+      }
+    </script>
+  </body>
+</html>

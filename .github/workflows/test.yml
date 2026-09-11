@@ -22,3 +22,5 @@ jobs:
       - run: npx playwright install --with-deps chromium
 
       - run: node scripts/smoke.mjs
+
+      - run: node scripts/smoke-apk.mjs
