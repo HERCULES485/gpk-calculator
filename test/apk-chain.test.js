@@ -12,7 +12,8 @@
 // ст. 188 ч. 5 — жалоба на постановление апелляции по жалобе на определение (задача 5c),
 // ст. 321 ч. 1, 3, 4 — предъявление исполнительного листа, базовый срок и перерыв (задача 6b),
 // ст. 321 ч. 2, 5 — исключение периода из срока предъявления (задача 6c),
-// ст. 321 ч. 1 п. 2) — срок предъявления после восстановления (задача 6d).
+// ст. 321 ч. 1 п. 2) — срок предъявления после восстановления (задача 6d),
+// ст. 308.1 ч. 4, 5 — надзорное обжалование, срок и восстановление (задача НАДЗОР.1).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -45,6 +46,10 @@ import {
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   computeEnforcementPresentationAfterRestorationApk,
   ENFORCEMENT_PRESENTATION_AFTER_RESTORATION_APK,
+  computeNadzorGeneralApk,
+  NADZOR_GENERAL_APK,
+  computeNadzorGeneralApkRestoration,
+  NADZOR_GENERAL_APK_RESTORATION,
 } from '../apk/chain.js';
 
 test('appeal_general_apk считается от decision_full_text_date (обычная дата, без переноса)', () => {
@@ -1517,4 +1522,124 @@ test('исполнительный лист после восстановлен�
   assert.equal(term.excluded_days, undefined);
   assert.equal(term.base_anchor, undefined);
   assert.equal(term.pre_exclusion_deadline, undefined);
+});
+
+// Задача НАДЗОР.1 — надзорное обжалование (ч. 4, 5 ст. 308.1 АПК РФ).
+
+test('надзор АПК: три месяца со дня вступления в силу последнего оспариваемого акта, будний день без переноса', () => {
+  const term = computeNadzorGeneralApk({
+    last_contested_act_entry_into_force_date: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-06-11');
+  assert.equal(term.deadline, '2025-06-11'); // среда, рабочий день
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'ч. 4 ст. 308.1 АПК РФ');
+});
+
+test('надзор АПК: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeNadzorGeneralApk({
+    last_contested_act_entry_into_force_date: '2025-01-05',
+  });
+  // 05.01.2025 + 3 месяца = 05.04.2025 — суббота, перенос на 07.04.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-04-05');
+  assert.equal(term.deadline, '2025-04-07');
+  assert.equal(term.shifted, true);
+});
+
+test('надзор АПК: отсутствие last_contested_act_entry_into_force_date — понятная ошибка', () => {
+  assert.throws(
+    () => computeNadzorGeneralApk({}),
+    /last_contested_act_entry_into_force_date/,
+  );
+});
+
+test('восстановление надзора АПК: участвовавшее лицо — 6 месяцев со дня вступления в силу оспариваемого акта', () => {
+  const term = computeNadzorGeneralApkRestoration({
+    subject_category: 'participating_duly_notified',
+    last_contested_act_entry_into_force_date: '2025-06-10',
+  });
+  assert.equal(term.anchor, '2025-06-10');
+  assert.equal(term.raw_deadline, '2025-12-10');
+  assert.equal(term.deadline, '2025-12-10');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 6, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 5 ст. 308.1 АПК РФ');
+  assert.equal(term.subject_category, 'participating_duly_notified');
+});
+
+test('восстановление надзора АПК: обе категории берут каждая свою дату, не путая поля', () => {
+  // Оба поля переданы одновременно — participating_duly_notified должна
+  // считать от last_contested_act_entry_into_force_date, article_42_person —
+  // от learned_of_violation_date, а не от чужого поля и не от первого попавшегося.
+  const inputs = {
+    last_contested_act_entry_into_force_date: '2025-06-10',
+    learned_of_violation_date: '2025-01-05',
+  };
+
+  const duly = computeNadzorGeneralApkRestoration({
+    subject_category: 'participating_duly_notified',
+    ...inputs,
+  });
+  assert.equal(duly.anchor, '2025-06-10');
+  assert.equal(duly.deadline, '2025-12-10');
+
+  const article42 = computeNadzorGeneralApkRestoration({
+    subject_category: 'article_42_person',
+    ...inputs,
+  });
+  // 05.01.2025 + 6 месяцев = 05.07.2025 — суббота, перенос на 07.07.2025.
+  assert.equal(article42.anchor, '2025-01-05');
+  assert.equal(article42.raw_deadline, '2025-07-05');
+  assert.equal(article42.deadline, '2025-07-07');
+
+  assert.notEqual(duly.deadline, article42.deadline);
+});
+
+test('восстановление надзора АПК: лицо по ст. 42 без learned_of_violation_date — ошибка', () => {
+  assert.throws(
+    () => computeNadzorGeneralApkRestoration({ subject_category: 'article_42_person' }),
+    /learned_of_violation_date/,
+  );
+});
+
+test('восстановление надзора АПК: participating_duly_notified без last_contested_act_entry_into_force_date — ошибка', () => {
+  assert.throws(
+    () =>
+      computeNadzorGeneralApkRestoration({ subject_category: 'participating_duly_notified' }),
+    /last_contested_act_entry_into_force_date/,
+  );
+});
+
+test('восстановление надзора АПК: subject_category отсутствует или неизвестна — ошибка со списком ИЗ ДВУХ допустимых значений', () => {
+  const expected = /participating_duly_notified.*article_42_person/;
+  assert.throws(
+    () =>
+      computeNadzorGeneralApkRestoration({
+        subject_category: 'participating_improperly_notified',
+        learned_of_violation_date: '2025-06-10',
+      }),
+    expected,
+  );
+
+  try {
+    computeNadzorGeneralApkRestoration({});
+    assert.fail('ожидалась ошибка');
+  } catch (err) {
+    assert.match(err.message, expected);
+    // Третьей категории здесь нет вовсе — в отличие от ст. 259/276.
+    assert.ok(!err.message.includes('participating_improperly_notified'));
+  }
+});
+
+test('восстановление надзора АПК: объём задачи — только две категории, третьей нет', () => {
+  // Фиксирует границу: третья категория (ненадлежащее извещение) не должна
+  // появиться в этом узле по инерции с паттерном ст. 259/276 (три категории).
+  const term = computeNadzorGeneralApkRestoration({
+    subject_category: 'participating_duly_notified',
+    last_contested_act_entry_into_force_date: '2025-06-10',
+  });
+  assert.equal(term.id, 'nadzor_general_apk_restoration');
+  assert.equal(NADZOR_GENERAL_APK.restoration_norm, undefined);
+  assert.equal(NADZOR_GENERAL_APK_RESTORATION.restoration_norm, undefined);
 });

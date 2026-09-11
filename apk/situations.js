@@ -82,6 +82,16 @@ export const SITUATIONS_APK = [
     ],
     nodes: ['enforcement_presentation_apk', 'enforcement_presentation_after_restoration_apk'],
   },
+  {
+    id: 'nadzor',
+    label: 'Надзорное производство (Президиум ВС РФ)',
+    // Основное поле ветви — дата вступления в силу последнего оспариваемого
+    // акта: вводится напрямую, не через граф узлов (см. apk/chain.js,
+    // NADZOR_GENERAL_APK), как и у узла предъявления исполнительного листа.
+    primary_field: 'last_contested_act_entry_into_force_date',
+    fields: ['subject_category', 'learned_of_violation_date'],
+    nodes: ['nadzor_general_apk', 'nadzor_general_apk_restoration'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';
