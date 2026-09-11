@@ -13,7 +13,9 @@
 // ст. 321 ч. 1, 3, 4 — предъявление исполнительного листа, базовый срок и перерыв (задача 6b),
 // ст. 321 ч. 2, 5 — исключение периода из срока предъявления (задача 6c),
 // ст. 321 ч. 1 п. 2) — срок предъявления после восстановления (задача 6d),
-// ст. 308.1 ч. 4, 5 — надзорное обжалование, срок и восстановление (задача НАДЗОР.1).
+// ст. 308.1 ч. 4, 5 — надзорное обжалование, срок и восстановление (задача НАДЗОР.1),
+// ст. 312 ч. 1, 2 — пересмотр по новым обстоятельствам, срок и восстановление
+// (задача НОВЫЕ-ОБСТОЯТЕЛЬСТВА.1).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -50,6 +52,10 @@ import {
   NADZOR_GENERAL_APK,
   computeNadzorGeneralApkRestoration,
   NADZOR_GENERAL_APK_RESTORATION,
+  computeNewCircumstancesReviewApk,
+  NEW_CIRCUMSTANCES_REVIEW_APK,
+  computeNewCircumstancesReviewApkRestoration,
+  NEW_CIRCUMSTANCES_REVIEW_APK_RESTORATION,
 } from '../apk/chain.js';
 
 test('appeal_general_apk считается от decision_full_text_date (обычная дата, без переноса)', () => {
@@ -1642,4 +1648,88 @@ test('восстановление надзора АПК: объём задач�
   assert.equal(term.id, 'nadzor_general_apk_restoration');
   assert.equal(NADZOR_GENERAL_APK.restoration_norm, undefined);
   assert.equal(NADZOR_GENERAL_APK_RESTORATION.restoration_norm, undefined);
+});
+
+// Задача НОВЫЕ-ОБСТОЯТЕЛЬСТВА.1 — пересмотр по новым/вновь открывшимся
+// обстоятельствам (ч. 1, 2 ст. 312 АПК РФ).
+
+test('пересмотр по новым обстоятельствам АПК: три месяца со дня появления/открытия обстоятельств, будний день без переноса', () => {
+  const term = computeNewCircumstancesReviewApk({
+    circumstances_discovered_date: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-06-11');
+  assert.equal(term.deadline, '2025-06-11'); // среда, рабочий день
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'ч. 1 ст. 312 АПК РФ');
+});
+
+test('пересмотр по новым обстоятельствам АПК: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeNewCircumstancesReviewApk({
+    circumstances_discovered_date: '2025-01-05',
+  });
+  // 05.01.2025 + 3 месяца = 05.04.2025 — суббота, перенос на 07.04.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-04-05');
+  assert.equal(term.deadline, '2025-04-07');
+  assert.equal(term.shifted, true);
+});
+
+test('пересмотр по новым обстоятельствам АПК: отсутствие circumstances_discovered_date — понятная ошибка', () => {
+  assert.throws(
+    () => computeNewCircumstancesReviewApk({}),
+    /circumstances_discovered_date/,
+  );
+});
+
+test('восстановление пересмотра по новым обстоятельствам АПК: шесть месяцев от того же якоря', () => {
+  const term = computeNewCircumstancesReviewApkRestoration({
+    circumstances_discovered_date: '2025-06-10',
+  });
+  assert.equal(term.anchor, '2025-06-10');
+  assert.equal(term.raw_deadline, '2025-12-10');
+  assert.equal(term.deadline, '2025-12-10');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 6, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 2 ст. 312 АПК РФ');
+});
+
+// ВНИМАНИЕ АРХИТЕКТОРУ: этот тест — предложенная замена теста 4 из промпта
+// ("throw при попытке передать что-то за пределами 6-месячного потолка").
+// Такой throw-механики нет ни у одного restoration-узла (ни здесь, ни у
+// 259/276/291.2/308.1) — throw бывает только на отсутствующем/неизвестном
+// входе, а "потолок" — это просто другая duration того же computeSimpleTerm.
+// Единственный throw, который здесь вообще возможен, — на отсутствии
+// circumstances_discovered_date, что уже покрыто тестом выше и тестом на
+// объём задачи ниже. Вместо этого проверяется реальный факт "потолка": один
+// и тот же якорь даёт РАЗНЫЙ (более поздний) дедлайн у restoration-узла,
+// чем у общего трёхмесячного срока.
+test('восстановление пересмотра по новым обстоятельствам АПК: тот же якорь даёт более поздний дедлайн, чем общий срок (шесть месяцев против трёх)', () => {
+  const anchor = '2025-06-10';
+  const general = computeNewCircumstancesReviewApk({ circumstances_discovered_date: anchor });
+  const restoration = computeNewCircumstancesReviewApkRestoration({
+    circumstances_discovered_date: anchor,
+  });
+  assert.equal(general.anchor, restoration.anchor);
+  assert.notEqual(general.deadline, restoration.deadline);
+  assert.ok(restoration.deadline > general.deadline);
+});
+
+test('восстановление пересмотра по новым обстоятельствам АПК: отсутствие circumstances_discovered_date — понятная ошибка', () => {
+  assert.throws(
+    () => computeNewCircumstancesReviewApkRestoration({}),
+    /circumstances_discovered_date/,
+  );
+});
+
+test('восстановление пересмотра по новым обстоятельствам АПК: объём задачи — без subject_category', () => {
+  // Фиксирует границу: категория субъекта не должна появиться в этом узле по
+  // инерции с паттерном 259/276/291.2/308.1 — ч. 1-2 ст. 312 ст. 42 АПК не
+  // упоминает, заявление подаёт только участвующее в деле лицо.
+  const term = computeNewCircumstancesReviewApkRestoration({
+    circumstances_discovered_date: '2025-06-10',
+  });
+  assert.equal(term.subject_category, undefined);
+  assert.equal(term.id, 'new_circumstances_review_apk_restoration');
+  assert.equal(NEW_CIRCUMSTANCES_REVIEW_APK.restoration_norm, undefined);
+  assert.equal(NEW_CIRCUMSTANCES_REVIEW_APK_RESTORATION.restoration_norm, undefined);
 });

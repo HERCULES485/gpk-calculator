@@ -60,21 +60,22 @@ test('АПК ситуации: каждый узел chain.js закреплён
   assert.deepEqual([...inSituations].sort(), [...CHAIN_NODE_IDS].sort());
 });
 
-test('АПК ситуации: четыре ветви ожидаемого состава, ситуация по умолчанию существует', () => {
+test('АПК ситуации: пять ветвей ожидаемого состава, ситуация по умолчанию существует', () => {
   assert.deepEqual(
     SITUATIONS_APK.map((s) => s.id),
-    ['decision_chain', 'rulings', 'enforcement', 'nadzor'],
+    ['decision_chain', 'rulings', 'enforcement', 'nadzor', 'new_circumstances'],
   );
   assert.deepEqual(
     SITUATIONS_APK.map((s) => s.nodes.length),
-    [8, 4, 2, 2],
+    [8, 4, 2, 2, 2],
   );
   assert.equal(situationById(DEFAULT_SITUATION_APK, SITUATIONS_APK).id, 'decision_chain');
-  // primary_field — у ветви цепочки обжалования (как у общей ветви ГПК) и у
-  // надзора: там якорь тоже вводится напрямую, а не через уточняющие поля.
+  // primary_field — у ветви цепочки обжалования (как у общей ветви ГПК), у
+  // надзора и у пересмотра по новым обстоятельствам: там якорь тоже вводится
+  // напрямую, а не через уточняющие поля.
   assert.deepEqual(
     SITUATIONS_APK.filter((s) => s.primary_field).map((s) => s.id),
-    ['decision_chain', 'nadzor'],
+    ['decision_chain', 'nadzor', 'new_circumstances'],
   );
 });
 
@@ -130,13 +131,13 @@ test('АПК подписи: словарь покрывает все входы
   }
 });
 
-test('АПК реестр сроков: 14 узлов из 16 — без двух узлов-событий', () => {
-  assert.equal(CHAIN_NODE_IDS.length, 16);
+test('АПК реестр сроков: 16 узлов из 18 — без двух узлов-событий', () => {
+  assert.equal(CHAIN_NODE_IDS.length, 18);
   assert.deepEqual(
     [...EVENT_NODE_IDS].sort(),
     ['entry_into_force_after_cassation_apk', 'entry_into_force_apk'],
   );
-  assert.equal(Object.keys(TERM_REGISTRY_APK).length, 14);
+  assert.equal(Object.keys(TERM_REGISTRY_APK).length, 16);
   for (const id of EVENT_NODE_IDS) {
     assert.equal(TERM_REGISTRY_APK[id], undefined, `узел-событие "${id}" попал в реестр`);
   }
@@ -160,7 +161,7 @@ test('АПК реестр сроков: идентификаторы проду�
 
 // --- buildView (задача UI.3) --------------------------------------------------
 
-// Данные, поднимающие все 16 узлов разом. Ветви дискриминаторов выбраны так,
+// Данные, поднимающие все 18 узлов разом. Ветви дискриминаторов выбраны так,
 // чтобы цепочка считалась целиком: жалоба не подана → вступление в силу от
 // срока апелляции, окружная кассация не подавалась → якорь кассации в ВС РФ от
 // срока окружной кассации.
@@ -178,13 +179,14 @@ const ALL_NODES_INPUTS_APK = {
   entry_into_force_date: '2022-06-18',
   restoration_ruling_date: '2025-03-11',
   last_contested_act_entry_into_force_date: '2025-02-10',
+  circumstances_discovered_date: '2025-01-20',
 };
 
 const TODAY_APK = '2025-01-01'; // раньше всех дедлайнов — ничего не истекло
 
-test('АПК buildView: на полном наборе данных считаются все 16 узлов, incomplete пуст', () => {
+test('АПК buildView: на полном наборе данных считаются все 18 узлов, incomplete пуст', () => {
   const view = buildView(ALL_NODES_INPUTS_APK, { today: TODAY_APK });
-  assert.equal(view.cards.length, 16);
+  assert.equal(view.cards.length, 18);
   assert.equal(view.incomplete.length, 0);
   assert.deepEqual(view.stubs, []);
   // Форма возврата совпадает с ГПК-шной: cards/incomplete/stubs.
@@ -220,7 +222,7 @@ test('АПК buildView: пересечение периодов даёт кар�
     { today: TODAY_APK },
   );
   // Расчёт не падает целиком: 16 карточек на месте, ошибочная — ровно одна.
-  assert.equal(view.cards.length, 16);
+  assert.equal(view.cards.length, 18);
   const errors = view.cards.filter((c) => c.kind === 'error');
   assert.equal(errors.length, 1);
   assert.equal(errors[0].id, 'enforcement_presentation_apk');
@@ -346,9 +348,9 @@ test('АПК buildView: узлы-события дают карточку kind="
   assert.equal(entry.based_on, 'appellate_ruling_date');
 });
 
-test('АПК buildView: без данных все 16 узлов уходят в incomplete, расчёт не вызывается', () => {
+test('АПК buildView: без данных все 18 узлов уходят в incomplete, расчёт не вызывается', () => {
   const view = buildView({}, { today: TODAY_APK });
-  assert.equal(view.incomplete.length, 16);
+  assert.equal(view.incomplete.length, 18);
   // Ни одной карточки вообще: если бы compute-функции вызывались на пустых
   // данных, они бросили бы, и мы увидели бы карточки kind="error".
   assert.equal(view.cards.length, 0);
