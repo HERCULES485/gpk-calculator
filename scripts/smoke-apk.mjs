@@ -95,6 +95,25 @@ if (await appealCard.count()) {
   check(deadline === '11.04.2025', `ждали дедлайн 11.04.2025, получили «${deadline}»`);
 }
 
+// --- Формулировка ссылки на уже показанное поле (задача UI.5, п. 2) -----------
+//
+// subject_category — общее поле трёх узлов восстановления одной ветви; оно
+// уже отрисовано блоком «Дополнительные данные» (renderSituationFields), и все
+// три incomplete-карточки восстановления должны ссылаться на него текстом, а
+// не рисовать поле трижды. Формулировка не должна утверждать направление
+// («выше»/«ниже») — сам блок физически стоит и до, и после карточек результатов
+// в зависимости от ситуации.
+const restorationInvites = page.locator('.invite').filter({ hasText: 'восстановлен' });
+check((await restorationInvites.count()) >= 1, 'карточки восстановления не найдены среди неполных узлов');
+const inviteTexts = await restorationInvites.allInnerTexts();
+for (const text of inviteTexts) {
+  check(!text.includes('выше'), `формулировка ссылки на поле всё ещё утверждает направление: «${text}»`);
+}
+check(
+  inviteTexts.some((t) => t.includes('уже есть в этой форме')),
+  'ссылка на уже показанное поле subject_category не найдена ни на одной карточке восстановления',
+);
+
 // --- 6. Карточка «норма не применяется» ---------------------------------------
 //
 // Категория заявителя, которой ч. 2 ст. 291.2 не знает: два узла восстановления
@@ -124,9 +143,57 @@ const rulingCard = page
   .filter({ hasText: 'определение суда первой инстанции' });
 check((await rulingCard.count()) === 1, 'карточка частной жалобы на определение не появилась');
 
-// --- Ветвь исполнительного листа: базовый расчёт -------------------------------
+// --- Ветвь исполнительного листа: видимость альтернативных дат (задача UI.5, п. 1) ---
+//
+// Три даты якоря (ч. 1 ст. 321) взаимоисключающие: расчёту нужна ровно одна,
+// та, что соответствует case_type. Остальные две не просто визуально скрыты —
+// их не должно быть в DOM вовсе, иначе в них можно вписать значение, которое
+// никогда не попадёт в расчёт, и это будет выглядеть как забытое поле.
 
 await chooseSituation('enforcement');
+const ENFORCEMENT_DATE_IDS = [
+  'in-entry_into_force_date',
+  'in-immediate_execution_decision_date',
+  'in-deferred_installment_end_date',
+];
+async function visibleEnforcementDateIds() {
+  const present = [];
+  for (const id of ENFORCEMENT_DATE_IDS) {
+    if ((await page.locator(`#${id}`).count()) === 1) present.push(id);
+  }
+  return present;
+}
+
+check(
+  (await visibleEnforcementDateIds()).length === 0,
+  'без выбранного case_type должно быть не показано ни одной из трёх дат',
+);
+
+await page.selectOption('#in-case_type', 'entry_into_force');
+await settle();
+check(
+  JSON.stringify(await visibleEnforcementDateIds()) === JSON.stringify(['in-entry_into_force_date']),
+  `при case_type=entry_into_force должно быть видно только entry_into_force_date, видно: ${JSON.stringify(await visibleEnforcementDateIds())}`,
+);
+
+await page.selectOption('#in-case_type', 'immediate_execution');
+await settle();
+check(
+  JSON.stringify(await visibleEnforcementDateIds()) ===
+    JSON.stringify(['in-immediate_execution_decision_date']),
+  `при case_type=immediate_execution должно быть видно только immediate_execution_decision_date, видно: ${JSON.stringify(await visibleEnforcementDateIds())}`,
+);
+
+await page.selectOption('#in-case_type', 'deferred_installment_end');
+await settle();
+check(
+  JSON.stringify(await visibleEnforcementDateIds()) ===
+    JSON.stringify(['in-deferred_installment_end_date']),
+  `при case_type=deferred_installment_end должно быть видно только deferred_installment_end_date, видно: ${JSON.stringify(await visibleEnforcementDateIds())}`,
+);
+
+// --- Ветвь исполнительного листа: базовый расчёт -------------------------------
+
 await page.selectOption('#in-case_type', 'entry_into_force');
 await settle();
 await page.fill('#in-entry_into_force_date', '18.06.2022');

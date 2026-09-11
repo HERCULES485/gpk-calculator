@@ -62,6 +62,19 @@ const CASE_TYPE_OPTIONS = [
   { value: 'deferred_installment_end', label: 'Со дня окончания отсрочки или рассрочки' },
 ];
 
+// Какая из трёх альтернативных дат ветви «Исполнительный лист» реально нужна
+// при каждом case_type — дублирует ENFORCEMENT_DATE_BY_CASE_TYPE из
+// apk/views.js (та не экспортирована, а views.js в этой задаче не трогаем).
+// Здесь это чисто вопрос видимости поля, а не расчёта: сама модель по-прежнему
+// сама решает, что ей нужно, эта таблица лишь скрывает два поля из трёх,
+// которые для выбранной ветки заведомо не читаются.
+const ENFORCEMENT_DATE_BY_CASE_TYPE_APK = {
+  entry_into_force: 'entry_into_force_date',
+  immediate_execution: 'immediate_execution_decision_date',
+  deferred_installment_end: 'deferred_installment_end_date',
+};
+const ENFORCEMENT_DATE_FIELDS_APK = Object.values(ENFORCEMENT_DATE_BY_CASE_TYPE_APK);
+
 const FIELD_KIND_APK = {
   appeal_filed: { kind: 'boolean' },
   cassation_filed: { kind: 'boolean' },
@@ -320,9 +333,19 @@ function renderField(id, labelOverride) {
 }
 
 // Поле для узла: либо само поле, либо ссылка на то место, где оно уже показано.
+//
+// Формулировка без «выше»/«ниже» намеренно: у ветви decision_chain блок
+// уточняющих дат физически идёт ПОСЛЕ карточек результатов (renderSituationFields
+// кладёт его в #other-terms), а у rulings/enforcement — ДО них (#situation-inputs);
+// одно и то же сообщение обслуживает оба случая, и направление зависело бы от
+// того, к какой ситуации относится поле — устойчивее не утверждать его вовсе.
 function fieldOrPointer(id, labelOverride) {
   if (fieldAlreadyRendered(id)) {
-    return el('p', 'hint', `Поле «${labelOverride ?? INPUT_LABELS_APK[id]}» — выше на этой странице.`);
+    return el(
+      'p',
+      'hint',
+      `Поле «${labelOverride ?? INPUT_LABELS_APK[id]}» уже есть в этой форме.`,
+    );
   }
   return renderField(id, labelOverride);
 }
@@ -1033,6 +1056,18 @@ function renderSituationFields(situation, primaryFilled) {
   );
   const box = el('div', 'fields');
   for (const id of situation.fields) {
+    // Три альтернативные даты якоря трёхлетнего срока (ч. 1 ст. 321) —
+    // взаимоисключающие: расчёту нужна ровно одна, та, что соответствует
+    // выбранному case_type. Пока case_type не выбран, не показываем ни одну
+    // из трёх — три одинаковых на вид поля дат без подписи «зачем» только
+    // запутали бы, кто её должен заполнять; сначала пусть решит, какая ветка
+    // его случая, это единственный content-осмысленный порядок.
+    if (
+      ENFORCEMENT_DATE_FIELDS_APK.includes(id) &&
+      id !== ENFORCEMENT_DATE_BY_CASE_TYPE_APK[state.inputs.case_type]
+    ) {
+      continue;
+    }
     if (fieldAlreadyRendered(id)) continue;
     box.appendChild(renderField(id));
   }
