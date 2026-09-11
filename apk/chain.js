@@ -69,6 +69,26 @@
 //     (skill apk-hard-restoration-deadline), но с отступлением: здесь только
 //     ДВЕ категории, не три — третья (ненадлежащее извещение) для этой статьи
 //     не подтверждена отдельным разъяснением Пленума.
+// ст. 308.1 — надзорное обжалование:
+//   ч. 4 — общий срок подачи надзорных жалобы, представления в Верховный Суд
+//     РФ (NADZOR_GENERAL_APK). Три месяца со дня вступления в силу; якорь —
+//     простое поле ввода last_contested_act_entry_into_force_date, НЕ через
+//     граф узлов (в отличие от cassation_general_apk/cassation_vs_apk) —
+//     пользователь вводит дату вступления в силу последнего оспариваемого
+//     акта напрямую, как у узла предъявления исполнительного листа (ст. 321).
+//   ч. 5 — предельный срок подачи ходатайства о восстановлении пропущенного
+//     срока (NADZOR_GENERAL_APK_RESTORATION). Тот же паттерн ДВУХ категорий,
+//     что и у cassation_vs_apk_restoration (ст. 291.2 ч. 2) — третьей здесь
+//     тоже нет, отдельного разъяснения Пленума не найдено. В отличие от
+//     ст. 322 (сознательно не сделана restoration-узлом — там потолка нет),
+//     здесь потолок ЖЁСТКИЙ: шесть месяцев буквально в тексте ч. 5, и ст. 117
+//     ч. 2 АПК прямо включает ст. 308.1 в перечень статей с предельными
+//     сроками восстановления.
+//   ВНЕ ОБЪЁМА: ст. 308.5 (2/3 месяца на изучение жалобы судьёй ВС РФ) и
+//     ст. 308.9 ч. 4 (2 месяца на рассмотрение Президиумом) — сроки работы
+//     суда, а не стороны. Ни один из узлов калькулятора такие сроки не
+//     считает — последовательное ограничение предмета всего модуля, а не
+//     недоделка именно здесь.
 // Регистрация узлов в UI-реестре ситуаций и в .ics-реестре — отдельная
 // задача (нет поля ics — оно сейчас нерабочее, ни один реестр apk/ не сканирует
 // экспорты этого модуля).
@@ -1261,4 +1281,164 @@ export function computeEnforcementPresentationAfterRestorationApk(inputs) {
     );
   }
   return computeSimpleTerm(ENFORCEMENT_PRESENTATION_AFTER_RESTORATION_APK, anchor);
+}
+
+// --- Надзорное обжалование, общий срок (ч. 4 ст. 308.1 АПК РФ) --------------
+//
+// Три месяца со дня вступления в силу последнего оспариваемого судебного
+// акта — та же арифметика, что у cassation_general_apk/cassation_vs_apk (2
+// месяца) и appeal_general_apk (1 месяц), но якорь устроен иначе: здесь это
+// простое поле ввода last_contested_act_entry_into_force_date, а не результат
+// отдельного узла-события графа (entry_into_force_apk/
+// entry_into_force_after_cassation_apk). Пользователь вводит дату
+// вступления в силу напрямую — тот же принцип, что у трёх альтернативных дат
+// узла предъявления исполнительного листа (enforcement_presentation_apk,
+// ст. 321): не всякий якорь обязан приходить через граф.
+//
+// ВНЕ ОБЪЁМА: ст. 308.5 (срок изучения жалобы судьёй ВС РФ) и ст. 308.9 ч. 4
+// (срок рассмотрения Президиумом ВС РФ) — сроки работы суда, не стороны;
+// калькулятор такие сроки не считает последовательно ни для одного узла.
+
+export const NADZOR_GENERAL_APK = {
+  id: 'nadzor_general_apk',
+  title: 'Надзорные жалоба, представление (АПК)',
+  duration: { value: 3, unit: 'month' },
+  anchor: { offset_start: 1 },
+  weekend_shift: true,
+  logic:
+    'Три месяца со дня вступления в законную силу последнего оспариваемого ' +
+    'судебного акта (ч. 4 ст. 308.1 АПК РФ). Срок рассмотрения жалобы судьёй ' +
+    'и Президиумом ВС РФ (ст. 308.5, ч. 4 ст. 308.9 АПК РФ) — вне объёма, это ' +
+    'срок работы суда, а не стороны.',
+  midnight_rule:
+    'ч. 5, 6 ст. 114 АПК РФ — процессуальное действие может быть совершено, а ' +
+    'жалоба сдана на почту, до 24:00 последнего дня срока.',
+  norm_versions: [
+    {
+      id: 'current',
+      from: null,
+      to: null,
+      anchor: { offset_start: 1 },
+      norm: {
+        primary: 'ч. 4 ст. 308.1 АПК РФ',
+        calculation: ['ч. 4 ст. 113', 'ч. 2, 4 ст. 114 АПК РФ'],
+      },
+    },
+  ],
+};
+
+/**
+ * Срок подачи надзорных жалобы, представления по ч. 4 ст. 308.1 АПК РФ —
+ * три месяца со дня вступления в силу последнего оспариваемого акта.
+ * @param {{ last_contested_act_entry_into_force_date: string }} inputs
+ */
+export function computeNadzorGeneralApk(inputs) {
+  const anchor = inputs?.last_contested_act_entry_into_force_date;
+  if (anchor == null) {
+    throw new Error(
+      'Обязательна дата вступления в законную силу последнего оспариваемого ' +
+        'судебного акта (last_contested_act_entry_into_force_date)',
+    );
+  }
+  return computeSimpleTerm(NADZOR_GENERAL_APK, anchor);
+}
+
+// --- Восстановление срока надзорного обжалования (ч. 5 ст. 308.1 АПК РФ) ----
+//
+// Тот же паттерн ДВУХ категорий субъекта, что и у cassation_vs_apk_restoration
+// (ст. 291.2 ч. 2) — не паттерн трёх категорий (appeal_general_apk_restoration/
+// cassation_general_apk_restoration): отдельного разъяснения Пленума,
+// вводящего третью категорию (участвовавшее в деле лицо, ненадлежаще
+// извещённое), для ст. 308.1 не найдено.
+//
+// Две категории:
+//   participating_duly_notified — якорь — дата вступления в законную силу
+//     последнего оспариваемого акта (то же поле ввода, что и у
+//     nadzor_general_apk — last_contested_act_entry_into_force_date, НЕ через
+//     граф узлов), первая часть ч. 5 ст. 308.1;
+//   article_42_person — лицо по ст. 42 АПК РФ; якорь — learned_of_violation_date,
+//     вторая часть ч. 5 ст. 308.1.
+//
+// Потолок — ЖЁСТКИЕ шесть месяцев (в отличие от ст. 322, которую сознательно
+// не стали делать restoration-узлом из-за отсутствия числового предела): текст
+// ч. 5 прямо называет «не позднее чем через шесть месяцев», а ст. 117 ч. 2
+// АПК включает ст. 308.1 в перечень статей с предельными сроками
+// восстановления (наряду со ст. 259, 276, 291.2, 312).
+
+export const NADZOR_GENERAL_APK_RESTORATION = {
+  id: 'nadzor_general_apk_restoration',
+  title: 'Восстановление срока надзорного обжалования (предельный срок, АПК)',
+  duration: { value: 6, unit: 'month' },
+  anchor: { offset_start: 1 },
+  weekend_shift: true,
+  logic:
+    'Предельный срок для подачи ходатайства о восстановлении пропущенного ' +
+    'срока надзорного обжалования (ч. 5 ст. 308.1 АПК РФ). Не решает вопрос о ' +
+    'наличии причин пропуска, не зависящих от заявителя, — это оценивает суд; ' +
+    'считает только крайнюю дату подачи ходатайства. Для участвовавшего в деле ' +
+    'лица — 6 месяцев со дня вступления в законную силу последнего ' +
+    'оспариваемого акта. Для лица, указанного в ст. 42 АПК РФ, — 6 месяцев со ' +
+    'дня, когда лицо узнало или должно было узнать о нарушении своих прав. ' +
+    'Только две категории — третья (ненадлежащее извещение) для этой статьи не ' +
+    'подтверждена отдельным разъяснением Пленума.',
+  midnight_rule:
+    'ч. 5, 6 ст. 114 АПК РФ — процессуальное действие может быть совершено, а ' +
+    'ходатайство сдано на почту, до 24:00 последнего дня срока.',
+  norm_versions: [
+    {
+      id: 'current',
+      from: null,
+      to: null,
+      anchor: { offset_start: 1 },
+      norm: {
+        primary: 'ч. 5 ст. 308.1 АПК РФ',
+        calculation: ['ч. 4 ст. 113', 'ч. 2, 4 ст. 114 АПК РФ'],
+        clarification: 'ст. 42 АПК РФ',
+      },
+    },
+  ],
+};
+
+export const NADZOR_GENERAL_RESTORATION_SUBJECT_CATEGORIES = new Set([
+  'participating_duly_notified',
+  'article_42_person',
+]);
+
+/**
+ * Предельный срок подачи ходатайства о восстановлении срока надзорного
+ * обжалования по ч. 5 ст. 308.1 АПК РФ. Две категории (не три). Якорь
+ * категории participating_duly_notified — то же поле ввода, что и у
+ * nadzor_general_apk (last_contested_act_entry_into_force_date), без графа.
+ *
+ * @param {{
+ *   subject_category: 'participating_duly_notified' | 'article_42_person',
+ *   last_contested_act_entry_into_force_date?: string,
+ *   learned_of_violation_date?: string,
+ * }} inputs
+ */
+export function computeNadzorGeneralApkRestoration(inputs) {
+  const category = inputs?.subject_category;
+  if (!NADZOR_GENERAL_RESTORATION_SUBJECT_CATEGORIES.has(category)) {
+    throw new Error(
+      `subject_category должен быть одним из: ${[...NADZOR_GENERAL_RESTORATION_SUBJECT_CATEGORIES].join(', ')}`,
+    );
+  }
+
+  let anchorInput;
+  if (category === 'participating_duly_notified') {
+    anchorInput = inputs.last_contested_act_entry_into_force_date;
+    if (anchorInput == null) {
+      throw new Error(
+        `Для категории ${category} обязательна last_contested_act_entry_into_force_date`,
+      );
+    }
+  } else {
+    anchorInput = inputs.learned_of_violation_date;
+    if (anchorInput == null) {
+      throw new Error(`Для категории ${category} обязательна learned_of_violation_date`);
+    }
+  }
+
+  const calc = computeSimpleTerm(NADZOR_GENERAL_APK_RESTORATION, anchorInput);
+  return { ...calc, subject_category: category };
 }

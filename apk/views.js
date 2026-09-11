@@ -31,6 +31,8 @@ import {
   computePrivateComplaintAppellatePostanovlenieApk,
   computeEnforcementPresentationApk,
   computeEnforcementPresentationAfterRestorationApk,
+  computeNadzorGeneralApk,
+  computeNadzorGeneralApkRestoration,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -45,12 +47,15 @@ import {
   PRIVATE_COMPLAINT_APPELLATE_POSTANOVLENIE_APK,
   ENFORCEMENT_PRESENTATION_APK,
   ENFORCEMENT_PRESENTATION_AFTER_RESTORATION_APK,
+  NADZOR_GENERAL_APK,
+  NADZOR_GENERAL_APK_RESTORATION,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
   RESTORATION_SUBJECT_CATEGORIES,
   CASSATION_RESTORATION_SUBJECT_CATEGORIES,
   CASSATION_VS_RESTORATION_SUBJECT_CATEGORIES,
+  NADZOR_GENERAL_RESTORATION_SUBJECT_CATEGORIES,
 } from './chain.js';
 
 import {
@@ -126,13 +131,15 @@ export const RESTORATION_SUBJECT_CATEGORIES_APK = [
 ];
 
 // Какие категории применимы к какому узлу восстановления — наборы модели, как
-// есть. У кассации в Судебную коллегию ВС РФ их две, а не три: третья в ст. 259
-// и 276 появляется из отдельного разъяснения Пленума, а для ст. 291.2 такого
-// разъяснения нет (см. комментарий к CASSATION_VS_APK_RESTORATION в chain.js).
+// есть. У кассации в Судебную коллегию ВС РФ и у надзора их две, а не три:
+// третья в ст. 259 и 276 появляется из отдельного разъяснения Пленума, а для
+// ст. 291.2 и ст. 308.1 такого разъяснения нет (см. комментарии к
+// CASSATION_VS_APK_RESTORATION и NADZOR_GENERAL_APK_RESTORATION в chain.js).
 const RESTORATION_CATEGORY_SCOPE_APK = {
   appeal_general_apk_restoration: RESTORATION_SUBJECT_CATEGORIES,
   cassation_general_apk_restoration: CASSATION_RESTORATION_SUBJECT_CATEGORIES,
   cassation_vs_apk_restoration: CASSATION_VS_RESTORATION_SUBJECT_CATEGORIES,
+  nadzor_general_apk_restoration: NADZOR_GENERAL_RESTORATION_SUBJECT_CATEGORIES,
 };
 
 // Текст для карточки «неприменимо»: почему именно эта категория не даёт срока
@@ -352,6 +359,19 @@ const NODE_REQUIREMENTS = {
     node: ENFORCEMENT_PRESENTATION_AFTER_RESTORATION_APK,
     deps: () => ['restoration_ruling_date'],
     compute: (i) => computeEnforcementPresentationAfterRestorationApk(i),
+  },
+  nadzor_general_apk: {
+    node: NADZOR_GENERAL_APK,
+    deps: () => ['last_contested_act_entry_into_force_date'],
+    compute: (i) => computeNadzorGeneralApk(i),
+  },
+  nadzor_general_apk_restoration: {
+    node: NADZOR_GENERAL_APK_RESTORATION,
+    // Тот же хелпер, что у трёх уже реализованных restoration-узлов: якорь
+    // категории participating_duly_notified — прямое поле ввода (как у самого
+    // nadzor_general_apk, не через граф), а не результат другого узла.
+    deps: restorationDeps(() => ['last_contested_act_entry_into_force_date']),
+    compute: (i) => computeNadzorGeneralApkRestoration(i),
   },
 };
 
