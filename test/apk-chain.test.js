@@ -11,7 +11,8 @@
 // ст. 188 ч. 6 — частная жалоба на определение кассационной инстанции (задача 5b),
 // ст. 188 ч. 5 — жалоба на постановление апелляции по жалобе на определение (задача 5c),
 // ст. 321 ч. 1, 3, 4 — предъявление исполнительного листа, базовый срок и перерыв (задача 6b),
-// ст. 321 ч. 2, 5 — исключение периода из срока предъявления (задача 6c).
+// ст. 321 ч. 2, 5 — исключение периода из срока предъявления (задача 6c),
+// ст. 321 ч. 1 п. 2) — срок предъявления после восстановления (задача 6d).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -42,6 +43,8 @@ import {
   computeEnforcementPresentationApk,
   ENFORCEMENT_PRESENTATION_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
+  computeEnforcementPresentationAfterRestorationApk,
+  ENFORCEMENT_PRESENTATION_AFTER_RESTORATION_APK,
 } from '../apk/chain.js';
 
 test('appeal_general_apk считается от decision_full_text_date (обычная дата, без переноса)', () => {
@@ -1469,4 +1472,49 @@ test('исполнительный лист АПК: каталог основа�
   for (const type of ENFORCEMENT_EXCLUSION_TYPES_APK) {
     assert.equal(type.norm, 'ч. 5 ст. 321 АПК РФ');
   }
+});
+
+// Задача 6d — срок предъявления исполнительного листа после восстановления
+// пропущенного срока (п. 2 ч. 1 ст. 321 АПК РФ).
+
+test('исполнительный лист после восстановления АПК: три месяца со дня определения, будний день без переноса', () => {
+  const term = computeEnforcementPresentationAfterRestorationApk({
+    restoration_ruling_date: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-06-11');
+  assert.equal(term.deadline, '2025-06-11'); // среда, рабочий день
+  assert.equal(term.shifted, false);
+});
+
+test('исполнительный лист после восстановления АПК: перенос через нерабочий день', () => {
+  const term = computeEnforcementPresentationAfterRestorationApk({
+    restoration_ruling_date: '2026-06-05',
+  });
+  // 05.06.2026 + 3 месяца = 05.09.2026 — суббота, перенос на 07.09.2026
+  // (понедельник); проверено по производственному календарю (isNonWorkingDay),
+  // а не только по дню недели.
+  assert.equal(term.raw_deadline, '2026-09-05');
+  assert.equal(term.deadline, '2026-09-07');
+  assert.equal(term.shifted, true);
+});
+
+test('исполнительный лист после восстановления АПК: отсутствие restoration_ruling_date — понятная ошибка', () => {
+  assert.throws(
+    () => computeEnforcementPresentationAfterRestorationApk({}),
+    /restoration_ruling_date/,
+  );
+});
+
+test('исполнительный лист после восстановления АПК: объём задачи 6d — без restoration_norm и без перерыва/исключения', () => {
+  assert.equal(ENFORCEMENT_PRESENTATION_AFTER_RESTORATION_APK.restoration_norm, undefined);
+  assert.equal(ENFORCEMENT_PRESENTATION_AFTER_RESTORATION_APK.interruptible, false);
+  const term = computeEnforcementPresentationAfterRestorationApk({
+    restoration_ruling_date: '2025-03-11',
+  });
+  assert.equal(term.interruptions, undefined);
+  assert.equal(term.excluded_periods, undefined);
+  assert.equal(term.excluded_days, undefined);
+  assert.equal(term.base_anchor, undefined);
+  assert.equal(term.pre_exclusion_deadline, undefined);
 });
