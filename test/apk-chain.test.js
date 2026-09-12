@@ -16,7 +16,9 @@
 // ст. 308.1 ч. 4, 5 — надзорное обжалование, срок и восстановление (задача НАДЗОР.1),
 // ст. 312 ч. 1, 2 — пересмотр по новым обстоятельствам, срок и восстановление
 // (задача НОВЫЕ-ОБСТОЯТЕЛЬСТВА.1),
-// ст. 112 ч. 2 — заявление о судебных расходах (задача СУДРАСХОДЫ.1).
+// ст. 112 ч. 2 — заявление о судебных расходах (задача СУДРАСХОДЫ.1),
+// ст. 222.1 ч. 2 абз. 1 — компенсация за нарушение права на судопроизводство
+// в разумный срок (задача РАЗУМНЫЙСРОК.1).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -59,6 +61,8 @@ import {
   NEW_CIRCUMSTANCES_REVIEW_APK_RESTORATION,
   computeCourtCostsApplicationApk,
   COURT_COSTS_APPLICATION_APK,
+  computeReasonableTermCompensationApk,
+  REASONABLE_TERM_COMPENSATION_APK,
 } from '../apk/chain.js';
 
 test('appeal_general_apk считается от decision_full_text_date (обычная дата, без переноса)', () => {
@@ -1777,4 +1781,48 @@ test('судебные расходы АПК: объём задачи — без
   assert.equal(term.id, 'court_costs_application_apk');
   assert.equal(COURT_COSTS_APPLICATION_APK.restoration_norm, undefined);
   assert.equal(typeof computeCourtCostsApplicationApkRestoration, 'undefined');
+});
+
+// Задача РАЗУМНЫЙСРОК.1 — компенсация за нарушение права на судопроизводство
+// в разумный срок (ч. 2 абз. 1 ст. 222.1 АПК РФ).
+
+test('компенсация за нарушение права на судопроизводство в разумный срок: шесть месяцев со дня вступления в силу последнего акта, будний день без переноса', () => {
+  const term = computeReasonableTermCompensationApk({
+    last_judgment_entry_into_force_date: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-09-11');
+  assert.equal(term.deadline, '2025-09-11'); // четверг, рабочий день
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'ч. 2 ст. 222.1 АПК РФ');
+});
+
+test('компенсация за нарушение права на судопроизводство в разумный срок: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeReasonableTermCompensationApk({
+    last_judgment_entry_into_force_date: '2025-01-05',
+  });
+  // 05.01.2025 + 6 месяцев = 05.07.2025 — суббота, перенос на 07.07.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-07-05');
+  assert.equal(term.deadline, '2025-07-07');
+  assert.equal(term.shifted, true);
+});
+
+test('компенсация за нарушение права на судопроизводство в разумный срок: отсутствие last_judgment_entry_into_force_date — понятная ошибка', () => {
+  assert.throws(
+    () => computeReasonableTermCompensationApk({}),
+    /last_judgment_entry_into_force_date/,
+  );
+});
+
+test('компенсация за нарушение права на судопроизводство в разумный срок: объём задачи — без restoration_norm и без связанного restoration-узла', () => {
+  // Фиксирует границу: ст. 222.1 не входит в перечень ст. 117 ч. 2 АПК с
+  // предельными сроками восстановления (тот же случай, что ст. 322 и ст. 112)
+  // — узла для него нет и не должно быть по инерции с паттерном
+  // 259/276/291.2/308.1/312.
+  const term = computeReasonableTermCompensationApk({
+    last_judgment_entry_into_force_date: '2025-03-11',
+  });
+  assert.equal(term.id, 'reasonable_term_compensation_apk');
+  assert.equal(REASONABLE_TERM_COMPENSATION_APK.restoration_norm, undefined);
+  assert.equal(typeof computeReasonableTermCompensationApkRestoration, 'undefined');
 });

@@ -80,8 +80,8 @@ await page.goto(`http://localhost:${port}/apk.html`, { waitUntil: 'networkidle' 
 check((await page.locator('.fatal').count()) === 0, '.fatal показан — страница не инициализировалась');
 check((await page.locator('#decision-full-text').count()) === 1, 'нет основного поля даты решения');
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 6,
-  'переключатель ситуаций отрисован не на шесть ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 7,
+  'переключатель ситуаций отрисован не на семь ветвей',
 );
 
 // --- 1. Полный цикл: дата решения → карточка апелляционной жалобы --------------

@@ -36,6 +36,7 @@ import {
   computeNewCircumstancesReviewApk,
   computeNewCircumstancesReviewApkRestoration,
   computeCourtCostsApplicationApk,
+  computeReasonableTermCompensationApk,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -55,6 +56,7 @@ import {
   NEW_CIRCUMSTANCES_REVIEW_APK,
   NEW_CIRCUMSTANCES_REVIEW_APK_RESTORATION,
   COURT_COSTS_APPLICATION_APK,
+  REASONABLE_TERM_COMPENSATION_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -398,6 +400,13 @@ const NODE_REQUIREMENTS = {
     node: COURT_COSTS_APPLICATION_APK,
     deps: () => ['last_judgment_on_merits_entry_into_force_date'],
     compute: (i) => computeCourtCostsApplicationApk(i),
+  },
+  // Без restoration-узла: ст. 222.1 не входит в перечень ст. 117 ч. 2 АПК с
+  // предельными сроками (как у ст. 322 и ст. 112) — считать в нём нечего.
+  reasonable_term_compensation_apk: {
+    node: REASONABLE_TERM_COMPENSATION_APK,
+    deps: () => ['last_judgment_entry_into_force_date'],
+    compute: (i) => computeReasonableTermCompensationApk(i),
   },
 };
 

@@ -114,6 +114,17 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['court_costs_application_apk'],
   },
+  {
+    id: 'reasonable_term_compensation',
+    label: 'Компенсация за нарушение права на судопроизводство в разумный срок',
+    // Единственное поле ветви — дата вступления в силу последнего судебного
+    // акта по делу (шире, чем «по существу» у ст. 112 — см. apk/chain.js).
+    // Восстановление (ст. 222.6) без числового потолка — отдельного узла и
+    // уточняющих полей для него нет.
+    primary_field: 'last_judgment_entry_into_force_date',
+    fields: [],
+    nodes: ['reasonable_term_compensation_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';
