@@ -35,6 +35,7 @@ import {
   computeNadzorGeneralApkRestoration,
   computeNewCircumstancesReviewApk,
   computeNewCircumstancesReviewApkRestoration,
+  computeCourtCostsApplicationApk,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -53,6 +54,7 @@ import {
   NADZOR_GENERAL_APK_RESTORATION,
   NEW_CIRCUMSTANCES_REVIEW_APK,
   NEW_CIRCUMSTANCES_REVIEW_APK_RESTORATION,
+  COURT_COSTS_APPLICATION_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -389,6 +391,13 @@ const NODE_REQUIREMENTS = {
     node: NEW_CIRCUMSTANCES_REVIEW_APK_RESTORATION,
     deps: () => ['circumstances_discovered_date'],
     compute: (i) => computeNewCircumstancesReviewApkRestoration(i),
+  },
+  // Без restoration-узла: ч. 2 ст. 112 предусматривает восстановление без
+  // числового потолка (как у ст. 322) — считать в нём нечего.
+  court_costs_application_apk: {
+    node: COURT_COSTS_APPLICATION_APK,
+    deps: () => ['last_judgment_on_merits_entry_into_force_date'],
+    compute: (i) => computeCourtCostsApplicationApk(i),
   },
 };
 

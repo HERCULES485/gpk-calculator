@@ -15,7 +15,8 @@
 // ст. 321 ч. 1 п. 2) — срок предъявления после восстановления (задача 6d),
 // ст. 308.1 ч. 4, 5 — надзорное обжалование, срок и восстановление (задача НАДЗОР.1),
 // ст. 312 ч. 1, 2 — пересмотр по новым обстоятельствам, срок и восстановление
-// (задача НОВЫЕ-ОБСТОЯТЕЛЬСТВА.1).
+// (задача НОВЫЕ-ОБСТОЯТЕЛЬСТВА.1),
+// ст. 112 ч. 2 — заявление о судебных расходах (задача СУДРАСХОДЫ.1).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -56,6 +57,8 @@ import {
   NEW_CIRCUMSTANCES_REVIEW_APK,
   computeNewCircumstancesReviewApkRestoration,
   NEW_CIRCUMSTANCES_REVIEW_APK_RESTORATION,
+  computeCourtCostsApplicationApk,
+  COURT_COSTS_APPLICATION_APK,
 } from '../apk/chain.js';
 
 test('appeal_general_apk считается от decision_full_text_date (обычная дата, без переноса)', () => {
@@ -1732,4 +1735,46 @@ test('восстановление пересмотра по новым обст
   assert.equal(term.id, 'new_circumstances_review_apk_restoration');
   assert.equal(NEW_CIRCUMSTANCES_REVIEW_APK.restoration_norm, undefined);
   assert.equal(NEW_CIRCUMSTANCES_REVIEW_APK_RESTORATION.restoration_norm, undefined);
+});
+
+// Задача СУДРАСХОДЫ.1 — заявление о судебных расходах (ч. 2 ст. 112 АПК РФ).
+
+test('судебные расходы АПК: три месяца со дня вступления в силу последнего акта, будний день без переноса', () => {
+  const term = computeCourtCostsApplicationApk({
+    last_judgment_on_merits_entry_into_force_date: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-06-11');
+  assert.equal(term.deadline, '2025-06-11'); // среда, рабочий день
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'ч. 2 ст. 112 АПК РФ');
+});
+
+test('судебные расходы АПК: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeCourtCostsApplicationApk({
+    last_judgment_on_merits_entry_into_force_date: '2025-01-05',
+  });
+  // 05.01.2025 + 3 месяца = 05.04.2025 — суббота, перенос на 07.04.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-04-05');
+  assert.equal(term.deadline, '2025-04-07');
+  assert.equal(term.shifted, true);
+});
+
+test('судебные расходы АПК: отсутствие last_judgment_on_merits_entry_into_force_date — понятная ошибка', () => {
+  assert.throws(
+    () => computeCourtCostsApplicationApk({}),
+    /last_judgment_on_merits_entry_into_force_date/,
+  );
+});
+
+test('судебные расходы АПК: объём задачи — без restoration_norm и без связанного restoration-узла', () => {
+  // Фиксирует границу: ч. 2 ст. 112 предусматривает восстановление без
+  // числового потолка (тот же случай, что ст. 322) — узла для него нет и не
+  // должно быть по инерции с паттерном 259/276/291.2/308.1/312.
+  const term = computeCourtCostsApplicationApk({
+    last_judgment_on_merits_entry_into_force_date: '2025-03-11',
+  });
+  assert.equal(term.id, 'court_costs_application_apk');
+  assert.equal(COURT_COSTS_APPLICATION_APK.restoration_norm, undefined);
+  assert.equal(typeof computeCourtCostsApplicationApkRestoration, 'undefined');
 });

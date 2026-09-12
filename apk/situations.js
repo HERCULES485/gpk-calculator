@@ -103,6 +103,17 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['new_circumstances_review_apk', 'new_circumstances_review_apk_restoration'],
   },
+  {
+    id: 'court_costs',
+    label: 'Судебные расходы',
+    // Единственное поле ветви — дата вступления в силу последнего акта,
+    // которым закончилось рассмотрение дела по существу. Восстановление
+    // (ч. 2 ст. 112) без числового потолка — как у ст. 322, отдельного узла и
+    // уточняющих полей для него нет (см. apk/chain.js).
+    primary_field: 'last_judgment_on_merits_entry_into_force_date',
+    fields: [],
+    nodes: ['court_costs_application_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';
