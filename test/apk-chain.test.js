@@ -26,7 +26,10 @@
 // ст. 229.5 ч. 3 — возражения должника на судебный приказ, второй
 // working_day-узел домена apk/ (задача ПРИКАЗ.1),
 // ст. 198 ч. 4 — оспаривание ненормативного акта, решения, действия
-// (бездействия) госоргана (задача НЕНОРМАТИВНЫЙАКТ.1).
+// (бездействия) госоргана (задача НЕНОРМАТИВНЫЙАКТ.1),
+// ст. 208 ч. 2 — оспаривание решения о привлечении к административной
+// ответственности, третий working_day-узел домена apk/ (задача
+// АДМОТВЕТСТВЕННОСТЬ.1).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -79,6 +82,8 @@ import {
   COURT_ORDER_OBJECTION_APK,
   computeNonnormativeActChallengeApk,
   NONNORMATIVE_ACT_CHALLENGE_APK,
+  computeAdministrativeLiabilityChallengeApk,
+  ADMINISTRATIVE_LIABILITY_CHALLENGE_APK,
 } from '../apk/chain.js';
 // Нужен ровно для одной проверки: узел-окно не должен попасть в реестр .ics
 // (см. последний тест файла) — граница решения по экспорту.
@@ -2112,4 +2117,53 @@ test('оспаривание ненормативного акта: объём �
   assert.equal(term.id, 'nonnormative_act_challenge_apk');
   assert.equal(NONNORMATIVE_ACT_CHALLENGE_APK.restoration_norm, undefined);
   assert.equal(typeof computeNonnormativeActChallengeApkRestoration, 'undefined');
+});
+
+// Задача АДМОТВЕТСТВЕННОСТЬ.1 — оспаривание решения о привлечении к
+// административной ответственности (ч. 2 ст. 208 АПК РФ). Третий узел домена
+// apk/ с duration.unit: 'working_day' — та же трижды проверенная механика.
+
+test('оспаривание решения об административной ответственности: десять рабочих дней от даты получения копии, без праздничных кластеров рядом', () => {
+  const term = computeAdministrativeLiabilityChallengeApk({
+    administrative_decision_copy_received_date_apk: '2025-03-02',
+  });
+  assert.equal(term.anchor, '2025-03-02');
+  assert.equal(term.first_working_day, '2025-03-03');
+  assert.equal(term.raw_deadline, '2025-03-14');
+  assert.equal(term.deadline, '2025-03-14');
+  assert.equal(term.shifted, false); // weekend_shift к working_day не применяется
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 2 ст. 208 АПК РФ');
+});
+
+test('оспаривание решения об административной ответственности: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  // Копия получена 26.12.2025 (пятница). Течение — с 29.12 (понедельник);
+  // 31.12.2025 и 01–09.01.2026 нерабочие, поэтому десятый рабочий день —
+  // 21.01.2026, а не 05.01.2026, как было бы при подсчёте 10 календарных дней
+  // (тот же случай, что и у ПРИКАЗ.1 — та же длительность 10 рабочих дней).
+  const term = computeAdministrativeLiabilityChallengeApk({
+    administrative_decision_copy_received_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-21');
+  assert.notEqual(term.deadline, '2026-01-05'); // наивные "+10 календарных дней"
+});
+
+test('оспаривание решения об административной ответственности: без administrative_decision_copy_received_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeAdministrativeLiabilityChallengeApk({}),
+    /administrative_decision_copy_received_date_apk/,
+  );
+});
+
+test('оспаривание решения об административной ответственности: объём задачи — без restoration-полей и без связанного restoration-узла', () => {
+  // Фиксирует границу: ч. 2 ст. 208 предусматривает восстановление без
+  // числового потолка — тот же случай, что уже был со ст. 322, 112,
+  // 222.1 ч. 2, 229 ч. 4 и 198 ч. 4.
+  const term = computeAdministrativeLiabilityChallengeApk({
+    administrative_decision_copy_received_date_apk: '2025-03-02',
+  });
+  assert.equal(term.id, 'administrative_liability_challenge_apk');
+  assert.equal(ADMINISTRATIVE_LIABILITY_CHALLENGE_APK.restoration_norm, undefined);
+  assert.equal(typeof computeAdministrativeLiabilityChallengeApkRestoration, 'undefined');
 });
