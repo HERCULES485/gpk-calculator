@@ -1,8 +1,9 @@
 // Тесты домена банкротства (apk/bankruptcy.js) — задачи БАНКРОТСТВО.1
 // (ст. 47 п. 1, working_day), БАНКРОТСТВО.2.1 (ст. 71 п. 1, calendar_day),
 // БАНКРОТСТВО.3 (ст. 71 п. 8, обычный месячный узел), БАНКРОТСТВО.4
-// (ст. 142 п. 1, обычный месячный узел) и БАНКРОТСТВО.5 (ст. 213.8 п. 2,
-// обычный месячный узел, первый для процедуры банкротства гражданина).
+// (ст. 142 п. 1, обычный месячный узел), БАНКРОТСТВО.5 (ст. 213.8 п. 2,
+// обычный месячный узел, первый для процедуры банкротства гражданина) и
+// БАНКРОТСТВО.6 (ст. 213.29, обычный месячный узел, без restoration).
 //
 // Отдельный файл от test/apk-chain.test.js: домен банкротства — отдельный
 // правовой институт (ФЗ № 127-ФЗ), не часть процессуальной цепочки АПК, см.
@@ -22,6 +23,8 @@ import {
   CREDITORS_REGISTER_CLOSURE_APK,
   computeCitizenBankruptcyCreditorClaimsApk,
   CITIZEN_BANKRUPTCY_CREDITOR_CLAIMS_APK,
+  computeBankruptcyCompletionReviewApk,
+  BANKRUPTCY_COMPLETION_REVIEW_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 
@@ -290,4 +293,52 @@ test('требования кредиторов при банкротстве г
   assert.equal(term.id, 'citizen_bankruptcy_creditor_claims_apk');
   assert.equal(CITIZEN_BANKRUPTCY_CREDITOR_CLAIMS_APK.restoration_norm, undefined);
   assert.equal(typeof computeCitizenBankruptcyCreditorClaimsApkRestoration, 'undefined');
+});
+
+// Задача БАНКРОТСТВО.6 — пересмотр определения о завершении реструктуризации
+// долгов/реализации имущества гражданина по вновь открывшимся
+// обстоятельствам (ст. 213.29 ФЗ № 127-ФЗ). Обычный месячный узел; в этом
+// фрагменте нормы восстановление не упоминается вовсе (не путать с уже
+// встречавшимся паттерном "восстановление без потолка" у других узлов
+// домена — здесь института восстановления для этого срока просто нет).
+
+test('пересмотр определения о завершении процедуры: один месяц с даты открытия обстоятельств, будний день без переноса', () => {
+  const term = computeBankruptcyCompletionReviewApk({
+    bankruptcy_completion_review_circumstances_discovered_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11'); // пятница, рабочий день
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ст. 213.29 ФЗ № 127-ФЗ');
+});
+
+test('пересмотр определения о завершении процедуры: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeBankruptcyCompletionReviewApk({
+    bankruptcy_completion_review_circumstances_discovered_date_apk: '2025-02-01',
+  });
+  // 01.02.2025 + 1 месяц = 01.03.2025 — суббота, перенос на 03.03.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('пересмотр определения о завершении процедуры: без bankruptcy_completion_review_circumstances_discovered_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeBankruptcyCompletionReviewApk({}),
+    /bankruptcy_completion_review_circumstances_discovered_date_apk/,
+  );
+});
+
+test('пересмотр определения о завершении процедуры: объём задачи — без restoration-полей', () => {
+  // Фиксирует границу: этот фрагмент ст. 213.29 восстановление не упоминает
+  // вовсе — тот же случай, что и у ст. 47 п. 1 (а не "восстановление без
+  // потолка", как у остальных узлов домена банкротства).
+  const term = computeBankruptcyCompletionReviewApk({
+    bankruptcy_completion_review_circumstances_discovered_date_apk: '2025-03-11',
+  });
+  assert.equal(term.id, 'bankruptcy_completion_review_apk');
+  assert.equal(BANKRUPTCY_COMPLETION_REVIEW_APK.restoration_norm, undefined);
+  assert.equal(typeof computeBankruptcyCompletionReviewApkRestoration, 'undefined');
 });
