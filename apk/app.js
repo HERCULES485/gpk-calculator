@@ -1100,10 +1100,39 @@ function renderSituationSwitch(current) {
   root.dataset.rendered = 'yes';
 }
 
+// Подсказка под основным полем ветви — сейчас только у decision_full_text_date
+// (у остальных primary_field такого пояснения не было и раньше, до этой
+// правки, когда section.primary была жёстко привязана к decision_full_text_date
+// одна и не рисовалась для других ветвей вовсе).
+const PRIMARY_FIELD_HINT_APK = {
+  decision_full_text_date: 'Указана в самом решении',
+};
+
+// Основное поле ветви (decision_chain, nadzor, court_costs,
+// reasonable_term_compensation — у остальных ветвей primary_field нет).
+// Раньше здесь только скрывалась/показывалась статическая разметка apk.html,
+// жёстко привязанная к decision_full_text_date, — из-за этого якорь трёх
+// ветвей с ДРУГИМ primary_field физически было негде ввести. Теперь секция
+// рисует поле того узла, который реально нужен текущей ситуации, — тем же
+// generic-механизмом renderField/renderDateField, что и остальные поля.
 function renderPrimaryField(situation) {
   const box = document.querySelector('section.primary');
-  box.hidden = !situation.primary_field;
-  if (situation.primary_field) renderedFields.add(situation.primary_field);
+  const id = situation.primary_field;
+  box.hidden = !id;
+  box.textContent = '';
+  if (!id) return;
+  renderedFields.add(id);
+
+  const field = renderField(id);
+  // Основное поле ветви всегда обязательно — отмечаем звёздочкой, как раньше
+  // было отмечено только decision_full_text_date.
+  field.querySelector('label')?.appendChild(el('span', 'req', ' *'));
+  const hint = PRIMARY_FIELD_HINT_APK[id];
+  if (hint) {
+    const errorP = field.querySelector('.field-error');
+    field.insertBefore(el('p', 'hint', hint), errorP);
+  }
+  box.appendChild(field);
 }
 
 // Поля ситуации: у ветви с основным полем — блок уточнений под карточками (и
@@ -1230,12 +1259,9 @@ function render() {
 // которые считают строки списков без всякого DOM.
 
 function init() {
-  const primary = document.getElementById('decision-full-text');
-  const primaryError = document.getElementById('decision-full-text-error');
-  attachDateMask(primary, (input, parsed) =>
-    commitDateInput('decision_full_text_date', input, primaryError, parsed),
-  );
-
+  // Основное поле ветви (section.primary) больше не статическая разметка —
+  // его создаёт и заново привязывает маску дат renderPrimaryField на каждом
+  // render(), тем же путём, что и остальные поля ситуации.
   document.getElementById('download-ics')?.addEventListener('click', downloadICS);
   document.getElementById('copy-terms')?.addEventListener('click', copyTerms);
   document.getElementById('print-terms')?.addEventListener('click', printTerms);

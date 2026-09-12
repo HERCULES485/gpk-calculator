@@ -390,15 +390,9 @@
 
       <section class="situation-switch" id="situation"></section>
 
-      <section class="primary">
-        <label for="decision-full-text">
-          Дата изготовления решения в полном объёме <span class="req">*</span>
-        </label>
-        <input id="decision-full-text" type="text" inputmode="numeric" placeholder="ДД.ММ.ГГГГ"
-               autocomplete="off" aria-describedby="decision-full-text-hint" />
-        <p class="hint" id="decision-full-text-hint">Указана в самом решении</p>
-        <p class="field-error" id="decision-full-text-error"></p>
-      </section>
+      <!-- Содержимое рисует renderPrimaryField (apk/app.js) — под текущий
+           situation.primary_field, а не всегда под decision_full_text_date. -->
+      <section class="primary"></section>
 
       <section class="other-terms" id="situation-inputs"></section>
 
