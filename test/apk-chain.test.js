@@ -18,7 +18,9 @@
 // (задача НОВЫЕ-ОБСТОЯТЕЛЬСТВА.1),
 // ст. 112 ч. 2 — заявление о судебных расходах (задача СУДРАСХОДЫ.1),
 // ст. 222.1 ч. 2 абз. 1 — компенсация за нарушение права на судопроизводство
-// в разумный срок (задача РАЗУМНЫЙСРОК.1).
+// в разумный срок (задача РАЗУМНЫЙСРОК.1),
+// ст. 222.1 ч. 3 — компенсация за нарушение права на исполнение судебного акта
+// в разумный срок, узел-окно (задача РАЗУМНЫЙСРОК.2.1).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -63,7 +65,12 @@ import {
   COURT_COSTS_APPLICATION_APK,
   computeReasonableTermCompensationApk,
   REASONABLE_TERM_COMPENSATION_APK,
+  computeReasonableTermExecutionCompensationApk,
+  REASONABLE_TERM_EXECUTION_COMPENSATION_APK,
 } from '../apk/chain.js';
+// Нужен ровно для одной проверки: узел-окно не должен попасть в реестр .ics
+// (см. последний тест файла) — граница решения по экспорту.
+import { TERM_REGISTRY_APK } from '../apk/term-registry.js';
 
 test('appeal_general_apk считается от decision_full_text_date (обычная дата, без переноса)', () => {
   const term = computeAppealGeneralApk({ decision_full_text_date: '2025-03-11' });
@@ -1825,4 +1832,125 @@ test('компенсация за нарушение права на судоп�
   assert.equal(term.id, 'reasonable_term_compensation_apk');
   assert.equal(REASONABLE_TERM_COMPENSATION_APK.restoration_norm, undefined);
   assert.equal(typeof computeReasonableTermCompensationApkRestoration, 'undefined');
+});
+
+// Задача РАЗУМНЫЙСРОК.2.1 — компенсация за нарушение права на ИСПОЛНЕНИЕ
+// судебного акта (ч. 3 ст. 222.1 АПК РФ). Первый узел с формой результата
+// «окно»: две границы от разных якорей вместо единственного дедлайна.
+
+test('окно 222.1 ч. 3: производство не окончено — state "open", верхней границы нет как ключа', () => {
+  const result = computeReasonableTermExecutionCompensationApk({
+    execution_deadline_date: '2024-03-11',
+    enforcement_proceeding_ended: false,
+  });
+  assert.equal(result.id, 'reasonable_term_execution_compensation_apk');
+  assert.equal(result.state, 'open');
+  assert.equal(result.earliest_filing_date, '2024-09-11');
+  // Верхней границы не существует, а не «неизвестна»: ключа нет вовсе, не null.
+  assert.equal('latest_filing_date' in result, false);
+  assert.deepEqual(result.anchors, { execution_deadline_date: '2024-03-11' });
+  assert.equal(result.norm.primary, 'ч. 3 ст. 222.1 АПК РФ');
+});
+
+test('окно 222.1 ч. 3: производство окончено — state "closed", обе границы, верхняя позже нижней', () => {
+  const result = computeReasonableTermExecutionCompensationApk({
+    execution_deadline_date: '2024-03-11',
+    enforcement_proceeding_ended: true,
+    enforcement_proceeding_ended_date: '2025-02-10',
+  });
+  assert.equal(result.state, 'closed');
+  assert.equal(result.earliest_filing_date, '2024-09-11'); // 11.03.2024 + 6 мес.
+  assert.equal(result.latest_filing_date, '2025-08-11'); // 10.02.2025 + 6 мес., понедельник
+  assert.ok(result.latest_filing_date > result.earliest_filing_date);
+  assert.deepEqual(result.anchors, {
+    execution_deadline_date: '2024-03-11',
+    enforcement_proceeding_ended_date: '2025-02-10',
+  });
+});
+
+test('окно 222.1 ч. 3: исполнение завершилось до истечения срока на него — state "empty", обе даты на месте', () => {
+  // Производство окончено 01.03.2024, а срок на исполнение истекал только
+  // 01.06.2024: верхняя граница (01.09.2024 → 02.09.2024, воскресенье) раньше
+  // нижней (01.12.2024). Нарушения права на исполнение не было — подать
+  // заявление нельзя ни в один день.
+  const result = computeReasonableTermExecutionCompensationApk({
+    execution_deadline_date: '2024-06-01',
+    enforcement_proceeding_ended: true,
+    enforcement_proceeding_ended_date: '2024-03-01',
+  });
+  assert.equal(result.state, 'empty');
+  // Пустое окно — не отказ расчёта: обе границы посчитаны и возвращаются, они
+  // и объясняют результат.
+  assert.equal(result.earliest_filing_date, '2024-12-01');
+  assert.equal(result.latest_filing_date, '2024-09-02');
+  assert.ok(result.latest_filing_date < result.earliest_filing_date);
+});
+
+test('окно 222.1 ч. 3: перенос через нерабочий день только у верхней границы', () => {
+  // Обе границы выпадают на нерабочий день, и обе — на разные даты:
+  //   нижняя  05.01.2025 + 6 мес. = 05.07.2025, суббота — НЕ переносится
+  //           (перенос сузил бы окно, то есть ухудшил положение заявителя);
+  //   верхняя 05.04.2025 + 6 мес. = 05.10.2025, воскресенье — переносится
+  //           на понедельник 06.10.2025 (ч. 4 ст. 114 АПК РФ).
+  const result = computeReasonableTermExecutionCompensationApk({
+    execution_deadline_date: '2025-01-05',
+    enforcement_proceeding_ended: true,
+    enforcement_proceeding_ended_date: '2025-04-05',
+  });
+  assert.equal(result.state, 'closed');
+  assert.equal(result.earliest_filing_date, '2025-07-05');
+  assert.equal(result.latest_filing_date, '2025-10-06');
+});
+
+test('окно 222.1 ч. 3: enforcement_proceeding_ended не задан или не boolean — понятная ошибка', () => {
+  assert.throws(
+    () => computeReasonableTermExecutionCompensationApk({ execution_deadline_date: '2024-03-11' }),
+    /enforcement_proceeding_ended/,
+  );
+  // Строка вместо boolean молча не трактуется как «окончено».
+  assert.throws(
+    () =>
+      computeReasonableTermExecutionCompensationApk({
+        execution_deadline_date: '2024-03-11',
+        enforcement_proceeding_ended: 'true',
+      }),
+    /enforcement_proceeding_ended/,
+  );
+});
+
+test('окно 222.1 ч. 3: производство окончено, но дата окончания не задана — понятная ошибка', () => {
+  assert.throws(
+    () =>
+      computeReasonableTermExecutionCompensationApk({
+        execution_deadline_date: '2024-03-11',
+        enforcement_proceeding_ended: true,
+      }),
+    /enforcement_proceeding_ended_date/,
+  );
+});
+
+test('окно 222.1 ч. 3: без execution_deadline_date — понятная ошибка', () => {
+  assert.throws(
+    () => computeReasonableTermExecutionCompensationApk({ enforcement_proceeding_ended: false }),
+    /execution_deadline_date/,
+  );
+});
+
+test('окно 222.1 ч. 3: узел без top-level duration и вне реестра сроков (.ics)', () => {
+  // Фиксирует границу решения по экспорту: две длительности лежат во вложенном
+  // window, наверх duration не поднят намеренно. Иначе isTermNode завёл бы узел
+  // в реестр с ics: true, а exportableCards молча отбросил бы его по отсутствию
+  // card.deadline — молчаливое выпадение из экспорта вместо явного отказа.
+  assert.equal(REASONABLE_TERM_EXECUTION_COMPENSATION_APK.duration, undefined);
+  assert.deepEqual(REASONABLE_TERM_EXECUTION_COMPENSATION_APK.window.earliest.duration, {
+    value: 6,
+    unit: 'month',
+  });
+  assert.deepEqual(REASONABLE_TERM_EXECUTION_COMPENSATION_APK.window.latest.duration, {
+    value: 6,
+    unit: 'month',
+  });
+  assert.equal(REASONABLE_TERM_EXECUTION_COMPENSATION_APK.window.earliest.weekend_shift, false);
+  assert.equal(REASONABLE_TERM_EXECUTION_COMPENSATION_APK.window.latest.weekend_shift, true);
+  assert.equal(TERM_REGISTRY_APK.reasonable_term_execution_compensation_apk, undefined);
 });

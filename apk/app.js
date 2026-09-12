@@ -78,6 +78,7 @@ const ENFORCEMENT_DATE_FIELDS_APK = Object.values(ENFORCEMENT_DATE_BY_CASE_TYPE_
 const FIELD_KIND_APK = {
   appeal_filed: { kind: 'boolean' },
   cassation_filed: { kind: 'boolean' },
+  enforcement_proceeding_ended: { kind: 'boolean' },
   appeal_outcome: { kind: 'choice', options: APPEAL_OUTCOME_OPTIONS },
   case_type: { kind: 'choice', options: CASE_TYPE_OPTIONS },
   subject_category: {
@@ -495,6 +496,50 @@ function renderErrorCard(card) {
 
 // Норма к выбранной категории заявителя не применяется: показываем причину, а
 // не прячем карточку — иначе исчезновение срока с экрана выглядит как сбой.
+// Карточка окна (ч. 3 ст. 222.1): две границы вместо одного дедлайна. Подписи
+// границ — «не ранее»/«не позднее»: нижняя граница сроком на подачу не
+// является, и назвать её дедлайном значило бы соврать.
+const WINDOW_ANCHOR_CAPTION_APK = {
+  execution_deadline_date: 'срок на исполнение истёк',
+  enforcement_proceeding_ended_date: 'производство по исполнению окончено',
+};
+
+function renderWindow(card) {
+  const c = el('div', card.state === 'empty' ? 'card not-applicable' : 'card');
+  c.appendChild(el('div', 'kicker', 'Окно подачи'));
+  c.appendChild(el('h2', null, card.title));
+
+  c.appendChild(el('div', 'deadline-caption', 'Не ранее'));
+  c.appendChild(el('div', 'deadline', isoToRu(card.earliest_filing_date)));
+  c.appendChild(el('div', 'deadline-caption', 'Не позднее'));
+  c.appendChild(
+    el('div', 'deadline', card.latest_filing_date ? isoToRu(card.latest_filing_date) : '—'),
+  );
+  c.appendChild(el('div', 'norm', card.norm));
+
+  // Состояния 'open' и 'empty' без пояснения не читаются: в первом прочерк
+  // вместо верхней границы выглядит как недосчитанное, во втором обе даты
+  // стоят, но подать нельзя ни в один день.
+  if (card.note) c.appendChild(el('div', 'na-reason', card.note));
+
+  // От чего посчитана каждая граница — иначе две даты неотличимы по источнику.
+  for (const [field, date] of Object.entries(card.anchors)) {
+    c.appendChild(
+      el('div', 'hint', `${WINDOW_ANCHOR_CAPTION_APK[field]}: ${isoToRu(date)}`),
+    );
+  }
+
+  if (card.calendar_warning) {
+    c.appendChild(
+      collapsedWarning('Календарь на этот год ещё не окончательный', [
+        el('div', null, card.calendar_warning.text),
+      ]),
+    );
+  }
+  if (card.details) c.appendChild(renderDetails(card.details));
+  return c;
+}
+
 function renderNotApplicableCard(card) {
   const c = el('div', 'card not-applicable');
   c.appendChild(el('div', 'kicker', 'Срок не исчисляется'));
@@ -855,6 +900,34 @@ function summaryEntries(cards) {
       });
     } else if (card.kind === 'event' && card.date) {
       entries.push({ title: card.title, deadline: card.date, norm: card.norm, kind: 'event' });
+    } else if (card.kind === 'window') {
+      // caseSummaryItems в ядре принимает одну дату на запись, и расширять его
+      // под две — правка core/, которой эта задача не предусматривает. Поэтому
+      // окно раскладывается на две записи с разными подписями границ.
+      //
+      // Нижняя граница идёт как 'event': подпись «последний день подачи» к ней
+      // не относится, у kind 'event' её нет. Верхняя — как 'applicant': она и
+      // есть последний день подачи.
+      //
+      // Пустое окно (state: 'empty') в сводку не попадает: действовать не в
+      // какой день, а «последний день подачи» рядом с датой, когда подать
+      // нельзя, вводил бы в заблуждение. Это то же правило, по которому в
+      // сводку не попадают карточки kind:'not_applicable'.
+      if (card.state === 'empty') continue;
+      entries.push({
+        title: `${card.title} — подача не ранее`,
+        deadline: card.earliest_filing_date,
+        norm: card.norm,
+        kind: 'event',
+      });
+      if (card.latest_filing_date) {
+        entries.push({
+          title: `${card.title} — подача не позднее`,
+          deadline: card.latest_filing_date,
+          norm: card.norm,
+          kind: 'applicant',
+        });
+      }
     }
   }
   return entries;
@@ -1112,6 +1185,7 @@ function render() {
     const card = cardById(id);
     if (card) {
       if (card.kind === 'event') root.appendChild(renderEvent(card));
+      else if (card.kind === 'window') root.appendChild(renderWindow(card));
       else if (card.kind === 'error') {
         const errorEl = renderErrorCard(card);
         // Списки остаются на экране и при отказе расчёта: пересечение периодов

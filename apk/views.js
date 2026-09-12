@@ -37,6 +37,7 @@ import {
   computeNewCircumstancesReviewApkRestoration,
   computeCourtCostsApplicationApk,
   computeReasonableTermCompensationApk,
+  computeReasonableTermExecutionCompensationApk,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -57,6 +58,7 @@ import {
   NEW_CIRCUMSTANCES_REVIEW_APK_RESTORATION,
   COURT_COSTS_APPLICATION_APK,
   REASONABLE_TERM_COMPENSATION_APK,
+  REASONABLE_TERM_EXECUTION_COMPENSATION_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -192,6 +194,58 @@ function eventCard(node, entry) {
   return card;
 }
 
+// Карточка узла-окна (ч. 3 ст. 222.1): не единственный дедлайн, а диапазон из
+// двух границ от разных якорей. Отдельная функция, а не надстройка над
+// monthTermCard: markExpired, exportableCards и summaryEntries ключуются на
+// card.deadline, которого у окна по конструкции нет, и подстановка туда одной
+// из границ объявила бы вторую несуществующей.
+//
+// Тексты состояний живут здесь, а не в chain.js: это объяснение результата
+// пользователю, а не содержание нормы.
+const WINDOW_STATE_NOTE_APK = {
+  open:
+    'Производство по исполнению не окончено: верхняя граница ещё не ' +
+    'определена, наступит через шесть месяцев со дня окончания производства.',
+  empty:
+    'Окно закрыто: исполнение завершилось до истечения установленного законом ' +
+    'срока на исполнение, нарушения права на исполнение в разумный срок нет.',
+};
+
+function windowCard(node, result) {
+  const card = {
+    id: node.id,
+    kind: 'window',
+    title: node.title,
+    status: 'computed',
+    state: result.state,
+    norm: result.norm.primary,
+    // Подписи границ — «не ранее»/«не позднее», а не «дедлайн»: нижняя граница
+    // сроком на подачу не является.
+    earliest_filing_date: result.earliest_filing_date,
+    anchors: result.anchors,
+    details: {
+      collapsed: true,
+      logic: result.logic,
+      calculation: result.norm.calculation,
+      midnight_rule: result.midnight_rule,
+    },
+  };
+  // Верхняя граница отсутствует как ключ, если производство не окончено, —
+  // карточка повторяет форму результата, а не подставляет null.
+  if (result.state !== 'open') card.latest_filing_date = result.latest_filing_date;
+  const note = WINDOW_STATE_NOTE_APK[result.state];
+  if (note) card.note = note;
+  // Предупреждение календаря — только по верхней границе: нижняя не переносится
+  // через нерабочий день, и точность производственного календаря для неё роли
+  // не играет.
+  if (card.latest_filing_date) attachCalendarWarning(card, card.latest_filing_date);
+  return card;
+}
+
+// Узлы с нестандартной формой результата строят карточку своей функцией; для
+// остальных (обычный срок) карточку строит monthTermCard из ядра.
+const CARD_BUILDERS_APK = { event: eventCard, window: windowCard };
+
 // История перерывов срока (ч. 3, 4 ст. 321 АПК РФ) на карточке: события с
 // подписями оснований, дата, от которой срок пошёл заново, норма и логика.
 // Расчёт уже сдвинут в chain.js — здесь только показываем, от чего он пошёл.
@@ -268,6 +322,18 @@ function entryAfterCassationDeps(inputs) {
   }
   if (inputs.cassation_filed === true) return ['cassation_filed', 'district_cassation_ruling_date'];
   return ['cassation_filed'];
+}
+
+// Зависимости узла-окна ст. 222.1 ч. 3: дата истечения срока на исполнение
+// нужна всегда, дата окончания производства — только когда дискриминатор
+// enforcement_proceeding_ended выставлен в true. Та же конструкция, что у
+// entryIntoForceDeps: набор полей определяется явным булевым дискриминатором.
+function executionCompensationDeps(inputs) {
+  const base = ['execution_deadline_date', 'enforcement_proceeding_ended'];
+  if (inputs.enforcement_proceeding_ended === true) {
+    return [...base, 'enforcement_proceeding_ended_date'];
+  }
+  return base;
 }
 
 // Зависимости узла восстановления: у категории «участвующее лицо, извещённое
@@ -408,6 +474,14 @@ const NODE_REQUIREMENTS = {
     deps: () => ['last_judgment_entry_into_force_date'],
     compute: (i) => computeReasonableTermCompensationApk(i),
   },
+  // Единственный узел с kind: 'window' — результат не срок, а окно из двух
+  // границ (см. windowCard выше и комментарий к узлу в chain.js).
+  reasonable_term_execution_compensation_apk: {
+    node: REASONABLE_TERM_EXECUTION_COMPENSATION_APK,
+    kind: 'window',
+    deps: executionCompensationDeps,
+    compute: (i) => computeReasonableTermExecutionCompensationApk(i),
+  },
 };
 
 // --- Пометка истёкших ---------------------------------------------------------
@@ -483,7 +557,8 @@ export function buildView(inputs, options = {}) {
       continue;
     }
 
-    const card = kind === 'event' ? eventCard(spec.node, term) : monthTermCard(term);
+    const buildCard = CARD_BUILDERS_APK[kind];
+    const card = buildCard ? buildCard(spec.node, term) : monthTermCard(term);
     if (spec.decorate) spec.decorate(card, term);
     cards.push(card);
   }

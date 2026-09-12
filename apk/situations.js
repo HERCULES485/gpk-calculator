@@ -125,6 +125,21 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['reasonable_term_compensation_apk'],
   },
+  {
+    id: 'execution_compensation',
+    label: 'Компенсация за нарушение права на исполнение судебного акта в разумный срок',
+    // Без primary_field: все три поля ветви равноправно лежат в блоке исходных
+    // данных, как у ветвей rulings и enforcement. Нижняя граница окна считается
+    // от execution_deadline_date и есть всегда; верхняя появляется только когда
+    // дискриминатор enforcement_proceeding_ended выставлен в true, и тогда же
+    // становится обязательной дата окончания производства (см. deps в views.js).
+    fields: [
+      'execution_deadline_date',
+      'enforcement_proceeding_ended',
+      'enforcement_proceeding_ended_date',
+    ],
+    nodes: ['reasonable_term_execution_compensation_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';
