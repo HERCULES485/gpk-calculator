@@ -40,6 +40,7 @@ import {
   computeReasonableTermExecutionCompensationApk,
   computeSimplifiedProceedingsAppealApk,
   computeCourtOrderObjectionApk,
+  computeNonnormativeActChallengeApk,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -63,6 +64,7 @@ import {
   REASONABLE_TERM_EXECUTION_COMPENSATION_APK,
   SIMPLIFIED_PROCEEDINGS_APPEAL_APK,
   COURT_ORDER_OBJECTION_APK,
+  NONNORMATIVE_ACT_CHALLENGE_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -500,6 +502,14 @@ const NODE_REQUIREMENTS = {
     node: COURT_ORDER_OBJECTION_APK,
     deps: () => ['court_order_copy_received_date_apk'],
     compute: (i) => computeCourtOrderObjectionApk(i),
+  },
+  // Без restoration-узла: ч. 4 ст. 198 предусматривает восстановление без
+  // числового потолка — тот же случай, что уже был со ст. 322, 112,
+  // 222.1 ч. 2 и 229 ч. 4.
+  nonnormative_act_challenge_apk: {
+    node: NONNORMATIVE_ACT_CHALLENGE_APK,
+    deps: () => ['nonnormative_act_violation_known_date'],
+    compute: (i) => computeNonnormativeActChallengeApk(i),
   },
 };
 

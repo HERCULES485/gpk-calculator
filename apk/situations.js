@@ -166,6 +166,18 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['court_order_objection_apk'],
   },
+  {
+    id: 'nonnormative_act_challenge',
+    label: 'Оспаривание ненормативного акта, решения, действия госоргана',
+    // Единственное поле ветви — дата, когда заявителю стало известно о
+    // нарушении его прав ненормативным актом/решением/действием (не о
+    // нарушении судебным актом — то другое понятие, см. apk/chain.js).
+    // Восстановление (ч. 4 ст. 198) без числового потолка — отдельного узла
+    // и уточняющих полей для него нет.
+    primary_field: 'nonnormative_act_violation_known_date',
+    fields: [],
+    nodes: ['nonnormative_act_challenge_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';

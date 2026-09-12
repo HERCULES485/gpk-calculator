@@ -24,7 +24,9 @@
 // ст. 229 ч. 4 — апелляционная жалоба по делу упрощённого производства, первый
 // working_day-узел домена apk/ (задача УПРОЩЁННОЕ.1),
 // ст. 229.5 ч. 3 — возражения должника на судебный приказ, второй
-// working_day-узел домена apk/ (задача ПРИКАЗ.1).
+// working_day-узел домена apk/ (задача ПРИКАЗ.1),
+// ст. 198 ч. 4 — оспаривание ненормативного акта, решения, действия
+// (бездействия) госоргана (задача НЕНОРМАТИВНЫЙАКТ.1).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -75,6 +77,8 @@ import {
   SIMPLIFIED_PROCEEDINGS_APPEAL_APK,
   computeCourtOrderObjectionApk,
   COURT_ORDER_OBJECTION_APK,
+  computeNonnormativeActChallengeApk,
+  NONNORMATIVE_ACT_CHALLENGE_APK,
 } from '../apk/chain.js';
 // Нужен ровно для одной проверки: узел-окно не должен попасть в реестр .ics
 // (см. последний тест файла) — граница решения по экспорту.
@@ -2065,4 +2069,47 @@ test('возражения на судебный приказ: объём зад
   assert.equal(term.id, 'court_order_objection_apk');
   assert.equal(COURT_ORDER_OBJECTION_APK.restoration_norm, undefined);
   assert.equal(typeof computeCourtOrderObjectionApkRestoration, 'undefined');
+});
+
+// Задача НЕНОРМАТИВНЫЙАКТ.1 — оспаривание ненормативного акта, решения,
+// действия (бездействия) госоргана (ч. 4 ст. 198 АПК РФ).
+
+test('оспаривание ненормативного акта: три месяца со дня, когда стало известно о нарушении, будний день без переноса', () => {
+  const term = computeNonnormativeActChallengeApk({
+    nonnormative_act_violation_known_date: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-06-11');
+  assert.equal(term.deadline, '2025-06-11'); // среда, рабочий день
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'ч. 4 ст. 198 АПК РФ');
+});
+
+test('оспаривание ненормативного акта: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeNonnormativeActChallengeApk({
+    nonnormative_act_violation_known_date: '2025-01-05',
+  });
+  // 05.01.2025 + 3 месяца = 05.04.2025 — суббота, перенос на 07.04.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-04-05');
+  assert.equal(term.deadline, '2025-04-07');
+  assert.equal(term.shifted, true);
+});
+
+test('оспаривание ненормативного акта: без nonnormative_act_violation_known_date — понятная ошибка', () => {
+  assert.throws(
+    () => computeNonnormativeActChallengeApk({}),
+    /nonnormative_act_violation_known_date/,
+  );
+});
+
+test('оспаривание ненормативного акта: объём задачи — без restoration_norm и без связанного restoration-узла', () => {
+  // Фиксирует границу: ч. 4 ст. 198 предусматривает восстановление без
+  // числового потолка — тот же случай, что уже был со ст. 322, 112,
+  // 222.1 ч. 2 и 229 ч. 4.
+  const term = computeNonnormativeActChallengeApk({
+    nonnormative_act_violation_known_date: '2025-03-11',
+  });
+  assert.equal(term.id, 'nonnormative_act_challenge_apk');
+  assert.equal(NONNORMATIVE_ACT_CHALLENGE_APK.restoration_norm, undefined);
+  assert.equal(typeof computeNonnormativeActChallengeApkRestoration, 'undefined');
 });
