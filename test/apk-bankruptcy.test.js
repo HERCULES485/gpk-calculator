@@ -1,4 +1,5 @@
-// Тесты домена банкротства (apk/bankruptcy.js) — задача БАНКРОТСТВО.1.
+// Тесты домена банкротства (apk/bankruptcy.js) — задачи БАНКРОТСТВО.1
+// (ст. 47 п. 1, working_day) и БАНКРОТСТВО.2.1 (ст. 71 п. 1, calendar_day).
 //
 // Отдельный файл от test/apk-chain.test.js: домен банкротства — отдельный
 // правовой институт (ФЗ № 127-ФЗ), не часть процессуальной цепочки АПК, см.
@@ -10,7 +11,10 @@ import assert from 'node:assert/strict';
 import {
   computeDebtorResponseBankruptcyApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
+  computeCreditorClaimsSubmissionApk,
+  CREDITOR_CLAIMS_SUBMISSION_APK,
 } from '../apk/bankruptcy.js';
+import { isWorkingDay } from '../core/calendar/calendar.js';
 
 // Задача БАНКРОТСТВО.1 — отзыв должника на заявление о банкротстве
 // (ст. 47 п. 1 ФЗ № 127-ФЗ). Первый узел домена банкротства.
@@ -60,4 +64,84 @@ test('отзыв должника на заявление о банкротст�
   assert.equal(term.id, 'debtor_response_bankruptcy_apk');
   assert.equal(DEBTOR_RESPONSE_BANKRUPTCY_APK.restoration_norm, undefined);
   assert.equal(typeof computeDebtorResponseBankruptcyApkRestoration, 'undefined');
+});
+
+// Задача БАНКРОТСТВО.2.1 — предъявление требований кредиторов для участия в
+// первом собрании (ст. 71 п. 1 ФЗ № 127-ФЗ). Первый узел проекта с
+// duration.unit: 'calendar_day'.
+
+test('требования кредиторов: тридцать календарных дней с даты опубликования сообщения, итоговый день рабочий', () => {
+  const term = computeCreditorClaimsSubmissionApk({
+    observation_introduction_notice_published_date_apk: '2025-03-03',
+  });
+  assert.equal(term.anchor, '2025-03-03');
+  assert.equal(term.raw_deadline, '2025-04-02');
+  assert.equal(term.deadline, '2025-04-02'); // среда, рабочий день
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 30, unit: 'calendar_day' });
+  assert.equal(term.norm.primary, 'ст. 71 п. 1 ФЗ № 127-ФЗ');
+});
+
+test('требования кредиторов: итоговая дата на нерабочий день переносится (ч. 4 ст. 114 АПК РФ)', () => {
+  // 01.04.2025 + 30 календарных дней = 01.05.2025 (Праздник Весны и Труда,
+  // нерабочий) → ближайший рабочий 05.05.2025 (понедельник).
+  const term = computeCreditorClaimsSubmissionApk({
+    observation_introduction_notice_published_date_apk: '2025-04-01',
+  });
+  assert.equal(term.raw_deadline, '2025-05-01');
+  assert.ok(!isWorkingDay('2025-05-01'));
+  assert.equal(term.deadline, '2025-05-05');
+  assert.equal(term.shifted, true);
+});
+
+test('требования кредиторов: нерабочие дни ВНУТРИ периода не растягивают срок — дедлайн ровно якорь + 30', () => {
+  // Главная проверка того, что узел не перепутан с working_day-веткой.
+  // Период 03.03–02.04.2025 захватывает ЧЕТЫРЕ полных уикенда (8 нерабочих
+  // дней: 08–09, 15–16, 22–23, 29–30 марта). У working_day-срока они
+  // пропускались бы и отодвинули дедлайн почти на две недели; у календарного
+  // они входят в счёт, и итог — ровно 30 дней от якоря.
+  const anchor = '2025-03-03';
+  const nonWorkingInside = [
+    '2025-03-08',
+    '2025-03-09',
+    '2025-03-15',
+    '2025-03-16',
+    '2025-03-22',
+    '2025-03-23',
+    '2025-03-29',
+    '2025-03-30',
+  ];
+  for (const day of nonWorkingInside) {
+    assert.ok(!isWorkingDay(day), `${day} должен быть нерабочим днём внутри периода`);
+  }
+
+  const term = computeCreditorClaimsSubmissionApk({
+    observation_introduction_notice_published_date_apk: anchor,
+  });
+  // Ровно якорь + 30 календарных дней, несмотря на восемь нерабочих внутри.
+  assert.equal(term.deadline, '2025-04-02');
+  const plusThirty = new Date(Date.parse(anchor + 'T00:00:00Z') + 30 * 86_400_000);
+  assert.equal(term.deadline, plusThirty.toISOString().slice(0, 10));
+  // Собственного сдвига дня начала календарный срок не делает — в отличие от
+  // working_day-узлов, у которых в результате есть first_working_day.
+  assert.equal(term.first_working_day, undefined);
+});
+
+test('требования кредиторов: без observation_introduction_notice_published_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeCreditorClaimsSubmissionApk({}),
+    /observation_introduction_notice_published_date_apk/,
+  );
+});
+
+test('требования кредиторов: объём задачи — без restoration-полей', () => {
+  // Фиксирует границу: п. 1 ст. 71 восстановление применительно к этому сроку
+  // не упоминает. П. 8 той же статьи (требования, заявленные позже) — отдельная
+  // норма с собственными последствиями, в объём задачи не входит.
+  const term = computeCreditorClaimsSubmissionApk({
+    observation_introduction_notice_published_date_apk: '2025-03-03',
+  });
+  assert.equal(term.id, 'creditor_claims_submission_apk');
+  assert.equal(CREDITOR_CLAIMS_SUBMISSION_APK.restoration_norm, undefined);
+  assert.equal(typeof computeCreditorClaimsSubmissionApkRestoration, 'undefined');
 });

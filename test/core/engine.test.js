@@ -188,3 +188,68 @@ test('unit year: последний день на нерабочий → пер�
   assert.equal(r.deadline, '2024-06-13');
   assert.equal(r.shifted, true);
 });
+
+// --- Единица calendar_day (норма прямо называет дни календарными) ------------
+//
+// Отличие от working_day: нерабочие дни ВХОДЯТ в счёт периода и не растягивают
+// срок; переносится только итоговая дата, как у month/year.
+
+function cdTerm(value, weekendShift) {
+  const term = { duration: { value, unit: 'calendar_day' }, anchor: { offset_start: 1 } };
+  if (weekendShift !== undefined) term.weekend_shift = weekendShift;
+  return term;
+}
+
+test('calendar_day: базовый случай — ровно якорь + N, итоговый день рабочий, переноса нет', () => {
+  // 03.03.2025 + 10 календарных дней = 13.03.2025 (четверг, рабочий).
+  const r = computeDeadline(cdTerm(10), '2025-03-03');
+  assert.equal(r.raw_deadline, '2025-03-13');
+  assert.equal(r.deadline, '2025-03-13');
+  assert.equal(r.shifted, false);
+  // Ровно якорь + N, без «+1» сверх формулы.
+  assert.equal(r.deadline, toISODate(addDays('2025-03-03', 10)));
+});
+
+test('calendar_day: итоговая дата на нерабочий день переносится вперёд', () => {
+  // 01.04.2025 + 30 календарных дней = 01.05.2025 (Праздник Весны и Труда,
+  // нерабочий) → ближайший рабочий 05.05.2025 (понедельник).
+  const r = computeDeadline(cdTerm(30), '2025-04-01');
+  assert.equal(r.raw_deadline, '2025-05-01');
+  assert.ok(!isWorkingDay('2025-05-01'));
+  assert.equal(r.deadline, '2025-05-05');
+  assert.equal(r.shifted, true);
+});
+
+test('calendar_day vs working_day: нерабочие дни ВНУТРИ периода не растягивают календарный срок', () => {
+  // Один и тот же диапазон и одна и та же длительность — разные результаты.
+  // Внутри 03.03–13.03.2025 есть нерабочие 08.03 и 09.03 (суббота и
+  // воскресенье, 8 марта — праздник).
+  const anchor = '2025-03-03';
+  assert.ok(!isWorkingDay('2025-03-08'));
+  assert.ok(!isWorkingDay('2025-03-09'));
+
+  const calendar = computeDeadline(cdTerm(10), anchor);
+  const working = computeDeadline(wdTerm(10), anchor);
+
+  // Календарный срок игнорирует нерабочие дни внутри периода — ровно якорь + 10.
+  assert.equal(calendar.deadline, '2025-03-13');
+  assert.equal(calendar.deadline, toISODate(addDays(anchor, 10)));
+  // Срок в рабочих днях их пропускает и потому уезжает дальше.
+  assert.equal(working.deadline, '2025-03-17');
+  assert.equal(working.deadline, nthWorkingDayAfter(anchor, 10));
+  assert.notEqual(calendar.deadline, working.deadline);
+  assert.ok(working.deadline > calendar.deadline);
+
+  // Ветки действительно разные: у календарного срока нет first_working_day —
+  // собственного сдвига дня начала он не делает.
+  assert.equal(calendar.first_working_day, undefined);
+  assert.equal(working.first_working_day, '2025-03-04');
+});
+
+test('calendar_day: weekend_shift: false отключает перенос итоговой даты', () => {
+  // Та же логика опциональности переноса, что и у month/year.
+  const r = computeDeadline(cdTerm(30, false), '2025-04-01');
+  assert.equal(r.raw_deadline, '2025-05-01');
+  assert.equal(r.deadline, '2025-05-01'); // остаётся на нерабочий день
+  assert.equal(r.shifted, false);
+});
