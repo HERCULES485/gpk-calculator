@@ -20,7 +20,9 @@
 // ст. 222.1 ч. 2 абз. 1 — компенсация за нарушение права на судопроизводство
 // в разумный срок (задача РАЗУМНЫЙСРОК.1),
 // ст. 222.1 ч. 3 — компенсация за нарушение права на исполнение судебного акта
-// в разумный срок, узел-окно (задача РАЗУМНЫЙСРОК.2.1).
+// в разумный срок, узел-окно (задача РАЗУМНЫЙСРОК.2.1),
+// ст. 229 ч. 4 — апелляционная жалоба по делу упрощённого производства, первый
+// working_day-узел домена apk/ (задача УПРОЩЁННОЕ.1).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -67,6 +69,8 @@ import {
   REASONABLE_TERM_COMPENSATION_APK,
   computeReasonableTermExecutionCompensationApk,
   REASONABLE_TERM_EXECUTION_COMPENSATION_APK,
+  computeSimplifiedProceedingsAppealApk,
+  SIMPLIFIED_PROCEEDINGS_APPEAL_APK,
 } from '../apk/chain.js';
 // Нужен ровно для одной проверки: узел-окно не должен попасть в реестр .ics
 // (см. последний тест файла) — граница решения по экспорту.
@@ -1953,4 +1957,56 @@ test('окно 222.1 ч. 3: узел без top-level duration и вне рее�
   assert.equal(REASONABLE_TERM_EXECUTION_COMPENSATION_APK.window.earliest.weekend_shift, false);
   assert.equal(REASONABLE_TERM_EXECUTION_COMPENSATION_APK.window.latest.weekend_shift, true);
   assert.equal(TERM_REGISTRY_APK.reasonable_term_execution_compensation_apk, undefined);
+});
+
+// Задача УПРОЩЁННОЕ.1 — апелляция по делам упрощённого производства
+// (ч. 4 ст. 229 АПК РФ). Первый узел домена apk/ с duration.unit:
+// 'working_day' — перенос уже проверенной на ГПК-узлах механики (нерабочие
+// дни исключаются из счёта, а не только сдвигают итоговую дату).
+
+test('упрощённое производство: пятнадцать рабочих дней от даты решения, без праздничных кластеров рядом', () => {
+  // 12.03–01.04.2025: внутри периода только обычные выходные (15/16, 22/23,
+  // 29/30 марта), без многодневных праздников — «чистый» базовый случай.
+  const term = computeSimplifiedProceedingsAppealApk({
+    simplified_proceedings_decision_date: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-04-01');
+  assert.equal(term.deadline, '2025-04-01');
+  assert.equal(term.shifted, false); // weekend_shift к working_day не применяется
+  assert.deepEqual(term.duration, { value: 15, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 4 ст. 229 АПК РФ');
+});
+
+test('упрощённое производство: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  // Решение принято 26.12.2025 (пятница). Течение — с 29.12 (понедельник);
+  // 31.12.2025 и 01–09.01.2026 нерабочие, поэтому пятнадцатый рабочий день —
+  // 28.01.2026, а не 10.01.2026, как было бы при подсчёте 15 календарных дней
+  // (тот же тестовый паттерн, что у test/chain.test.js: «возражения должника:
+  // рабочие дни, а не календарные — перенос через каникулы»).
+  const term = computeSimplifiedProceedingsAppealApk({
+    simplified_proceedings_decision_date: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-28');
+  assert.notEqual(term.deadline, '2026-01-10'); // наивные "+15 календарных дней"
+});
+
+test('упрощённое производство: без simplified_proceedings_decision_date — понятная ошибка', () => {
+  assert.throws(
+    () => computeSimplifiedProceedingsAppealApk({}),
+    /simplified_proceedings_decision_date/,
+  );
+});
+
+test('упрощённое производство: объём задачи — без restoration-полей и без связанного restoration-узла', () => {
+  // Фиксирует границу: ч. 4 ст. 229 механизм восстановления не упоминает
+  // вовсе — тот же случай, что уже был со ст. 322, 112 и 222.1 ч. 2.
+  const term = computeSimplifiedProceedingsAppealApk({
+    simplified_proceedings_decision_date: '2025-03-11',
+  });
+  assert.equal(term.id, 'simplified_proceedings_appeal_apk');
+  assert.equal(SIMPLIFIED_PROCEEDINGS_APPEAL_APK.restoration_norm, undefined);
+  assert.equal(typeof computeSimplifiedProceedingsAppealApkRestoration, 'undefined');
 });

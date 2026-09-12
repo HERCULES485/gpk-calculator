@@ -140,6 +140,19 @@ export const SITUATIONS_APK = [
     ],
     nodes: ['reasonable_term_execution_compensation_apk'],
   },
+  {
+    id: 'simplified_proceedings',
+    label: 'Упрощённое производство: апелляция',
+    // Единственное поле ветви — дата принятия решения (либо изготовления
+    // мотивированного решения в полном объёме, если оно составлялось): норма
+    // даёт оба случая через дизъюнкцию, но это одно и то же входное поле —
+    // какая дата применима, решает пользователь при заполнении формы (см.
+    // apk/chain.js). Восстановления ч. 4 ст. 229 не предусматривает —
+    // отдельного узла и уточняющих полей для него нет.
+    primary_field: 'simplified_proceedings_decision_date',
+    fields: [],
+    nodes: ['simplified_proceedings_appeal_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';
