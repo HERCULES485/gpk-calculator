@@ -29,7 +29,10 @@
 // (бездействия) госоргана (задача НЕНОРМАТИВНЫЙАКТ.1),
 // ст. 208 ч. 2 — оспаривание решения о привлечении к административной
 // ответственности, третий working_day-узел домена apk/ (задача
-// АДМОТВЕТСТВЕННОСТЬ.1).
+// АДМОТВЕТСТВЕННОСТЬ.1),
+// ст. 206 ч. 4 и ст. 211 ч. 5 — сокращённый срок апелляции по делам об
+// административной ответственности, четвёртый и пятый working_day-узлы
+// домена apk/ (задача АДМОТВЕТСТВЕННОСТЬ.2).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -84,6 +87,10 @@ import {
   NONNORMATIVE_ACT_CHALLENGE_APK,
   computeAdministrativeLiabilityChallengeApk,
   ADMINISTRATIVE_LIABILITY_CHALLENGE_APK,
+  computeAdminLiabilityImpositionAppealApk,
+  ADMIN_LIABILITY_IMPOSITION_APPEAL_APK,
+  computeAdminLiabilityChallengeAppealApk,
+  ADMIN_LIABILITY_CHALLENGE_APPEAL_APK,
 } from '../apk/chain.js';
 // Нужен ровно для одной проверки: узел-окно не должен попасть в реестр .ics
 // (см. последний тест файла) — граница решения по экспорту.
@@ -2166,4 +2173,102 @@ test('оспаривание решения об административно�
   assert.equal(term.id, 'administrative_liability_challenge_apk');
   assert.equal(ADMINISTRATIVE_LIABILITY_CHALLENGE_APK.restoration_norm, undefined);
   assert.equal(typeof computeAdministrativeLiabilityChallengeApkRestoration, 'undefined');
+});
+
+// Задача АДМОТВЕТСТВЕННОСТЬ.2 — сокращённый срок апелляционного обжалования
+// по делам об административной ответственности (ч. 4 ст. 206, ч. 5 ст. 211
+// АПК РФ, толкование — п. 8 Постановления Пленума ВС РФ от 30.06.2020 № 12).
+// Четвёртый и пятый узлы домена apk/ с duration.unit: 'working_day'.
+
+test('апелляция на решение о привлечении к адм. ответственности (ч. 4 ст. 206): десять рабочих дней от даты принятия решения, без праздничных кластеров рядом', () => {
+  const term = computeAdminLiabilityImpositionAppealApk({
+    first_instance_decision_date_apk: '2025-03-02',
+  });
+  assert.equal(term.anchor, '2025-03-02');
+  assert.equal(term.first_working_day, '2025-03-03');
+  assert.equal(term.raw_deadline, '2025-03-14');
+  assert.equal(term.deadline, '2025-03-14');
+  assert.equal(term.shifted, false); // weekend_shift к working_day не применяется
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 4 ст. 206 АПК РФ');
+});
+
+test('апелляция на решение о привлечении к адм. ответственности (ч. 4 ст. 206): рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  // Решение принято 26.12.2025 (пятница). Течение — с 29.12 (понедельник);
+  // 31.12.2025 и 01–09.01.2026 нерабочие, поэтому десятый рабочий день —
+  // 21.01.2026, а не 05.01.2026, как было бы при подсчёте 10 календарных дней.
+  const term = computeAdminLiabilityImpositionAppealApk({
+    first_instance_decision_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-21');
+  assert.notEqual(term.deadline, '2026-01-05'); // наивные "+10 календарных дней"
+});
+
+test('апелляция на решение о привлечении к адм. ответственности (ч. 4 ст. 206): без first_instance_decision_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeAdminLiabilityImpositionAppealApk({}),
+    /first_instance_decision_date_apk/,
+  );
+});
+
+test('апелляция на решение о привлечении к адм. ответственности (ч. 4 ст. 206): объём задачи — без restoration-полей и без связанного restoration-узла', () => {
+  // Фиксирует границу: ч. 4 ст. 206 восстановление вообще не упоминает — не
+  // тот случай, что со ст. 322/112/222.1/229/198/208 (там оно предусмотрено
+  // без потолка), здесь самого института нет.
+  const term = computeAdminLiabilityImpositionAppealApk({
+    first_instance_decision_date_apk: '2025-03-02',
+  });
+  assert.equal(term.id, 'admin_liability_imposition_appeal_apk');
+  assert.equal(ADMIN_LIABILITY_IMPOSITION_APPEAL_APK.restoration_norm, undefined);
+  assert.equal(typeof computeAdminLiabilityImpositionAppealApkRestoration, 'undefined');
+});
+
+test('апелляция на решение об оспаривании адм. ответственности (ч. 5 ст. 211): десять рабочих дней от даты принятия решения, без праздничных кластеров рядом', () => {
+  const term = computeAdminLiabilityChallengeAppealApk({
+    first_instance_decision_date_apk: '2025-03-02',
+  });
+  assert.equal(term.anchor, '2025-03-02');
+  assert.equal(term.first_working_day, '2025-03-03');
+  assert.equal(term.raw_deadline, '2025-03-14');
+  assert.equal(term.deadline, '2025-03-14');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 5 ст. 211 АПК РФ');
+});
+
+test('апелляция на решение об оспаривании адм. ответственности (ч. 5 ст. 211): рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeAdminLiabilityChallengeAppealApk({
+    first_instance_decision_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-21');
+  assert.notEqual(term.deadline, '2026-01-05');
+});
+
+test('апелляция на решение об оспаривании адм. ответственности (ч. 5 ст. 211): без first_instance_decision_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeAdminLiabilityChallengeAppealApk({}),
+    /first_instance_decision_date_apk/,
+  );
+});
+
+test('апелляция на решение об оспаривании адм. ответственности (ч. 5 ст. 211): объём задачи — без restoration-полей и без связанного restoration-узла', () => {
+  const term = computeAdminLiabilityChallengeAppealApk({
+    first_instance_decision_date_apk: '2025-03-02',
+  });
+  assert.equal(term.id, 'admin_liability_challenge_appeal_apk');
+  assert.equal(ADMIN_LIABILITY_CHALLENGE_APPEAL_APK.restoration_norm, undefined);
+  assert.equal(typeof computeAdminLiabilityChallengeAppealApkRestoration, 'undefined');
+});
+
+test('ч. 4 ст. 206 и ч. 5 ст. 211: одна и та же дата даёт одинаковый дедлайн на обоих узлах, но разные normы — это два узла, не один под двумя именами', () => {
+  const inputs = { first_instance_decision_date_apk: '2025-03-02' };
+  const imposition = computeAdminLiabilityImpositionAppealApk(inputs);
+  const challenge = computeAdminLiabilityChallengeAppealApk(inputs);
+  assert.equal(imposition.deadline, challenge.deadline);
+  assert.notEqual(imposition.id, challenge.id);
+  assert.notEqual(imposition.norm.primary, challenge.norm.primary);
+  assert.equal(imposition.norm.primary, 'ч. 4 ст. 206 АПК РФ');
+  assert.equal(challenge.norm.primary, 'ч. 5 ст. 211 АПК РФ');
 });
