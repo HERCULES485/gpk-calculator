@@ -38,6 +38,7 @@ import {
   computeCourtCostsApplicationApk,
   computeReasonableTermCompensationApk,
   computeReasonableTermExecutionCompensationApk,
+  computeSimplifiedProceedingsAppealApk,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -59,6 +60,7 @@ import {
   COURT_COSTS_APPLICATION_APK,
   REASONABLE_TERM_COMPENSATION_APK,
   REASONABLE_TERM_EXECUTION_COMPENSATION_APK,
+  SIMPLIFIED_PROCEEDINGS_APPEAL_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -481,6 +483,13 @@ const NODE_REQUIREMENTS = {
     kind: 'window',
     deps: executionCompensationDeps,
     compute: (i) => computeReasonableTermExecutionCompensationApk(i),
+  },
+  // Без restoration-узла: ч. 4 ст. 229 механизм восстановления не упоминает —
+  // тот же случай, что уже был со ст. 322, 112 и 222.1 ч. 2.
+  simplified_proceedings_appeal_apk: {
+    node: SIMPLIFIED_PROCEEDINGS_APPEAL_APK,
+    deps: () => ['simplified_proceedings_decision_date'],
+    compute: (i) => computeSimplifiedProceedingsAppealApk(i),
   },
 };
 

@@ -83,8 +83,8 @@ check(
   'нет основного поля даты решения',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 8,
-  'переключатель ситуаций отрисован не на восемь ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 9,
+  'переключатель ситуаций отрисован не на девять ветвей',
 );
 
 // --- 1. Полный цикл: дата решения → карточка апелляционной жалобы --------------
@@ -300,6 +300,7 @@ const PRIMARY_FIELD_BRANCHES = [
   ['nadzor', 'last_contested_act_entry_into_force_date'],
   ['court_costs', 'last_judgment_on_merits_entry_into_force_date'],
   ['reasonable_term_compensation', 'last_judgment_entry_into_force_date'],
+  ['simplified_proceedings', 'simplified_proceedings_decision_date'],
 ];
 for (const [situationId, fieldId] of PRIMARY_FIELD_BRANCHES) {
   await chooseSituation(situationId);

@@ -64,7 +64,7 @@ test('АПК ситуации: каждый узел chain.js закреплён
   assert.deepEqual([...inSituations].sort(), [...CHAIN_NODE_IDS].sort());
 });
 
-test('АПК ситуации: восемь ветвей ожидаемого состава, ситуация по умолчанию существует', () => {
+test('АПК ситуации: девять ветвей ожидаемого состава, ситуация по умолчанию существует', () => {
   assert.deepEqual(
     SITUATIONS_APK.map((s) => s.id),
     [
@@ -76,23 +76,32 @@ test('АПК ситуации: восемь ветвей ожидаемого с
       'court_costs',
       'reasonable_term_compensation',
       'execution_compensation',
+      'simplified_proceedings',
     ],
   );
   assert.deepEqual(
     SITUATIONS_APK.map((s) => s.nodes.length),
-    [8, 4, 2, 2, 2, 1, 1, 1],
+    [8, 4, 2, 2, 2, 1, 1, 1, 1],
   );
   assert.equal(situationById(DEFAULT_SITUATION_APK, SITUATIONS_APK).id, 'decision_chain');
   // primary_field — у ветви цепочки обжалования (как у общей ветви ГПК), у
-  // надзора, у пересмотра по новым обстоятельствам, у судебных расходов и у
-  // компенсации за нарушение права на судопроизводство в разумный срок: там
-  // якорь тоже вводится напрямую, а не через уточняющие поля. У ветви
-  // execution_compensation primary_field НЕТ: её якорь равноправен с
-  // дискриминатором окончания производства и датой окончания, все три поля
-  // лежат в блоке исходных данных — как у ветвей rulings и enforcement.
+  // надзора, у пересмотра по новым обстоятельствам, у судебных расходов, у
+  // компенсации за нарушение права на судопроизводство в разумный срок и у
+  // упрощённого производства: там якорь тоже вводится напрямую, а не через
+  // уточняющие поля. У ветви execution_compensation primary_field НЕТ: её
+  // якорь равноправен с дискриминатором окончания производства и датой
+  // окончания, все три поля лежат в блоке исходных данных — как у ветвей
+  // rulings и enforcement.
   assert.deepEqual(
     SITUATIONS_APK.filter((s) => s.primary_field).map((s) => s.id),
-    ['decision_chain', 'nadzor', 'new_circumstances', 'court_costs', 'reasonable_term_compensation'],
+    [
+      'decision_chain',
+      'nadzor',
+      'new_circumstances',
+      'court_costs',
+      'reasonable_term_compensation',
+      'simplified_proceedings',
+    ],
   );
 });
 
@@ -148,11 +157,13 @@ test('АПК подписи: словарь покрывает все входы
   }
 });
 
-test('АПК реестр сроков: 18 узлов из 21 — без двух узлов-событий и узла-окна', () => {
-  assert.equal(CHAIN_NODE_IDS.length, 21);
+test('АПК реестр сроков: 19 узлов из 22 — без двух узлов-событий и узла-окна', () => {
+  assert.equal(CHAIN_NODE_IDS.length, 22);
   // Счётчики узлов и реестра растут НЕ синхронно: узел-окно ч. 3 ст. 222.1
   // добавился в chain.js, но в реестр сроков не попал — у него нет top-level
-  // duration, и это намеренно (экспорт окна в .ics вне объёма задачи).
+  // duration, и это намеренно (экспорт окна в .ics вне объёма задачи). Узел
+  // ст. 229 ч. 4 (working_day) top-level duration ИМЕЕТ и в реестр попадает —
+  // счётчики снова растут синхронно на этом узле.
   assert.deepEqual(
     [...NON_REGISTRY_NODE_IDS].sort(),
     [
@@ -161,7 +172,7 @@ test('АПК реестр сроков: 18 узлов из 21 — без дву�
       'reasonable_term_execution_compensation_apk',
     ],
   );
-  assert.equal(Object.keys(TERM_REGISTRY_APK).length, 18);
+  assert.equal(Object.keys(TERM_REGISTRY_APK).length, 19);
   for (const id of NON_REGISTRY_NODE_IDS) {
     assert.equal(TERM_REGISTRY_APK[id], undefined, `узел без duration "${id}" попал в реестр`);
   }
@@ -185,7 +196,7 @@ test('АПК реестр сроков: идентификаторы проду�
 
 // --- buildView (задача UI.3) --------------------------------------------------
 
-// Данные, поднимающие все 21 узел разом. Ветви дискриминаторов выбраны так,
+// Данные, поднимающие все 22 узла разом. Ветви дискриминаторов выбраны так,
 // чтобы цепочка считалась целиком: жалоба не подана → вступление в силу от
 // срока апелляции, окружная кассация не подавалась → якорь кассации в ВС РФ от
 // срока окружной кассации.
@@ -209,13 +220,14 @@ const ALL_NODES_INPUTS_APK = {
   execution_deadline_date: '2024-02-20',
   enforcement_proceeding_ended: true,
   enforcement_proceeding_ended_date: '2025-01-10',
+  simplified_proceedings_decision_date: '2025-03-11',
 };
 
 const TODAY_APK = '2025-01-01'; // раньше всех дедлайнов — ничего не истекло
 
-test('АПК buildView: на полном наборе данных считаются все 21 узел, incomplete пуст', () => {
+test('АПК buildView: на полном наборе данных считаются все 22 узла, incomplete пуст', () => {
   const view = buildView(ALL_NODES_INPUTS_APK, { today: TODAY_APK });
-  assert.equal(view.cards.length, 21);
+  assert.equal(view.cards.length, 22);
   assert.equal(view.incomplete.length, 0);
   assert.deepEqual(view.stubs, []);
   // Форма возврата совпадает с ГПК-шной: cards/incomplete/stubs.
@@ -251,7 +263,7 @@ test('АПК buildView: пересечение периодов даёт кар�
     { today: TODAY_APK },
   );
   // Расчёт не падает целиком: 16 карточек на месте, ошибочная — ровно одна.
-  assert.equal(view.cards.length, 21);
+  assert.equal(view.cards.length, 22);
   const errors = view.cards.filter((c) => c.kind === 'error');
   assert.equal(errors.length, 1);
   assert.equal(errors[0].id, 'enforcement_presentation_apk');
@@ -377,9 +389,9 @@ test('АПК buildView: узлы-события дают карточку kind="
   assert.equal(entry.based_on, 'appellate_ruling_date');
 });
 
-test('АПК buildView: без данных все 21 узел уходит в incomplete, расчёт не вызывается', () => {
+test('АПК buildView: без данных все 22 узла уходит в incomplete, расчёт не вызывается', () => {
   const view = buildView({}, { today: TODAY_APK });
-  assert.equal(view.incomplete.length, 21);
+  assert.equal(view.incomplete.length, 22);
   // Ни одной карточки вообще: если бы compute-функции вызывались на пустых
   // данных, они бросили бы, и мы увидели бы карточки kind="error".
   assert.equal(view.cards.length, 0);
