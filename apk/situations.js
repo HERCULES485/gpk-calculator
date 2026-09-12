@@ -178,6 +178,19 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['nonnormative_act_challenge_apk'],
   },
+  {
+    id: 'administrative_liability_challenge',
+    label: 'Оспаривание решения об административной ответственности',
+    // Соседняя, но отдельная категория дел от nonnormative_act_challenge
+    // (параграф 2 главы 25 АПК, не параграф 1) — свой узел, своя ветвь.
+    // Единственное поле — дата получения копии решения (не дата его принятия
+    // административным органом — см. apk/chain.js). Восстановление (ч. 2
+    // ст. 208) без числового потолка — отдельного узла и уточняющих полей
+    // для него нет.
+    primary_field: 'administrative_decision_copy_received_date_apk',
+    fields: [],
+    nodes: ['administrative_liability_challenge_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';
