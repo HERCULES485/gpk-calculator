@@ -174,7 +174,11 @@ export function monthTermCard(term) {
 export function markExpired(cards, inputs, today, config) {
   const { factInputMap, missedFromFilingIds } = config;
   for (const card of cards) {
-    if (card.kind !== 'term' || card.status !== 'computed' || !card.deadline) continue;
+    // 'capped_term' — срок, дедлайн которого получен как минимум из нескольких
+    // кумулятивных потолков (ст. 61.14 ФЗ № 127-ФЗ). Для пометки истёкшего он
+    // ничем не отличается от обычного term: у него есть один готовый deadline.
+    const markable = card.kind === 'term' || card.kind === 'capped_term';
+    if (!markable || card.status !== 'computed' || !card.deadline) continue;
     const factInput = factInputMap[card.id];
     const fact = factInput ? toISO(inputs?.[factInput]) : null;
 

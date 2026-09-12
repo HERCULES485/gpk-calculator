@@ -3,7 +3,10 @@
 // БАНКРОТСТВО.3 (ст. 71 п. 8, обычный месячный узел), БАНКРОТСТВО.4
 // (ст. 142 п. 1, обычный месячный узел), БАНКРОТСТВО.5 (ст. 213.8 п. 2,
 // обычный месячный узел, первый для процедуры банкротства гражданина) и
-// БАНКРОТСТВО.6 (ст. 213.29, обычный месячный узел, без restoration).
+// БАНКРОТСТВО.6 (ст. 213.29, обычный месячный узел, без restoration),
+// БАНКРОТСТВО.7.1 (ст. 61.14 п. 5 и п. 6 — первые узлы с kind:
+// 'capped_term', минимум из нескольких кумулятивных потолков, плюс два
+// restoration-узла, считающих два года от уже вычисленного дедлайна).
 //
 // Отдельный файл от test/apk-chain.test.js: домен банкротства — отдельный
 // правовой институт (ФЗ № 127-ФЗ), не часть процессуальной цепочки АПК, см.
@@ -25,8 +28,15 @@ import {
   CITIZEN_BANKRUPTCY_CREDITOR_CLAIMS_APK,
   computeBankruptcyCompletionReviewApk,
   BANKRUPTCY_COMPLETION_REVIEW_APK,
+  computeSubsidiaryLiabilityInCaseApk,
+  computeSubsidiaryLiabilityInCaseApkRestoration,
+  computeSubsidiaryLiabilityPostConclusionApk,
+  computeSubsidiaryLiabilityPostConclusionApkRestoration,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
+// Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
+// помечаться истёкшей наравне с обычным term (см. последний тест файла).
+import { markExpired } from '../core/view/cards.js';
 
 // Задача БАНКРОТСТВО.1 — отзыв должника на заявление о банкротстве
 // (ст. 47 п. 1 ФЗ № 127-ФЗ). Первый узел домена банкротства.
@@ -341,4 +351,327 @@ test('пересмотр определения о завершении проц
   assert.equal(term.id, 'bankruptcy_completion_review_apk');
   assert.equal(BANKRUPTCY_COMPLETION_REVIEW_APK.restoration_norm, undefined);
   assert.equal(typeof computeBankruptcyCompletionReviewApkRestoration, 'undefined');
+});
+
+// Задача БАНКРОТСТВО.7.1 — субсидиарная ответственность (ст. 61.14 ФЗ
+// № 127-ФЗ). Первые узлы с kind: 'capped_term' — дедлайн есть минимум из
+// нескольких кумулятивных потолков, и результат показывает все потолки плюс
+// те из них, что реально ограничили срок (binding).
+
+// --- П. 5: заявление в рамках дела о банкротстве ------------------------------
+
+test('субсидиарная ответственность (п. 5): ограничивает субъективный трёхлетний потолок', () => {
+  const term = computeSubsidiaryLiabilityInCaseApk({
+    subsidiary_liability_grounds_known_date_apk: '2022-03-10',
+    objective_cap_event: 'bankruptcy_declared',
+    bankruptcy_declared_date_apk: '2023-06-01',
+    subsidiary_liability_conduct_date_apk: '2020-01-01',
+  });
+  assert.equal(term.id, 'subsidiary_liability_in_case_apk');
+  assert.equal(term.kind, 'capped_term');
+  assert.equal(term.norm.primary, 'п. 5 ст. 61.14 ФЗ № 127-ФЗ');
+  // Считаются все три потолка, а не только связавший.
+  assert.deepEqual(term.caps, {
+    subjective: '2025-03-10', // 10.03.2022 + 3 года — ближайший
+    objective: '2026-06-01', // 01.06.2023 + 3 года
+    absolute: '2030-01-01', // 01.01.2020 + 10 лет
+  });
+  assert.deepEqual(term.binding, ['subjective']);
+  assert.equal(term.deadline, '2025-03-10'); // понедельник, переноса нет
+});
+
+test('субсидиарная ответственность (п. 5): ограничивает десятилетний предел — binding это показывает', () => {
+  // Давние действия: десятилетний предел истекает раньше обоих трёхлетних.
+  const term = computeSubsidiaryLiabilityInCaseApk({
+    subsidiary_liability_grounds_known_date_apk: '2024-01-10',
+    objective_cap_event: 'case_terminated',
+    bankruptcy_case_terminated_date_apk: '2024-06-01',
+    subsidiary_liability_conduct_date_apk: '2016-05-20',
+  });
+  assert.deepEqual(term.caps, {
+    subjective: '2027-01-10',
+    objective: '2027-06-01',
+    absolute: '2026-05-20', // 20.05.2016 + 10 лет — ближайший
+  });
+  assert.deepEqual(term.binding, ['absolute']);
+  assert.equal(term.deadline, '2026-05-20');
+});
+
+test('субсидиарная ответственность (п. 5): ограничивает объективный потолок от возврата заявления', () => {
+  const term = computeSubsidiaryLiabilityInCaseApk({
+    subsidiary_liability_grounds_known_date_apk: '2023-11-01',
+    objective_cap_event: 'petition_returned',
+    bankruptcy_petition_returned_date_apk: '2022-09-15',
+    subsidiary_liability_conduct_date_apk: '2018-01-01',
+  });
+  assert.deepEqual(term.binding, ['objective']);
+  assert.equal(term.deadline, '2025-09-15');
+  assert.equal(term.anchors.objective_cap_event, 'petition_returned');
+  assert.equal(term.anchors.objective_cap_date, '2022-09-15');
+});
+
+test('субсидиарная ответственность (п. 5): ничья — два потолка дают одну дату, binding содержит оба', () => {
+  const term = computeSubsidiaryLiabilityInCaseApk({
+    subsidiary_liability_grounds_known_date_apk: '2022-09-15',
+    objective_cap_event: 'bankruptcy_declared',
+    bankruptcy_declared_date_apk: '2022-09-15',
+    subsidiary_liability_conduct_date_apk: '2018-01-01',
+  });
+  assert.equal(term.caps.subjective, term.caps.objective);
+  assert.deepEqual(term.binding, ['subjective', 'objective']);
+  assert.equal(term.deadline, '2025-09-15');
+});
+
+test('субсидиарная ответственность (п. 5): перенос применяется к итоговому дедлайну (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeSubsidiaryLiabilityInCaseApk({
+    subsidiary_liability_grounds_known_date_apk: '2022-04-05',
+    objective_cap_event: 'bankruptcy_declared',
+    bankruptcy_declared_date_apk: '2023-01-01',
+    subsidiary_liability_conduct_date_apk: '2018-01-01',
+  });
+  // В caps — СЫРАЯ дата потолка: отдельный потолок сам по себе не является
+  // последним днём срока, им становится только минимум.
+  assert.equal(term.caps.subjective, '2025-04-05'); // суббота
+  assert.ok(!isWorkingDay('2025-04-05'));
+  assert.equal(term.deadline, '2025-04-07'); // перенос на понедельник
+});
+
+test('субсидиарная ответственность (п. 5): сравнение идёт по СЫРЫМ датам — ложной ничьи при переносе не возникает', () => {
+  // Краевой случай, ради которого потолки сравниваются до переноса: субъективный
+  // потолок даёт 05.04.2025 (суббота), объективный — 06.04.2025 (воскресенье),
+  // и оба переносятся на 07.04.2025. Сравнение по перенесённым датам объявило
+  // бы ничью, хотя юридически срок ограничил именно субъективный потолок — он
+  // истекает раньше. Итоговый дедлайн при этом одинаков в обоих порядках
+  // (перенос монотонен), расходится только binding.
+  const term = computeSubsidiaryLiabilityInCaseApk({
+    subsidiary_liability_grounds_known_date_apk: '2022-04-05',
+    objective_cap_event: 'bankruptcy_declared',
+    bankruptcy_declared_date_apk: '2022-04-06',
+    subsidiary_liability_conduct_date_apk: '2018-01-01',
+  });
+  assert.equal(term.caps.subjective, '2025-04-05');
+  assert.equal(term.caps.objective, '2025-04-06');
+  assert.notEqual(term.caps.subjective, term.caps.objective); // сырые даты различаются
+  assert.deepEqual(term.binding, ['subjective']); // ничьи нет
+  assert.equal(term.deadline, '2025-04-07'); // но переносятся оба в один день
+});
+
+test('субсидиарная ответственность (п. 5): отсутствующий или неизвестный objective_cap_event — понятная ошибка', () => {
+  const base = {
+    subsidiary_liability_grounds_known_date_apk: '2022-03-10',
+    subsidiary_liability_conduct_date_apk: '2020-01-01',
+  };
+  assert.throws(() => computeSubsidiaryLiabilityInCaseApk(base), /objective_cap_event/);
+  assert.throws(
+    () => computeSubsidiaryLiabilityInCaseApk({ ...base, objective_cap_event: 'something_else' }),
+    /objective_cap_event/,
+  );
+  // Дискриминатор выбран, но соответствующей ему даты нет.
+  assert.throws(
+    () =>
+      computeSubsidiaryLiabilityInCaseApk({ ...base, objective_cap_event: 'bankruptcy_declared' }),
+    /bankruptcy_declared_date_apk/,
+  );
+});
+
+test('субсидиарная ответственность (п. 5): отсутствие любого обязательного поля — понятная ошибка', () => {
+  const full = {
+    subsidiary_liability_grounds_known_date_apk: '2022-03-10',
+    objective_cap_event: 'bankruptcy_declared',
+    bankruptcy_declared_date_apk: '2023-06-01',
+    subsidiary_liability_conduct_date_apk: '2020-01-01',
+  };
+  const without = (field) => {
+    const copy = { ...full };
+    delete copy[field];
+    return copy;
+  };
+  assert.throws(
+    () => computeSubsidiaryLiabilityInCaseApk(without('subsidiary_liability_grounds_known_date_apk')),
+    /subsidiary_liability_grounds_known_date_apk/,
+  );
+  assert.throws(
+    () => computeSubsidiaryLiabilityInCaseApk(without('subsidiary_liability_conduct_date_apk')),
+    /subsidiary_liability_conduct_date_apk/,
+  );
+});
+
+// --- П. 6: заявление после завершения конкурсного производства ----------------
+
+test('субсидиарная ответственность (п. 6): ограничивает трёхлетний потолок от завершения конкурсного производства', () => {
+  const term = computeSubsidiaryLiabilityPostConclusionApk({
+    bankruptcy_proceeding_conclusion_date_apk: '2022-03-10',
+    subsidiary_liability_conduct_date_apk: '2018-01-01',
+  });
+  assert.equal(term.id, 'subsidiary_liability_post_conclusion_apk');
+  assert.equal(term.kind, 'capped_term');
+  assert.equal(term.norm.primary, 'п. 6 ст. 61.14 ФЗ № 127-ФЗ');
+  assert.deepEqual(term.caps, {
+    post_conclusion: '2025-03-10',
+    absolute: '2028-01-01',
+  });
+  assert.deepEqual(term.binding, ['post_conclusion']);
+  assert.equal(term.deadline, '2025-03-10');
+});
+
+test('субсидиарная ответственность (п. 6): ограничивает десятилетний предел — binding это показывает', () => {
+  const term = computeSubsidiaryLiabilityPostConclusionApk({
+    bankruptcy_proceeding_conclusion_date_apk: '2024-01-10',
+    subsidiary_liability_conduct_date_apk: '2016-05-20',
+  });
+  assert.deepEqual(term.binding, ['absolute']);
+  assert.equal(term.deadline, '2026-05-20');
+});
+
+test('субсидиарная ответственность (п. 6): ничья — оба потолка дают одну дату', () => {
+  const term = computeSubsidiaryLiabilityPostConclusionApk({
+    bankruptcy_proceeding_conclusion_date_apk: '2022-09-15', // + 3 года
+    subsidiary_liability_conduct_date_apk: '2015-09-15', // + 10 лет — та же дата
+  });
+  assert.equal(term.caps.post_conclusion, term.caps.absolute);
+  assert.deepEqual(term.binding, ['post_conclusion', 'absolute']);
+  assert.equal(term.deadline, '2025-09-15');
+});
+
+test('субсидиарная ответственность (п. 6): перенос применяется к итоговому дедлайну', () => {
+  const term = computeSubsidiaryLiabilityPostConclusionApk({
+    bankruptcy_proceeding_conclusion_date_apk: '2022-04-05',
+    subsidiary_liability_conduct_date_apk: '2018-01-01',
+  });
+  assert.equal(term.caps.post_conclusion, '2025-04-05'); // суббота, сырая
+  assert.equal(term.deadline, '2025-04-07');
+});
+
+test('субсидиарная ответственность (п. 6): отсутствие любого обязательного поля — понятная ошибка', () => {
+  assert.throws(
+    () =>
+      computeSubsidiaryLiabilityPostConclusionApk({
+        subsidiary_liability_conduct_date_apk: '2018-01-01',
+      }),
+    /bankruptcy_proceeding_conclusion_date_apk/,
+  );
+  assert.throws(
+    () =>
+      computeSubsidiaryLiabilityPostConclusionApk({
+        bankruptcy_proceeding_conclusion_date_apk: '2022-03-10',
+      }),
+    /subsidiary_liability_conduct_date_apk/,
+  );
+});
+
+// --- Restoration: два года от УЖЕ ВЫЧИСЛЕННОГО дедлайна базового узла ---------
+
+test('восстановление срока (п. 5): два года от итогового дедлайна основного срока', () => {
+  const inputs = {
+    subsidiary_liability_grounds_known_date_apk: '2022-03-10',
+    objective_cap_event: 'bankruptcy_declared',
+    bankruptcy_declared_date_apk: '2023-06-01',
+    subsidiary_liability_conduct_date_apk: '2020-01-01',
+  };
+  const base = computeSubsidiaryLiabilityInCaseApk(inputs);
+  const term = computeSubsidiaryLiabilityInCaseApkRestoration(inputs);
+  assert.equal(term.id, 'subsidiary_liability_in_case_apk_restoration');
+  // Якорь — именно дедлайн базового узла, а не какая-либо из исходных дат.
+  assert.equal(term.anchor, base.deadline);
+  assert.equal(term.anchor, '2025-03-10');
+  assert.equal(term.deadline, '2027-03-10');
+  assert.deepEqual(term.duration, { value: 2, unit: 'year' });
+});
+
+test('восстановление срока (п. 5): якорь — ПЕРЕНЕСЁННЫЙ дедлайн базового узла, без повторного переноса', () => {
+  // База: сырой минимум 05.04.2025 (суббота) → перенесённый дедлайн 07.04.2025.
+  // Восстановление отсчитывается от 07.04.2025, а не от 05.04.2025.
+  const inputs = {
+    subsidiary_liability_grounds_known_date_apk: '2022-04-05',
+    objective_cap_event: 'bankruptcy_declared',
+    bankruptcy_declared_date_apk: '2023-01-01',
+    subsidiary_liability_conduct_date_apk: '2018-01-01',
+  };
+  const base = computeSubsidiaryLiabilityInCaseApk(inputs);
+  assert.equal(base.caps.subjective, '2025-04-05');
+  assert.equal(base.deadline, '2025-04-07');
+
+  const term = computeSubsidiaryLiabilityInCaseApkRestoration(inputs);
+  assert.equal(term.anchor, '2025-04-07'); // перенесённый, не сырой
+  assert.equal(term.deadline, '2027-04-07');
+});
+
+test('восстановление срока (п. 5): без полей базового узла — та же ошибка, что у базового расчёта', () => {
+  // Подтверждает, что restoration считает базовый срок, а не работает от
+  // независимого поля: валидация приходит из базовой compute-функции.
+  assert.throws(
+    () => computeSubsidiaryLiabilityInCaseApkRestoration({}),
+    /subsidiary_liability_grounds_known_date_apk/,
+  );
+  assert.throws(
+    () =>
+      computeSubsidiaryLiabilityInCaseApkRestoration({
+        subsidiary_liability_grounds_known_date_apk: '2022-03-10',
+        subsidiary_liability_conduct_date_apk: '2020-01-01',
+      }),
+    /objective_cap_event/,
+  );
+});
+
+test('восстановление срока (п. 6): два года от итогового дедлайна, с переносом', () => {
+  const inputs = {
+    bankruptcy_proceeding_conclusion_date_apk: '2023-03-04',
+    subsidiary_liability_conduct_date_apk: '2018-01-01',
+  };
+  const base = computeSubsidiaryLiabilityPostConclusionApk(inputs);
+  const term = computeSubsidiaryLiabilityPostConclusionApkRestoration(inputs);
+  assert.equal(term.id, 'subsidiary_liability_post_conclusion_apk_restoration');
+  assert.equal(term.anchor, base.deadline);
+  assert.equal(term.anchor, '2026-03-04');
+  // 04.03.2026 + 2 года = 04.03.2028 — суббота, перенос на понедельник.
+  assert.equal(term.raw_deadline, '2028-03-04');
+  assert.ok(!isWorkingDay('2028-03-04'));
+  assert.equal(term.deadline, '2028-03-06');
+  assert.equal(term.shifted, true);
+});
+
+test('восстановление срока (п. 6): без полей базового узла — та же ошибка, что у базового расчёта', () => {
+  assert.throws(
+    () => computeSubsidiaryLiabilityPostConclusionApkRestoration({}),
+    /bankruptcy_proceeding_conclusion_date_apk/,
+  );
+  assert.throws(
+    () =>
+      computeSubsidiaryLiabilityPostConclusionApkRestoration({
+        bankruptcy_proceeding_conclusion_date_apk: '2022-03-10',
+      }),
+    /subsidiary_liability_conduct_date_apk/,
+  );
+});
+
+// --- markExpired: расширение на kind: 'capped_term' (core/view/cards.js) ------
+
+test("markExpired: карточка kind 'capped_term' помечается истёкшей наравне с обычным term", () => {
+  // До этой задачи markExpired фильтровала буквально по kind === 'term', и
+  // карточка узла-потолка молча проходила бы мимо пометки. Расширение —
+  // единственная правка core/view/cards.js в этой задаче.
+  const config = { factInputMap: {}, missedFromFilingIds: new Set() };
+  const cards = [
+    { id: 'capped', kind: 'capped_term', status: 'computed', deadline: '2025-03-10' },
+    { id: 'plain', kind: 'term', status: 'computed', deadline: '2025-03-10' },
+    { id: 'window', kind: 'window', status: 'computed', deadline: '2025-03-10' },
+  ];
+  markExpired(cards, {}, '2025-06-01', config);
+
+  const byId = Object.fromEntries(cards.map((c) => [c.id, c]));
+  assert.equal(byId.capped.status, 'expired');
+  assert.equal(byId.capped.expired.days, 83);
+  // Обычный term ведёт себя как прежде — расширение его не изменило.
+  assert.equal(byId.plain.status, 'expired');
+  assert.equal(byId.plain.expired.days, 83);
+  // Прочие kind по-прежнему не помечаются: расширение точечное, не общее.
+  assert.equal(byId.window.status, 'computed');
+  assert.equal(byId.window.expired, undefined);
+});
+
+test("markExpired: 'capped_term' с дедлайном в будущем не помечается", () => {
+  const config = { factInputMap: {}, missedFromFilingIds: new Set() };
+  const cards = [{ id: 'capped', kind: 'capped_term', status: 'computed', deadline: '2030-01-15' }];
+  markExpired(cards, {}, '2025-06-01', config);
+  assert.equal(cards[0].status, 'computed');
 });
