@@ -1,5 +1,6 @@
 // Тесты домена банкротства (apk/bankruptcy.js) — задачи БАНКРОТСТВО.1
-// (ст. 47 п. 1, working_day) и БАНКРОТСТВО.2.1 (ст. 71 п. 1, calendar_day).
+// (ст. 47 п. 1, working_day), БАНКРОТСТВО.2.1 (ст. 71 п. 1, calendar_day) и
+// БАНКРОТСТВО.3 (ст. 71 п. 8, обычный месячный узел).
 //
 // Отдельный файл от test/apk-chain.test.js: домен банкротства — отдельный
 // правовой институт (ФЗ № 127-ФЗ), не часть процессуальной цепочки АПК, см.
@@ -13,6 +14,8 @@ import {
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   computeCreditorClaimsSubmissionApk,
   CREDITOR_CLAIMS_SUBMISSION_APK,
+  computeCreditorClaimExclusionApk,
+  CREDITOR_CLAIM_EXCLUSION_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 
@@ -144,4 +147,49 @@ test('требования кредиторов: объём задачи — б�
   assert.equal(term.id, 'creditor_claims_submission_apk');
   assert.equal(CREDITOR_CLAIMS_SUBMISSION_APK.restoration_norm, undefined);
   assert.equal(typeof computeCreditorClaimsSubmissionApkRestoration, 'undefined');
+});
+
+// Задача БАНКРОТСТВО.3 — исключение требования кредитора из реестра при новых
+// обстоятельствах (ст. 71 п. 8 ФЗ № 127-ФЗ). Обычный месячный узел, без
+// restoration и без новой единицы измерения.
+
+test('исключение требования из реестра: три месяца с момента, когда стало известно об обстоятельствах, будний день без переноса', () => {
+  const term = computeCreditorClaimExclusionApk({
+    creditor_claim_unjustified_circumstances_known_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-06-11');
+  assert.equal(term.deadline, '2025-06-11'); // среда, рабочий день
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 3, unit: 'month' });
+  assert.equal(term.norm.primary, 'ст. 71 п. 8 ФЗ № 127-ФЗ');
+});
+
+test('исключение требования из реестра: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeCreditorClaimExclusionApk({
+    creditor_claim_unjustified_circumstances_known_date_apk: '2025-01-05',
+  });
+  // 05.01.2025 + 3 месяца = 05.04.2025 — суббота, перенос на 07.04.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-04-05');
+  assert.equal(term.deadline, '2025-04-07');
+  assert.equal(term.shifted, true);
+});
+
+test('исключение требования из реестра: без creditor_claim_unjustified_circumstances_known_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeCreditorClaimExclusionApk({}),
+    /creditor_claim_unjustified_circumstances_known_date_apk/,
+  );
+});
+
+test('исключение требования из реестра: объём задачи — без restoration-полей', () => {
+  // Фиксирует границу: ст. 71 п. 8 предусматривает восстановление без
+  // числового потолка — тот же случай, что уже был со ст. 322, 112,
+  // 222.1 ч. 2, 229 ч. 4, 198 ч. 4 и 208 ч. 2 АПК.
+  const term = computeCreditorClaimExclusionApk({
+    creditor_claim_unjustified_circumstances_known_date_apk: '2025-03-11',
+  });
+  assert.equal(term.id, 'creditor_claim_exclusion_apk');
+  assert.equal(CREDITOR_CLAIM_EXCLUSION_APK.restoration_norm, undefined);
+  assert.equal(typeof computeCreditorClaimExclusionApkRestoration, 'undefined');
 });
