@@ -191,6 +191,21 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['administrative_liability_challenge_apk'],
   },
+  {
+    id: 'admin_liability_appeal',
+    label: 'Административная ответственность: сокращённый срок апелляции',
+    // Оба узла делят один и тот же якорь — дату принятия решения судом первой
+    // инстанции — и больше ни с чем не пересекаются, поэтому показаны в одной
+    // ветви (тот же паттерн, что у nadzor: общее primary_field, несколько
+    // узлов). Не сливается с administrative_liability_challenge выше: там
+    // другой якорь (дата получения копии решения, не дата его принятия) и
+    // другая норма (срок на само заявление, а не на апелляцию). Восстановление
+    // ни ч. 4 ст. 206, ни ч. 5 ст. 211 не упоминают — отдельного узла и
+    // уточняющих полей для него нет.
+    primary_field: 'first_instance_decision_date_apk',
+    fields: [],
+    nodes: ['admin_liability_imposition_appeal_apk', 'admin_liability_challenge_appeal_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';

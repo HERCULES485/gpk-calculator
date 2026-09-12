@@ -42,6 +42,8 @@ import {
   computeCourtOrderObjectionApk,
   computeNonnormativeActChallengeApk,
   computeAdministrativeLiabilityChallengeApk,
+  computeAdminLiabilityImpositionAppealApk,
+  computeAdminLiabilityChallengeAppealApk,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -67,6 +69,8 @@ import {
   COURT_ORDER_OBJECTION_APK,
   NONNORMATIVE_ACT_CHALLENGE_APK,
   ADMINISTRATIVE_LIABILITY_CHALLENGE_APK,
+  ADMIN_LIABILITY_IMPOSITION_APPEAL_APK,
+  ADMIN_LIABILITY_CHALLENGE_APPEAL_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -520,6 +524,19 @@ const NODE_REQUIREMENTS = {
     node: ADMINISTRATIVE_LIABILITY_CHALLENGE_APK,
     deps: () => ['administrative_decision_copy_received_date_apk'],
     compute: (i) => computeAdministrativeLiabilityChallengeApk(i),
+  },
+  // Без restoration-узла: ни ч. 4 ст. 206, ни ч. 5 ст. 211 восстановление не
+  // упоминают вообще (не тот случай, что выше — там оно предусмотрено, но без
+  // потолка; здесь самого института нет).
+  admin_liability_imposition_appeal_apk: {
+    node: ADMIN_LIABILITY_IMPOSITION_APPEAL_APK,
+    deps: () => ['first_instance_decision_date_apk'],
+    compute: (i) => computeAdminLiabilityImpositionAppealApk(i),
+  },
+  admin_liability_challenge_appeal_apk: {
+    node: ADMIN_LIABILITY_CHALLENGE_APPEAL_APK,
+    deps: () => ['first_instance_decision_date_apk'],
+    compute: (i) => computeAdminLiabilityChallengeAppealApk(i),
   },
 };
 
