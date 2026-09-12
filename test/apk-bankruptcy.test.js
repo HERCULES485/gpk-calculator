@@ -1,7 +1,8 @@
 // Тесты домена банкротства (apk/bankruptcy.js) — задачи БАНКРОТСТВО.1
 // (ст. 47 п. 1, working_day), БАНКРОТСТВО.2.1 (ст. 71 п. 1, calendar_day),
-// БАНКРОТСТВО.3 (ст. 71 п. 8, обычный месячный узел) и БАНКРОТСТВО.4
-// (ст. 142 п. 1, обычный месячный узел).
+// БАНКРОТСТВО.3 (ст. 71 п. 8, обычный месячный узел), БАНКРОТСТВО.4
+// (ст. 142 п. 1, обычный месячный узел) и БАНКРОТСТВО.5 (ст. 213.8 п. 2,
+// обычный месячный узел, первый для процедуры банкротства гражданина).
 //
 // Отдельный файл от test/apk-chain.test.js: домен банкротства — отдельный
 // правовой институт (ФЗ № 127-ФЗ), не часть процессуальной цепочки АПК, см.
@@ -19,6 +20,8 @@ import {
   CREDITOR_CLAIM_EXCLUSION_APK,
   computeCreditorsRegisterClosureApk,
   CREDITORS_REGISTER_CLOSURE_APK,
+  computeCitizenBankruptcyCreditorClaimsApk,
+  CITIZEN_BANKRUPTCY_CREDITOR_CLAIMS_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 
@@ -240,4 +243,51 @@ test('закрытие реестра требований кредиторов:
   assert.equal(term.id, 'creditors_register_closure_apk');
   assert.equal(CREDITORS_REGISTER_CLOSURE_APK.restoration_norm, undefined);
   assert.equal(typeof computeCreditorsRegisterClosureApkRestoration, 'undefined');
+});
+
+// Задача БАНКРОТСТВО.5 — предъявление требований кредиторов при банкротстве
+// гражданина (ст. 213.8 п. 2 ФЗ № 127-ФЗ). Первый узел для процедуры
+// банкротства гражданина, структурно — обычный месячный узел без
+// restoration, аналог CREDITOR_CLAIMS_SUBMISSION_APK (ст. 71 п. 1).
+
+test('требования кредиторов при банкротстве гражданина: два месяца с даты опубликования сообщения, будний день без переноса', () => {
+  const term = computeCitizenBankruptcyCreditorClaimsApk({
+    citizen_bankruptcy_petition_justified_notice_published_date_apk: '2025-04-02',
+  });
+  assert.equal(term.anchor, '2025-04-02');
+  assert.equal(term.raw_deadline, '2025-06-02');
+  assert.equal(term.deadline, '2025-06-02'); // понедельник, рабочий день
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 2, unit: 'month' });
+  assert.equal(term.norm.primary, 'ст. 213.8 п. 2 ФЗ № 127-ФЗ');
+});
+
+test('требования кредиторов при банкротстве гражданина: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeCitizenBankruptcyCreditorClaimsApk({
+    citizen_bankruptcy_petition_justified_notice_published_date_apk: '2025-02-05',
+  });
+  // 05.02.2025 + 2 месяца = 05.04.2025 — суббота, перенос на 07.04.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-04-05');
+  assert.equal(term.deadline, '2025-04-07');
+  assert.equal(term.shifted, true);
+});
+
+test('требования кредиторов при банкротстве гражданина: без citizen_bankruptcy_petition_justified_notice_published_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeCitizenBankruptcyCreditorClaimsApk({}),
+    /citizen_bankruptcy_petition_justified_notice_published_date_apk/,
+  );
+});
+
+test('требования кредиторов при банкротстве гражданина: объём задачи — без restoration-полей', () => {
+  // Фиксирует границу: ст. 213.8 п. 2 предусматривает восстановление без
+  // числового потолка — тот же случай, что уже был со ст. 322, 112,
+  // 222.1 ч. 2, 229 ч. 4, 198 ч. 4, 208 ч. 2 АПК, 71 п. 8 и 142 п. 1
+  // ФЗ № 127-ФЗ.
+  const term = computeCitizenBankruptcyCreditorClaimsApk({
+    citizen_bankruptcy_petition_justified_notice_published_date_apk: '2025-04-02',
+  });
+  assert.equal(term.id, 'citizen_bankruptcy_creditor_claims_apk');
+  assert.equal(CITIZEN_BANKRUPTCY_CREDITOR_CLAIMS_APK.restoration_norm, undefined);
+  assert.equal(typeof computeCitizenBankruptcyCreditorClaimsApkRestoration, 'undefined');
 });
