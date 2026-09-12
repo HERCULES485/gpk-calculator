@@ -1,6 +1,7 @@
 // Тесты домена банкротства (apk/bankruptcy.js) — задачи БАНКРОТСТВО.1
-// (ст. 47 п. 1, working_day), БАНКРОТСТВО.2.1 (ст. 71 п. 1, calendar_day) и
-// БАНКРОТСТВО.3 (ст. 71 п. 8, обычный месячный узел).
+// (ст. 47 п. 1, working_day), БАНКРОТСТВО.2.1 (ст. 71 п. 1, calendar_day),
+// БАНКРОТСТВО.3 (ст. 71 п. 8, обычный месячный узел) и БАНКРОТСТВО.4
+// (ст. 142 п. 1, обычный месячный узел).
 //
 // Отдельный файл от test/apk-chain.test.js: домен банкротства — отдельный
 // правовой институт (ФЗ № 127-ФЗ), не часть процессуальной цепочки АПК, см.
@@ -16,6 +17,8 @@ import {
   CREDITOR_CLAIMS_SUBMISSION_APK,
   computeCreditorClaimExclusionApk,
   CREDITOR_CLAIM_EXCLUSION_APK,
+  computeCreditorsRegisterClosureApk,
+  CREDITORS_REGISTER_CLOSURE_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 
@@ -192,4 +195,49 @@ test('исключение требования из реестра: объём 
   assert.equal(term.id, 'creditor_claim_exclusion_apk');
   assert.equal(CREDITOR_CLAIM_EXCLUSION_APK.restoration_norm, undefined);
   assert.equal(typeof computeCreditorClaimExclusionApkRestoration, 'undefined');
+});
+
+// Задача БАНКРОТСТВО.4 — закрытие реестра требований кредиторов в
+// конкурсном производстве (ст. 142 п. 1 ФЗ № 127-ФЗ). Обычный месячный узел,
+// без restoration.
+
+test('закрытие реестра требований кредиторов: два месяца с даты опубликования сведений, будний день без переноса', () => {
+  const term = computeCreditorsRegisterClosureApk({
+    bankruptcy_declaration_notice_published_date_apk: '2025-04-02',
+  });
+  assert.equal(term.anchor, '2025-04-02');
+  assert.equal(term.raw_deadline, '2025-06-02');
+  assert.equal(term.deadline, '2025-06-02'); // понедельник, рабочий день
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 2, unit: 'month' });
+  assert.equal(term.norm.primary, 'ст. 142 п. 1 ФЗ № 127-ФЗ');
+});
+
+test('закрытие реестра требований кредиторов: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeCreditorsRegisterClosureApk({
+    bankruptcy_declaration_notice_published_date_apk: '2025-02-05',
+  });
+  // 05.02.2025 + 2 месяца = 05.04.2025 — суббота, перенос на 07.04.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-04-05');
+  assert.equal(term.deadline, '2025-04-07');
+  assert.equal(term.shifted, true);
+});
+
+test('закрытие реестра требований кредиторов: без bankruptcy_declaration_notice_published_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeCreditorsRegisterClosureApk({}),
+    /bankruptcy_declaration_notice_published_date_apk/,
+  );
+});
+
+test('закрытие реестра требований кредиторов: объём задачи — без restoration-полей', () => {
+  // Фиксирует границу: ст. 142 п. 1 предусматривает восстановление без
+  // числового потолка — тот же случай, что уже был со ст. 322, 112,
+  // 222.1 ч. 2, 229 ч. 4, 198 ч. 4, 208 ч. 2 АПК и 71 п. 8 ФЗ № 127-ФЗ.
+  const term = computeCreditorsRegisterClosureApk({
+    bankruptcy_declaration_notice_published_date_apk: '2025-04-02',
+  });
+  assert.equal(term.id, 'creditors_register_closure_apk');
+  assert.equal(CREDITORS_REGISTER_CLOSURE_APK.restoration_norm, undefined);
+  assert.equal(typeof computeCreditorsRegisterClosureApkRestoration, 'undefined');
 });
