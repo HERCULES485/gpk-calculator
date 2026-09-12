@@ -9,6 +9,8 @@
 //     (weekend_shift → shiftIfNonWorking);
 //   working_day — нерабочие дни не включаются; weekend_shift к таким срокам
 //     НЕ применяется — последний день рабочий по построению.
+//   calendar_day — нерабочие дни ВХОДЯТ в счёт (норма прямо называет дни
+//     календарными); переносится только итоговая дата, как у month/year.
 // Начало течения во всех случаях — со дня, следующего за днём события,
 // через offset_start.
 
@@ -125,6 +127,34 @@ export function computeDeadline(term, anchorDate) {
       raw_deadline: deadlineISO, // переноса нет — сырая и итоговая дата совпадают
       deadline: deadlineISO,
       shifted: false, // weekend_shift не применяется (см. выше)
+    };
+  }
+
+  if (duration.unit === 'calendar_day') {
+    // Календарные дни: нерабочие дни ВХОДЯТ в счёт периода — в отличие от
+    // working_day/day выше, где они пропускаются и растягивают срок. Норма,
+    // прямо называющая дни календарными (например, «тридцать календарных
+    // дней» — ст. 71 п. 1 ФЗ № 127-ФЗ), отменяет общее правило ч. 3 ст. 113
+    // АПК об исключении нерабочих дней из счёта.
+    //
+    // Правило «течение начинается со дня, следующего за событием» учтено самой
+    // формулой «якорь + N», как и у month/year: отдельного «+1» сверх неё нет.
+    // Собственного сдвига дня начала offset_start здесь не делает (в отличие
+    // от working_day-пути, где первый день отсчёта сам переносится на рабочий).
+    //
+    // Перенос — ровно тот же, что у month/year: сдвигается ТОЛЬКО итоговая
+    // дата, если она выпала на нерабочий день (ч. 4 ст. 114 АПК —
+    // самостоятельное правило об окончании срока, не о способе его подсчёта),
+    // и так же отключается через weekend_shift: false.
+    const raw = addDays(anchor, duration.value);
+    const doShift = term.weekend_shift !== false;
+    const shifted = doShift ? toDate(shiftIfNonWorking(raw)) : raw;
+    return {
+      anchor: toISODate(anchor),
+      offset_start: offsetStart,
+      raw_deadline: toISODate(raw),
+      deadline: toISODate(shifted),
+      shifted: toISODate(shifted) !== toISODate(raw),
     };
   }
 
