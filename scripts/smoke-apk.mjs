@@ -78,7 +78,10 @@ await page.goto(`http://localhost:${port}/apk.html`, { waitUntil: 'networkidle' 
 // --- Инициализация ------------------------------------------------------------
 
 check((await page.locator('.fatal').count()) === 0, '.fatal показан — страница не инициализировалась');
-check((await page.locator('#decision-full-text').count()) === 1, 'нет основного поля даты решения');
+check(
+  (await page.locator('#in-decision_full_text_date').count()) === 1,
+  'нет основного поля даты решения',
+);
 check(
   (await page.locator('#situation input[type=radio]').count()) === 8,
   'переключатель ситуаций отрисован не на восемь ветвей',
@@ -86,7 +89,7 @@ check(
 
 // --- 1. Полный цикл: дата решения → карточка апелляционной жалобы --------------
 
-await page.fill('#decision-full-text', '11.03.2025');
+await page.fill('#in-decision_full_text_date', '11.03.2025');
 await settle();
 const appealCard = page.locator('#results .card').filter({ hasText: 'Апелляционная жалоба' });
 check((await appealCard.count()) === 1, 'карточка апелляционной жалобы не появилась');
@@ -282,6 +285,35 @@ check(
   (await page.locator('#results .card, #results .invite').count()) >= 2,
   'после ошибки на одном узле пропали остальные карточки ветви',
 );
+
+// --- 8. section.primary рисует РЕАЛЬНОЕ поле текущей ветви (регрессия БАГ.1) ---
+//
+// До этой правки section.primary была статической разметкой, жёстко привязанной
+// к decision_full_text_date: у ветвей с ДРУГИМ primary_field (nadzor,
+// court_costs, reasonable_term_compensation) поле-якорь нигде не появлялось —
+// пользователь не мог его ввести, хотя incomplete-карточка утверждала обратное
+// («уже есть в этой форме»). Ловит именно этот класс бага: для каждой ветви со
+// своим primary_field в DOM должен быть input с ИМЕННО ЕЁ id, а не всегда
+// #in-decision_full_text_date.
+const PRIMARY_FIELD_BRANCHES = [
+  ['decision_chain', 'decision_full_text_date'],
+  ['nadzor', 'last_contested_act_entry_into_force_date'],
+  ['court_costs', 'last_judgment_on_merits_entry_into_force_date'],
+  ['reasonable_term_compensation', 'last_judgment_entry_into_force_date'],
+];
+for (const [situationId, fieldId] of PRIMARY_FIELD_BRANCHES) {
+  await chooseSituation(situationId);
+  check(
+    (await page.locator(`#in-${fieldId}`).count()) === 1,
+    `ветвь "${situationId}": основное поле #in-${fieldId} не найдено в DOM`,
+  );
+  await page.fill(`#in-${fieldId}`, '11.03.2025');
+  await settle();
+  check(
+    (await page.locator(`#in-${fieldId}`).inputValue()) === '11.03.2025',
+    `ветвь "${situationId}": введённое значение в #in-${fieldId} не сохранилось`,
+  );
+}
 
 await browser.close();
 server.close();
