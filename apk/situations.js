@@ -153,6 +153,19 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['simplified_proceedings_appeal_apk'],
   },
+  {
+    id: 'court_order',
+    label: 'Судебный приказ: возражения должника',
+    // Первая ветвь приказного производства в модуле АПК — не часть уже
+    // существующей ветви (нет ни одного узла, с которым эта тема делила бы
+    // якорь или поле). Единственное поле — дата получения должником копии
+    // приказа (не дата вынесения — см. apk/chain.js). Восстановления ч. 5
+    // ст. 229.5 не предусматривает — отдельного узла и уточняющих полей для
+    // него нет.
+    primary_field: 'court_order_copy_received_date_apk',
+    fields: [],
+    nodes: ['court_order_objection_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';

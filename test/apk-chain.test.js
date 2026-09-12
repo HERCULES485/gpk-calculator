@@ -22,7 +22,9 @@
 // ст. 222.1 ч. 3 — компенсация за нарушение права на исполнение судебного акта
 // в разумный срок, узел-окно (задача РАЗУМНЫЙСРОК.2.1),
 // ст. 229 ч. 4 — апелляционная жалоба по делу упрощённого производства, первый
-// working_day-узел домена apk/ (задача УПРОЩЁННОЕ.1).
+// working_day-узел домена apk/ (задача УПРОЩЁННОЕ.1),
+// ст. 229.5 ч. 3 — возражения должника на судебный приказ, второй
+// working_day-узел домена apk/ (задача ПРИКАЗ.1).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -71,6 +73,8 @@ import {
   REASONABLE_TERM_EXECUTION_COMPENSATION_APK,
   computeSimplifiedProceedingsAppealApk,
   SIMPLIFIED_PROCEEDINGS_APPEAL_APK,
+  computeCourtOrderObjectionApk,
+  COURT_ORDER_OBJECTION_APK,
 } from '../apk/chain.js';
 // Нужен ровно для одной проверки: узел-окно не должен попасть в реестр .ics
 // (см. последний тест файла) — граница решения по экспорту.
@@ -2009,4 +2013,56 @@ test('упрощённое производство: объём задачи —
   assert.equal(term.id, 'simplified_proceedings_appeal_apk');
   assert.equal(SIMPLIFIED_PROCEEDINGS_APPEAL_APK.restoration_norm, undefined);
   assert.equal(typeof computeSimplifiedProceedingsAppealApkRestoration, 'undefined');
+});
+
+// Задача ПРИКАЗ.1 — возражения должника относительно исполнения судебного
+// приказа (ч. 3 ст. 229.5 АПК РФ). Второй узел домена apk/ с duration.unit:
+// 'working_day' — та же дважды проверенная механика.
+
+test('возражения на судебный приказ: десять рабочих дней от даты получения копии, без праздничных кластеров рядом', () => {
+  // 03.03–14.03.2025: внутри периода только обычные выходные (08/09 марта),
+  // без многодневных праздников — «чистый» базовый случай.
+  const term = computeCourtOrderObjectionApk({
+    court_order_copy_received_date_apk: '2025-03-02',
+  });
+  assert.equal(term.anchor, '2025-03-02');
+  assert.equal(term.first_working_day, '2025-03-03');
+  assert.equal(term.raw_deadline, '2025-03-14');
+  assert.equal(term.deadline, '2025-03-14');
+  assert.equal(term.shifted, false); // weekend_shift к working_day не применяется
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 3 ст. 229.5 АПК РФ');
+});
+
+test('возражения на судебный приказ: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  // Копия получена 26.12.2025 (пятница). Течение — с 29.12 (понедельник);
+  // 31.12.2025 и 01–09.01.2026 нерабочие, поэтому десятый рабочий день —
+  // 21.01.2026, а не 05.01.2026, как было бы при подсчёте 10 календарных дней
+  // (тот же случай, что и у ГПК-аналога — test/chain.test.js: «возражения
+  // должника: рабочие дни, а не календарные — перенос через каникулы»).
+  const term = computeCourtOrderObjectionApk({
+    court_order_copy_received_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-21');
+  assert.notEqual(term.deadline, '2026-01-05'); // наивные "+10 календарных дней"
+});
+
+test('возражения на судебный приказ: без court_order_copy_received_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeCourtOrderObjectionApk({}),
+    /court_order_copy_received_date_apk/,
+  );
+});
+
+test('возражения на судебный приказ: объём задачи — без restoration-полей и без связанного restoration-узла', () => {
+  // Фиксирует границу: ч. 5 ст. 229.5 говорит о возврате поздних возражений
+  // без числового потолка восстановления — тот же случай, что уже был со
+  // ст. 322, 112, 222.1 ч. 2 и 229 ч. 4.
+  const term = computeCourtOrderObjectionApk({
+    court_order_copy_received_date_apk: '2025-03-02',
+  });
+  assert.equal(term.id, 'court_order_objection_apk');
+  assert.equal(COURT_ORDER_OBJECTION_APK.restoration_norm, undefined);
+  assert.equal(typeof computeCourtOrderObjectionApkRestoration, 'undefined');
 });

@@ -39,6 +39,7 @@ import {
   computeReasonableTermCompensationApk,
   computeReasonableTermExecutionCompensationApk,
   computeSimplifiedProceedingsAppealApk,
+  computeCourtOrderObjectionApk,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -61,6 +62,7 @@ import {
   REASONABLE_TERM_COMPENSATION_APK,
   REASONABLE_TERM_EXECUTION_COMPENSATION_APK,
   SIMPLIFIED_PROCEEDINGS_APPEAL_APK,
+  COURT_ORDER_OBJECTION_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -490,6 +492,14 @@ const NODE_REQUIREMENTS = {
     node: SIMPLIFIED_PROCEEDINGS_APPEAL_APK,
     deps: () => ['simplified_proceedings_decision_date'],
     compute: (i) => computeSimplifiedProceedingsAppealApk(i),
+  },
+  // Без restoration-узла: ч. 5 ст. 229.5 говорит о возврате поздних возражений
+  // без числового потолка — тот же случай, что уже был со ст. 322, 112,
+  // 222.1 ч. 2 и 229 ч. 4.
+  court_order_objection_apk: {
+    node: COURT_ORDER_OBJECTION_APK,
+    deps: () => ['court_order_copy_received_date_apk'],
+    compute: (i) => computeCourtOrderObjectionApk(i),
   },
 };
 
