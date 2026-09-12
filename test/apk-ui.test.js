@@ -39,8 +39,12 @@ const CHAIN_NODE_IDS = Object.values(chainModule)
   )
   .map((v) => v.id);
 
-// Узлы-события (вступление акта в силу) — без duration и без дедлайна.
-const EVENT_NODE_IDS = Object.values(chainModule)
+// Узлы без top-level duration — то есть те, которые предикат isTermNode не
+// заводит в реестр сроков. Категорий здесь две, и они не совпадают: узлы-события
+// (вступление акта в силу — не срок, а момент) и единственный узел-окно
+// (ч. 3 ст. 222.1 — две длительности во вложенном window, наверх не поднятые
+// намеренно, см. apk/chain.js). Поимённый состав закреплён тестом ниже.
+const NON_REGISTRY_NODE_IDS = Object.values(chainModule)
   .filter(
     (v) =>
       v != null &&
@@ -60,7 +64,7 @@ test('АПК ситуации: каждый узел chain.js закреплён
   assert.deepEqual([...inSituations].sort(), [...CHAIN_NODE_IDS].sort());
 });
 
-test('АПК ситуации: семь ветвей ожидаемого состава, ситуация по умолчанию существует', () => {
+test('АПК ситуации: восемь ветвей ожидаемого состава, ситуация по умолчанию существует', () => {
   assert.deepEqual(
     SITUATIONS_APK.map((s) => s.id),
     [
@@ -71,17 +75,21 @@ test('АПК ситуации: семь ветвей ожидаемого сос
       'new_circumstances',
       'court_costs',
       'reasonable_term_compensation',
+      'execution_compensation',
     ],
   );
   assert.deepEqual(
     SITUATIONS_APK.map((s) => s.nodes.length),
-    [8, 4, 2, 2, 2, 1, 1],
+    [8, 4, 2, 2, 2, 1, 1, 1],
   );
   assert.equal(situationById(DEFAULT_SITUATION_APK, SITUATIONS_APK).id, 'decision_chain');
   // primary_field — у ветви цепочки обжалования (как у общей ветви ГПК), у
   // надзора, у пересмотра по новым обстоятельствам, у судебных расходов и у
   // компенсации за нарушение права на судопроизводство в разумный срок: там
-  // якорь тоже вводится напрямую, а не через уточняющие поля.
+  // якорь тоже вводится напрямую, а не через уточняющие поля. У ветви
+  // execution_compensation primary_field НЕТ: её якорь равноправен с
+  // дискриминатором окончания производства и датой окончания, все три поля
+  // лежат в блоке исходных данных — как у ветвей rulings и enforcement.
   assert.deepEqual(
     SITUATIONS_APK.filter((s) => s.primary_field).map((s) => s.id),
     ['decision_chain', 'nadzor', 'new_circumstances', 'court_costs', 'reasonable_term_compensation'],
@@ -140,15 +148,22 @@ test('АПК подписи: словарь покрывает все входы
   }
 });
 
-test('АПК реестр сроков: 18 узлов из 20 — без двух узлов-событий', () => {
-  assert.equal(CHAIN_NODE_IDS.length, 20);
+test('АПК реестр сроков: 18 узлов из 21 — без двух узлов-событий и узла-окна', () => {
+  assert.equal(CHAIN_NODE_IDS.length, 21);
+  // Счётчики узлов и реестра растут НЕ синхронно: узел-окно ч. 3 ст. 222.1
+  // добавился в chain.js, но в реестр сроков не попал — у него нет top-level
+  // duration, и это намеренно (экспорт окна в .ics вне объёма задачи).
   assert.deepEqual(
-    [...EVENT_NODE_IDS].sort(),
-    ['entry_into_force_after_cassation_apk', 'entry_into_force_apk'],
+    [...NON_REGISTRY_NODE_IDS].sort(),
+    [
+      'entry_into_force_after_cassation_apk',
+      'entry_into_force_apk',
+      'reasonable_term_execution_compensation_apk',
+    ],
   );
   assert.equal(Object.keys(TERM_REGISTRY_APK).length, 18);
-  for (const id of EVENT_NODE_IDS) {
-    assert.equal(TERM_REGISTRY_APK[id], undefined, `узел-событие "${id}" попал в реестр`);
+  for (const id of NON_REGISTRY_NODE_IDS) {
+    assert.equal(TERM_REGISTRY_APK[id], undefined, `узел без duration "${id}" попал в реестр`);
   }
   // Ядро отбирает карточки к экспорту по meta.ics === true — признак должен
   // быть на каждой записи реестра, иначе экспорт молча вернёт пустой список.
@@ -170,7 +185,7 @@ test('АПК реестр сроков: идентификаторы проду�
 
 // --- buildView (задача UI.3) --------------------------------------------------
 
-// Данные, поднимающие все 20 узлов разом. Ветви дискриминаторов выбраны так,
+// Данные, поднимающие все 21 узел разом. Ветви дискриминаторов выбраны так,
 // чтобы цепочка считалась целиком: жалоба не подана → вступление в силу от
 // срока апелляции, окружная кассация не подавалась → якорь кассации в ВС РФ от
 // срока окружной кассации.
@@ -191,13 +206,16 @@ const ALL_NODES_INPUTS_APK = {
   circumstances_discovered_date: '2025-01-20',
   last_judgment_on_merits_entry_into_force_date: '2025-02-15',
   last_judgment_entry_into_force_date: '2025-01-15',
+  execution_deadline_date: '2024-02-20',
+  enforcement_proceeding_ended: true,
+  enforcement_proceeding_ended_date: '2025-01-10',
 };
 
 const TODAY_APK = '2025-01-01'; // раньше всех дедлайнов — ничего не истекло
 
-test('АПК buildView: на полном наборе данных считаются все 20 узлов, incomplete пуст', () => {
+test('АПК buildView: на полном наборе данных считаются все 21 узел, incomplete пуст', () => {
   const view = buildView(ALL_NODES_INPUTS_APK, { today: TODAY_APK });
-  assert.equal(view.cards.length, 20);
+  assert.equal(view.cards.length, 21);
   assert.equal(view.incomplete.length, 0);
   assert.deepEqual(view.stubs, []);
   // Форма возврата совпадает с ГПК-шной: cards/incomplete/stubs.
@@ -233,7 +251,7 @@ test('АПК buildView: пересечение периодов даёт кар�
     { today: TODAY_APK },
   );
   // Расчёт не падает целиком: 16 карточек на месте, ошибочная — ровно одна.
-  assert.equal(view.cards.length, 20);
+  assert.equal(view.cards.length, 21);
   const errors = view.cards.filter((c) => c.kind === 'error');
   assert.equal(errors.length, 1);
   assert.equal(errors[0].id, 'enforcement_presentation_apk');
@@ -359,9 +377,9 @@ test('АПК buildView: узлы-события дают карточку kind="
   assert.equal(entry.based_on, 'appellate_ruling_date');
 });
 
-test('АПК buildView: без данных все 20 узлов уходят в incomplete, расчёт не вызывается', () => {
+test('АПК buildView: без данных все 21 узел уходит в incomplete, расчёт не вызывается', () => {
   const view = buildView({}, { today: TODAY_APK });
-  assert.equal(view.incomplete.length, 20);
+  assert.equal(view.incomplete.length, 21);
   // Ни одной карточки вообще: если бы compute-функции вызывались на пустых
   // данных, они бросили бы, и мы увидели бы карточки kind="error".
   assert.equal(view.cards.length, 0);
