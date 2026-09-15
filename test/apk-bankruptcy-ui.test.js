@@ -43,7 +43,7 @@ const BANKRUPTCY_NODE_IDS = Object.values(bankruptcyModule)
   )
   .map((v) => v.id);
 
-// Полный набор входных данных на все двенадцать узлов сразу. Даты — из
+// Полный набор входных данных на все тринадцать узлов сразу. Даты — из
 // тестов расчёта (test/apk-bankruptcy.test.js), кроме тех, что там задавались
 // в отдельных сценариях: здесь важно, что расчёт проходит, а не какие именно
 // получаются числа (их проверяют тесты расчёта).
@@ -61,6 +61,7 @@ const FULL_INPUTS = {
   bankruptcy_proceeding_conclusion_date_apk: '2022-03-10',
   out_of_court_bankruptcy_initiation_notice_included_date_apk: '2025-03-11',
   out_of_court_bankruptcy_return_date_apk: '2025-03-11',
+  out_of_court_bankruptcy_prior_procedure_end_date_apk: '2020-03-11',
 };
 
 const cardById = (view, id) => view.cards.find((c) => c.id === id);
@@ -68,8 +69,8 @@ const incompleteById = (view, id) => view.incomplete.find((n) => n.id === id);
 
 // --- 1. Покрытие ситуаций ------------------------------------------------------
 
-test('банкротство UI: каждый из двенадцати узлов закреплён ровно за одной ситуацией', () => {
-  assert.equal(BANKRUPTCY_NODE_IDS.length, 12);
+test('банкротство UI: каждый из тринадцати узлов закреплён ровно за одной ситуацией', () => {
+  assert.equal(BANKRUPTCY_NODE_IDS.length, 13);
   assert.doesNotThrow(() => checkSituationCoverage(BANKRUPTCY_NODE_IDS, SITUATIONS_BANKRUPTCY));
   // Обратная сторона того же инварианта: в ситуациях нет узлов-призраков,
   // которых в apk/bankruptcy.js уже (или ещё) нет.
@@ -79,7 +80,7 @@ test('банкротство UI: каждый из двенадцати узло
   );
 });
 
-test('банкротство UI: семь ветвей ожидаемого состава, ситуация по умолчанию существует', () => {
+test('банкротство UI: восемь ветвей ожидаемого состава, ситуация по умолчанию существует', () => {
   assert.deepEqual(
     SITUATIONS_BANKRUPTCY.map((s) => s.id),
     [
@@ -90,6 +91,7 @@ test('банкротство UI: семь ветвей ожидаемого со
       'subsidiary_post_conclusion',
       'out_of_court_bankruptcy',
       'out_of_court_bankruptcy_returned',
+      'out_of_court_bankruptcy_prior_completed',
     ],
   );
   assert.ok(SITUATIONS_BANKRUPTCY.some((s) => s.id === DEFAULT_SITUATION_BANKRUPTCY));
@@ -110,9 +112,9 @@ test('банкротство UI: у каждого поля всех ветве�
 
 // --- 2. Полный набор данных ----------------------------------------------------
 
-test('банкротство UI: полный набор данных — двенадцать карточек, incomplete пуст', () => {
+test('банкротство UI: полный набор данных — тринадцать карточек, incomplete пуст', () => {
   const view = buildViewBankruptcy(FULL_INPUTS);
-  assert.equal(view.cards.length, 12);
+  assert.equal(view.cards.length, 13);
   assert.deepEqual(view.incomplete, []);
   assert.deepEqual(view.stubs, []);
   assert.deepEqual([...view.cards.map((c) => c.id)].sort(), [...BANKRUPTCY_NODE_IDS].sort());
@@ -123,10 +125,10 @@ test('банкротство UI: полный набор данных — две
   );
 });
 
-test('банкротство UI: пустой ввод — ни одной карточки, все двенадцать узлов в incomplete', () => {
+test('банкротство UI: пустой ввод — ни одной карточки, все тринадцать узлов в incomplete', () => {
   const view = buildViewBankruptcy({});
   assert.deepEqual(view.cards, []);
-  assert.equal(view.incomplete.length, 12);
+  assert.equal(view.incomplete.length, 13);
   for (const node of view.incomplete) {
     assert.equal(node.status, 'not_computed');
     assert.ok(node.missing_inputs.length > 0);
@@ -413,6 +415,61 @@ test('карточка права на повторную подачу: без �
   assert.ok(node.missing_inputs[0].label);
 });
 
+// --- 4c. Третий узел-событие: право после завершения предыдущей процедуры
+// (п. 8 ст. 223.2) ---------------------------------------------------------------
+//
+// Тот же общий билдер, что и у двух предыдущих узлов-событий — подключился
+// без единой правки в apk/bankruptcy-views.js/apk/bankruptcy-app.js. Здесь
+// проверяется, что ТРЕТИЙ узел получает свои текст/hint, не спутанные ни с
+// одним из двух других.
+
+test("карточка права на повторную подачу после предыдущей процедуры: kind 'event', свои дата/норма/текст", () => {
+  const view = buildViewBankruptcy({
+    out_of_court_bankruptcy_prior_procedure_end_date_apk: '2020-03-11',
+  });
+  const card = cardById(view, 'out_of_court_bankruptcy_reapplication_after_prior_apk');
+  assert.equal(card.kind, 'event');
+  assert.equal(card.status, 'resolved');
+  assert.equal(card.date, '2025-03-11');
+  assert.equal(card.deadline, undefined);
+  assert.equal(card.norm, 'п. 8 ст. 223.2 ФЗ № 127-ФЗ');
+  assert.equal(
+    card.title,
+    'Право на повторную подачу заявления о внесудебном банкротстве после ' +
+      'завершения предыдущей процедуры банкротства',
+  );
+  assert.equal(card.eventTextTemplate, 'Право на подачу нового заявления — с {date}');
+  assert.equal(
+    card.hint,
+    'С этой даты гражданин вправе повторно подать заявление о признании его ' +
+      'банкротом во внесудебном порядке.',
+  );
+  // Не спутан с текстом двух других узлов-событий этого домена.
+  assert.notEqual(card.eventTextTemplate, 'Процедура завершена {date}');
+  assert.notEqual(card.eventTextTemplate, 'Право на повторную подачу — с {date}');
+});
+
+test('карточка права после предыдущей процедуры: перенос на рабочий день отражён в card.date', () => {
+  // 01.02.2020 + 5 лет = 01.02.2025 — суббота, перенос на понедельник.
+  const view = buildViewBankruptcy({
+    out_of_court_bankruptcy_prior_procedure_end_date_apk: '2020-02-01',
+  });
+  const card = cardById(view, 'out_of_court_bankruptcy_reapplication_after_prior_apk');
+  assert.equal(card.date, '2025-02-03');
+});
+
+test('карточка права после предыдущей процедуры: без якоря — узел в incomplete с подписью поля', () => {
+  const view = buildViewBankruptcy({});
+  const node = incompleteById(view, 'out_of_court_bankruptcy_reapplication_after_prior_apk');
+  assert.ok(node);
+  assert.equal(node.kind, 'event');
+  assert.deepEqual(
+    node.missing_inputs.map((f) => f.id),
+    ['out_of_court_bankruptcy_prior_procedure_end_date_apk'],
+  );
+  assert.ok(node.missing_inputs[0].label);
+});
+
 // --- 5. Восстановительные узлы делят поля с базовым ----------------------------
 
 test('восстановление (п. 5): список недостающих полей ДОСЛОВНО тот же, что у базового узла', () => {
@@ -473,7 +530,7 @@ test('банкротство UI: ни одна карточка не несёт 
   // Негативный тест: признак экспортируемости не должен появиться на карточке
   // по недосмотру — ни как поле ics, ни как метаданные реестра сроков.
   const view = buildViewBankruptcy(FULL_INPUTS);
-  assert.equal(view.cards.length, 12);
+  assert.equal(view.cards.length, 13);
   for (const card of view.cards) {
     assert.equal(card.ics, undefined, `у карточки "${card.id}" появилось поле ics`);
     assert.equal(card.ics_meta, undefined);

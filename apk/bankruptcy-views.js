@@ -33,6 +33,7 @@ import {
   computeSubsidiaryLiabilityPostConclusionApkRestoration,
   computeOutOfCourtBankruptcyCompletionApk,
   computeOutOfCourtBankruptcyReapplicationApk,
+  computeOutOfCourtBankruptcyReapplicationAfterPriorApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -45,6 +46,7 @@ import {
   SUBSIDIARY_LIABILITY_POST_CONCLUSION_APK_RESTORATION,
   OUT_OF_COURT_BANKRUPTCY_COMPLETION_APK,
   OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_APK,
+  OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_AFTER_PRIOR_APK,
 } from './bankruptcy.js';
 
 import {
@@ -171,11 +173,15 @@ export function cappedTermCard(node, result) {
 
 // --- Карточка узла-события (kind: 'event') ------------------------------------
 //
-// Общий билдер на ДВА узла этого вида: завершение процедуры внесудебного
-// банкротства (п. 1 ст. 223.6, OUT_OF_COURT_BANKRUPTCY_COMPLETION_APK) и
+// Общий билдер на ТРИ узла этого вида: завершение процедуры внесудебного
+// банкротства (п. 1 ст. 223.6, OUT_OF_COURT_BANKRUPTCY_COMPLETION_APK),
 // право на повторную подачу после возврата заявления (п. 6 ст. 223.2,
-// OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_APK). Оба — не срок, который
-// кто-либо подаёт, а момент смены статуса, наступающий сам.
+// OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_APK) и право на повторную подачу
+// после завершения предыдущей процедуры (п. 8 ст. 223.2,
+// OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_AFTER_PRIOR_APK). Все три — не
+// срок, который кто-либо подаёт, а момент смены статуса, наступающий сам.
+// Третий узел подключился без единой правки в этом билдере — подтверждение,
+// что обобщение из задачи п. 6 работает не только на два случая.
 //
 // По образцу eventCard из apk/views.js (там — вступление акта АПК в законную
 // силу): та же тройка полей результата — kind: 'event', status: 'resolved'
@@ -184,9 +190,10 @@ export function cappedTermCard(node, result) {
 //
 // Текст строки и пояснение — ДАННЫЕ узла (node.event_text_template с
 // плейсхолдером {date}, node.event_hint), а не константа этого билдера или
-// renderEvent: у двух узлов смысл события разный («завершена» vs «право на
-// подачу открыто»), а форма карточки — одна. Билдер только переносит эти
-// два поля в card как есть, не формулирует их сам.
+// renderEvent: у каждого узла смысл события свой («завершена» / «право
+// открыто» / «право открыто после другой процедуры»), а форма карточки —
+// одна. Билдер только переносит эти два поля в card как есть, не
+// формулирует их сам.
 //
 // Отличие от apk/views.js — не форма карточки, а откуда берётся дата. Там
 // entry.date считается вне computeSimpleTerm: либо вводится явно (дата акта
@@ -352,6 +359,12 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     kind: 'event',
     deps: () => ['out_of_court_bankruptcy_return_date_apk'],
     compute: (i) => computeOutOfCourtBankruptcyReapplicationApk(i),
+  },
+  out_of_court_bankruptcy_reapplication_after_prior_apk: {
+    node: OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_AFTER_PRIOR_APK,
+    kind: 'event',
+    deps: () => ['out_of_court_bankruptcy_prior_procedure_end_date_apk'],
+    compute: (i) => computeOutOfCourtBankruptcyReapplicationAfterPriorApk(i),
   },
 };
 

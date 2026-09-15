@@ -91,8 +91,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 7,
-  'переключатель ситуаций отрисован не на семь ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 8,
+  'переключатель ситуаций отрисован не на восемь ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -559,6 +559,59 @@ if (await reapplicationLine.count()) {
     'REAPPLICATION EVENT CARD outerHTML:',
     await reapplicationLine.first().evaluate((el) => el.outerHTML),
   );
+}
+
+// --- Ветвь 8: ранее уже проходил(а) через банкротство (третий kind: 'event') -----
+//
+// ТРЕТИЙ узел домена с kind: 'event' — тот же общий рендерер, подключился без
+// единой правки в apk/bankruptcy-app.js. Проверяется, что текст и hint — свои,
+// не спутанные ни с одним из двух других узлов-событий.
+
+await chooseSituation('out_of_court_bankruptcy_prior_completed');
+check(
+  (await page.locator('#in-out_of_court_bankruptcy_prior_procedure_end_date_apk').count()) === 1,
+  'ветвь "out_of_court_bankruptcy_prior_completed": основное поле не найдено в DOM',
+);
+await page.fill('#in-out_of_court_bankruptcy_prior_procedure_end_date_apk', '11.03.2020');
+await settle();
+
+const priorLine = page.locator('.event-line').filter({ hasText: 'Право на подачу нового заявления' });
+check(
+  (await priorLine.count()) === 1,
+  'карточка-событие права на подачу после предыдущей процедуры не появилась',
+);
+if (await priorLine.count()) {
+  const text = await priorLine.innerText();
+  check(text.includes('11.03.2025'), `дата права на подачу нового заявления посчитана неверно: «${text}»`);
+  check(
+    text.includes('п. 8 ст. 223.2 ФЗ № 127-ФЗ'),
+    `норма не показана на карточке-событии: «${text}»`,
+  );
+  check(!/последний день подачи/i.test(text), `карточка-событие несёт подпись срока заявителя: «${text}»`);
+  check(
+    (await priorLine.locator('.event-text').innerText()) === 'Право на подачу нового заявления — с 11.03.2025',
+    `текст строки события не соответствует ожидаемому: «${await priorLine.locator('.event-text').innerText()}»`,
+  );
+  const priorHint = await priorLine.locator('.hint').innerText();
+  check(
+    priorHint ===
+      'С этой даты гражданин вправе повторно подать заявление о признании его ' +
+        'банкротом во внесудебном порядке.',
+    `hint карточки права после предыдущей процедуры неверен: «${priorHint}»`,
+  );
+  // Не спутан с текстом двух других узлов-событий этого домена.
+  check(!text.includes('Процедура завершена'), `текст узла ст. 223.6 п. 1 протёк в эту карточку: «${text}»`);
+  check(
+    !text.includes('Право на повторную подачу — с'),
+    `текст узла п. 6 ст. 223.2 протёк в эту карточку: «${text}»`,
+  );
+  check(
+    !text.includes('обратиться в МФЦ'),
+    `hint узла п. 6 ст. 223.2 протёк в эту карточку: «${text}»`,
+  );
+
+  // Сырой outerHTML — на проверку архитектору.
+  console.log('PRIOR-PROCEDURE EVENT CARD outerHTML:', await priorLine.first().evaluate((el) => el.outerHTML));
 }
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------

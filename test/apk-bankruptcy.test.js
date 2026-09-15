@@ -39,6 +39,8 @@ import {
   OUT_OF_COURT_BANKRUPTCY_COMPLETION_APK,
   computeOutOfCourtBankruptcyReapplicationApk,
   OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_APK,
+  computeOutOfCourtBankruptcyReapplicationAfterPriorApk,
+  OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_AFTER_PRIOR_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -775,5 +777,61 @@ test('право на повторную подачу: norm.calculation досл
   assert.deepEqual(
     OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_APK.norm_versions[0].norm.calculation,
     OUT_OF_COURT_BANKRUPTCY_COMPLETION_APK.norm_versions[0].norm.calculation,
+  );
+});
+
+// --- Право на повторную подачу после завершения предыдущей процедуры
+// (п. 8 ст. 223.2) --------------------------------------------------------------
+//
+// Третий узел домена с kind: 'event' — тот же паттерн computeSimpleTerm/
+// 'year', отличается длительностью (5 лет вместо 6 месяцев/1 месяца) и
+// якорем (дата окончания ЛЮБОЙ предыдущей процедуры, одно поле на пять
+// альтернативных оснований нормы).
+
+test('право на повторную подачу после предыдущей процедуры: пять календарных лет от даты её окончания', () => {
+  const term = computeOutOfCourtBankruptcyReapplicationAfterPriorApk({
+    out_of_court_bankruptcy_prior_procedure_end_date_apk: '2020-03-11',
+  });
+  assert.equal(term.id, 'out_of_court_bankruptcy_reapplication_after_prior_apk');
+  assert.equal(term.anchor, '2020-03-11');
+  assert.equal(term.raw_deadline, '2025-03-11');
+  assert.ok(isWorkingDay('2025-03-11'));
+  assert.equal(term.deadline, '2025-03-11');
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'п. 8 ст. 223.2 ФЗ № 127-ФЗ');
+});
+
+test('право на повторную подачу после предыдущей процедуры: результат выпадает на нерабочий день — перенос конца', () => {
+  // 01.02.2020 + 5 лет = 01.02.2025 — суббота, перенос на понедельник.
+  const term = computeOutOfCourtBankruptcyReapplicationAfterPriorApk({
+    out_of_court_bankruptcy_prior_procedure_end_date_apk: '2020-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-02-01');
+  assert.ok(!isWorkingDay('2025-02-01'));
+  assert.equal(term.deadline, '2025-02-03');
+  assert.equal(term.shifted, true);
+});
+
+test('право на повторную подачу после предыдущей процедуры: без якоря — явная ошибка с названием поля', () => {
+  assert.throws(
+    () => computeOutOfCourtBankruptcyReapplicationAfterPriorApk({}),
+    /out_of_court_bankruptcy_prior_procedure_end_date_apk/,
+  );
+});
+
+test('право на повторную подачу после предыдущей процедуры: без midnight_rule и без потолков/restoration', () => {
+  assert.equal(OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_AFTER_PRIOR_APK.midnight_rule, undefined);
+  assert.equal(OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_AFTER_PRIOR_APK.caps, undefined);
+  assert.equal(OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_AFTER_PRIOR_APK.restoration_norm, undefined);
+});
+
+test('право на повторную подачу после предыдущей процедуры: norm.calculation дословно совпадает с двумя предыдущими узлами', () => {
+  assert.deepEqual(
+    OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_AFTER_PRIOR_APK.norm_versions[0].norm.calculation,
+    OUT_OF_COURT_BANKRUPTCY_COMPLETION_APK.norm_versions[0].norm.calculation,
+  );
+  assert.deepEqual(
+    OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_AFTER_PRIOR_APK.norm_versions[0].norm.calculation,
+    OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_APK.norm_versions[0].norm.calculation,
   );
 });
