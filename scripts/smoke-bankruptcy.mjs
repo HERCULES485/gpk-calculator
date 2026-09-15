@@ -60,7 +60,10 @@ const launchOpts = process.env.PW_CHROMIUM_PATH
   ? { executablePath: process.env.PW_CHROMIUM_PATH }
   : {};
 const browser = await chromium.launch(launchOpts);
-const page = await browser.newPage();
+// Разрешение на буфер обмена нужно, чтобы прочитать результат клика по
+// «Скопировать сроки» и убедиться, что capped_term попал в сводку одной строкой.
+const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+const page = await context.newPage();
 page.on('console', (m) => {
   if (m.type() === 'error') problems.push(`console error: ${m.text()}`);
 });
@@ -365,28 +368,89 @@ check(
   'в п. 6 отмечен не десятилетний предел, ограничивший срок',
 );
 
+// --- Сводка сроков: capped_term идёт в неё ОДНОЙ строкой -----------------------
+//
+// Проверяется на ветви с capped_term-узлом (сейчас выбрана она, п. 6 ст. 61.14):
+// в сводку должна попасть итоговая дата и норма — ровно то же, что у обычного
+// срока, — а разбор потолков остаться только на карточке. Ловит оба провала
+// сразу: молчаливый пропуск capped_term (записи не будет вовсе) и протекание
+// потолков в текст.
+
+check((await page.locator('#copy-terms').count()) === 1, 'нет кнопки «Скопировать сроки»');
+check((await page.locator('#print-terms').count()) === 1, 'нет кнопки «Распечатать»');
+check(
+  (await page.locator('#copy-terms').isDisabled()) === false,
+  'кнопка «Скопировать сроки» заблокирована при посчитанных сроках',
+);
+
+await page.click('#copy-terms');
+await settle();
+check(
+  (await page.locator('#copy-status').innerText()).includes('Скопировано'),
+  'клик по «Скопировать сроки» не подтвердился статусом',
+);
+const copied = await page.evaluate(() => navigator.clipboard.readText());
+
+// Строка базового узла — ровно одна, с итоговой (перенесённой, если был перенос)
+// датой и нормой.
+const cappedLines = copied
+  .split('\n')
+  .filter((line) => line.includes('к субсидиарной ответственности (после завершения'));
+check(
+  cappedLines.length === 1,
+  `capped_term-узел должен давать ровно одну строку сводки, получили ${cappedLines.length}: ${JSON.stringify(cappedLines)}`,
+);
+if (cappedLines.length === 1) {
+  const line = cappedLines[0];
+  check(line.includes('20.05.2026'), `в строке сводки нет итоговой даты: «${line}»`);
+  check(
+    line.includes('п. 6 ст. 61.14 ФЗ № 127-ФЗ'),
+    `в строке сводки нет нормы: «${line}»`,
+  );
+}
+// Потолки в сводку не протекли: ни даты несвязавшего потолка, ни слов разбора.
+check(
+  !copied.includes('10.01.2027'),
+  'в сводку попала дата несвязавшего потолка — она сроком не является',
+);
+for (const phrase of ['потолок', 'Потолок', 'Пределы срока', 'ограничивает срок']) {
+  check(!copied.includes(phrase), `в сводку протёк разбор потолков: «${phrase}»`);
+}
+
+// Печать строится из той же сводки — и дата в ней не должна быть пустой
+// (в apk/app.js на этом месте isoToRu(item.deadline), то есть пустая строка).
+const printDates = await page.locator('#print-list .print-date').allInnerTexts();
+check(printDates.length === 2, `в печатном списке ожидались две записи, получили ${printDates.length}`);
+check(
+  printDates.every((d) => /^\d{2}\.\d{2}\.\d{4}$/.test(d.trim())),
+  `в печатном списке дата пустая или не в формате ДД.ММ.ГГГГ: ${JSON.stringify(printDates)}`,
+);
+check(
+  printDates.some((d) => d.trim() === '20.05.2026'),
+  'итоговая дата capped_term не попала в печатный список',
+);
+
 // --- Негативные проверки: чего на странице быть не должно ----------------------
 //
 // Не «не тестировали», а явное отсутствие в DOM. Оба решения — архитектурные
 // (см. шапки apk/bankruptcy-app.js и apk/bankruptcy-views.js), и молчаливое
 // появление любого из этих элементов было бы регрессией, а не улучшением.
 
-// 1. Экспорт в календарь: ни кнопки .ics, ни ссылки в Google Календарь, ни
-//    кнопок сводки, тянущих за собой представление capped_term в тексте.
+// 1. Экспорт в КАЛЕНДАРЬ: ни кнопки .ics, ни ссылки в Google Календарь.
+//    Сводка (копирование и печать) — это не календарный экспорт, она есть и
+//    проверяется отдельно ниже.
 for (const [selector, what] of [
   ['#download-ics', 'кнопка «Скачать .ics»'],
-  ['#copy-terms', 'кнопка «Скопировать сроки»'],
-  ['#print-terms', 'кнопка «Распечатать»'],
   ['.to-calendar', 'ссылка «Добавить в Google Календарь»'],
   ['.to-calendar-block', 'блок ссылки на календарь'],
   ['a[href*="calendar.google.com"]', 'ссылка на calendar.google.com'],
-  ['.toolbar', 'панель кнопок экспорта'],
+  ['.toolbar-secondary', 'строка со ссылкой на файл .ics'],
 ]) {
   check((await page.locator(selector).count()) === 0, `на странице есть ${what} (${selector})`);
 }
 const bodyText = await page.locator('body').innerText();
-for (const phrase of ['.ics', 'Google', 'Скопировать сроки', 'Распечатать']) {
-  check(!bodyText.includes(phrase), `на странице есть текст экспорта «${phrase}»`);
+for (const phrase of ['.ics', 'Google', 'Календарь событий']) {
+  check(!bodyText.includes(phrase), `на странице есть текст календарного экспорта «${phrase}»`);
 }
 
 // 2. Виджет периодов, не засчитываемых в срок (ч. 2, 5 ст. 321 АПК) — специфика

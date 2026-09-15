@@ -61,6 +61,19 @@
 
       .empty { color: var(--muted); font-size: 15px; padding: 8px 2px; }
 
+      .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+      .toolbar button {
+        font: inherit; font-weight: 600; font-size: 14px;
+        color: #fff; background: var(--accent); border: none;
+        padding: 9px 16px; border-radius: 8px; cursor: pointer;
+      }
+      .toolbar button:hover:not(:disabled) { background: #1a52a6; }
+      .toolbar button:disabled { background: #c3ccd8; cursor: not-allowed; }
+      .copy-status { color: var(--ok); font-size: 13px; font-weight: 600; }
+      .toolbar-note { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
+
+      .print-only { display: none; }
+
       /* Что означает дата на карточке — над самой датой. */
       .deadline-caption {
         font-size: 12px; letter-spacing: .02em; text-transform: uppercase;
@@ -167,6 +180,42 @@
         border-radius: 6px; padding: 10px 12px; font-size: 14px;
       }
 
+      /* Печать: только перечень сроков — заголовок с датой расчёта, названия,
+         даты и нормы. Ввод, переключатели, кнопки и сами карточки не
+         печатаются: разбор потолков на бумаге повторял бы неоднозначность
+         карточки, а в сводке у capped_term одна итоговая дата, как у обычного
+         срока. */
+      @media print {
+        body { background: #fff; color: #000; font-size: 12pt; }
+        .wrap { max-width: none; padding: 0; }
+        header h1,
+        header p,
+        .situation-switch,
+        section.primary,
+        .toolbar,
+        .toolbar-note,
+        #situation-inputs,
+        #other-terms,
+        #results,
+        .disclaimer { display: none !important; }
+
+        .print-only { display: block; }
+        /* Сокращённая пометка в конце печати — мелко и серым. */
+        .print-disclaimer { font-size: 9pt; color: #555; margin: 16px 0 0; }
+        #print-header { margin: 0 0 14px; }
+        #print-header .print-title { font-size: 14pt; font-weight: 700; }
+        /* Иерархия: дата крупная и жирная, норма мельче и серым строкой ниже. */
+        #print-list .print-item {
+          padding: 8px 0; border-bottom: 1px solid #ccc;
+          break-inside: avoid; page-break-inside: avoid;
+        }
+        .print-item-title { font-size: 11pt; color: #333; }
+        .print-item .print-date {
+          font-size: 15pt; font-weight: 700; line-height: 1.15; margin-top: 2px;
+        }
+        .print-item .print-norm { font-size: 10pt; color: #555; margin-bottom: 4px; }
+      }
+
       /* --- Разбор кумулятивных потолков (ст. 61.14 ФЗ № 127-ФЗ) --------------
          Блок ВСЕГДА развёрнут, не за «Подробнее»: одна дата без разбора
          неотличима от обычного срока, и непонятно, почему при сдвиге одной из
@@ -225,6 +274,21 @@
 
       <section class="other-terms" id="situation-inputs"></section>
 
+      <!-- Сводка сроков: копирование и печать. Экспорта в календарь (.ics и
+           ссылки в Google Календарь) здесь нет и не должно быть — см. шапку
+           apk/bankruptcy-app.js. -->
+      <div class="toolbar" id="toolbar">
+        <button id="copy-terms" type="button" disabled>Скопировать сроки</button>
+        <button id="print-terms" type="button" disabled>Распечатать</button>
+        <span class="copy-status" id="copy-status" role="status" aria-live="polite"></span>
+      </div>
+      <p class="toolbar-note">
+        В сводку и печать идут итоговые даты сроков — разбор пределов остаётся на карточке.
+      </p>
+
+      <div class="print-only" id="print-header"></div>
+      <div class="print-only" id="print-list"></div>
+
       <main id="results">
         <p class="empty">Заполните исходные данные — появятся рассчитанные сроки.</p>
       </main>
@@ -238,6 +302,9 @@
         консультацией. Перед подачей документов проверяйте сроки по
         первоисточникам — расчёт может не учитывать особенности конкретного дела.
       </footer>
+
+      <!-- В печати — сокращённая пометка в конце (полный текст скрыт). -->
+      <p class="print-only print-disclaimer">Справочный расчёт, не заменяет консультацию юриста</p>
     </div>
 
     <script type="module">

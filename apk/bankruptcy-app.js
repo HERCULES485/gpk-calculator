@@ -16,6 +16,9 @@
 //   * НЕТ виджета периодов, не засчитываемых в срок (ч. 2, 5 ст. 321 АПК) —
 //     это специфика исполнительного листа АПК, ни один узел банкротства такой
 //     механики не требует;
+//   * сводка сроков (копирование и печать) — та же, что в apk/app.js; строка
+//     capped_term-узла в ней такая же, как у обычного срока: одна итоговая
+//     дата и норма, без разбора потолков (решение по итогам ревью UI.2);
 //   * НЕТ экспорта в календарь (.ics и ссылки в Google Календарь): реестр
 //     сроков apk/term-registry.js сканирует только apk/chain.js, а два узла
 //     субсидиарной ответственности не проходят его предикат isTermNode — у них
@@ -30,10 +33,15 @@ import { INPUT_LABELS_BANKRUPTCY } from './bankruptcy-labels.js';
 // --- Из ядра, без изменений ---------------------------------------------------
 import { situationById } from '../core/view/situations.js';
 import { applyDateEdit, dateFieldError, isoToRu, ruToISO } from '../core/ui/date-field.js';
-// Только подпись даты на карточке — тот же текст, что на страницах ГПК и АПК.
-// Ничего из механики экспорта (buildICS, googleCalendarUrl, сводки) сюда не
+// Подпись даты на карточке и сборка сводки — то же, что на страницах ГПК и АПК.
+// Ничего из механики КАЛЕНДАРНОГО экспорта (buildICS, googleCalendarUrl) сюда не
 // импортируется и импортироваться не должно — см. шапку файла.
-import { DEADLINE_CAPTION } from '../core/export/links.js';
+import {
+  DEADLINE_CAPTION,
+  termsAsText,
+  caseSummaryItems,
+  caseSummaryHeader,
+} from '../core/export/links.js';
 
 // --- Поля ввода: вид виджета по полю ------------------------------------------
 //
@@ -422,6 +430,130 @@ function renderIncompleteNode(node) {
   return box;
 }
 
+// --- Сводка сроков: копирование и печать --------------------------------------
+//
+// Механика перенесена из apk/app.js как есть (общий источник — core/export/
+// links.js, чтобы текст копирования и печати не расходились). Отличается только
+// состав видов карточек, попадающих в сводку: событий, окон и «норма не
+// применяется» в этом домене нет.
+
+let currentSummary = [];
+
+/**
+ * Карточки → записи сводки. Строка capped_term-узла ТАКАЯ ЖЕ, как у обычного
+ * срока: одна итоговая дата (уже перенесённая, если перенос был) и норма.
+ *
+ * Потолки (card.caps) в сводку и печать не идут сознательно. Разбор пределов
+ * нужен рядом с вводом — там видно, какую из введённых дат двигать; в списке
+ * дат он превратил бы одну запись в несколько строк дат-кандидатов, из которых
+ * все, кроме связавшей, сроком не являются и последним днём подачи не были.
+ *
+ * Условие по kind, а не по id узла: любой следующий capped_term попадёт в
+ * сводку сам, без правки этого места.
+ */
+function summaryEntries(cards) {
+  const entries = [];
+  for (const card of cards) {
+    if (card.kind !== 'term' && card.kind !== 'capped_term') continue;
+    if (!card.deadline) continue;
+    entries.push({
+      title: card.title,
+      deadline: card.deadline,
+      norm: card.norm,
+      // Все сроки этого домена — сроки заявителя: подпись «последний день
+      // подачи». Сроков суда (kind: 'court') и событий среди узлов нет.
+      kind: 'applicant',
+    });
+  }
+  return entries;
+}
+
+function updateSummaryButtons() {
+  for (const id of ['copy-terms', 'print-terms']) {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = currentSummary.length === 0;
+  }
+}
+
+let copyStatusTimer = null;
+
+function showCopyStatus(message) {
+  const box = document.getElementById('copy-status');
+  if (!box) return;
+  box.textContent = message;
+  clearTimeout(copyStatusTimer);
+  copyStatusTimer = setTimeout(() => {
+    box.textContent = '';
+  }, 3000);
+}
+
+function copyViaSelection(text) {
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.select();
+  let ok = false;
+  try {
+    ok = document.execCommand('copy');
+  } catch {
+    ok = false;
+  }
+  area.remove();
+  return ok;
+}
+
+async function copyTerms() {
+  if (currentSummary.length === 0) return;
+  const text = termsAsText(currentSummary, {
+    today,
+    situation: situationById(state.situation, SITUATIONS_BANKRUPTCY).label,
+  });
+  let ok = true;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    ok = copyViaSelection(text);
+  }
+  showCopyStatus(ok ? 'Скопировано' : 'Не удалось скопировать');
+}
+
+function printTerms() {
+  if (currentSummary.length === 0) return;
+  window.print();
+}
+
+function printItem(item) {
+  const box = el('div', 'print-item');
+  box.appendChild(
+    el('div', 'print-item-title', item.caption ? `${item.title} · ${item.caption}` : item.title),
+  );
+  // item.date, а НЕ isoToRu(item.deadline): caseSummaryItems отдаёт уже
+  // отформатированную дату в поле date, поля deadline у её результата нет.
+  // В apk/app.js здесь isoToRu(item.deadline) — то есть isoToRu(undefined),
+  // и на печати apk.html дата выходит пустой. Тот файл в этой задаче не
+  // трогаем; здесь повторён рабочий вариант из web/app.js (ГПК).
+  box.appendChild(el('div', 'print-date', item.date));
+  if (item.norm) box.appendChild(el('div', 'print-norm', item.norm));
+  return box;
+}
+
+function renderPrintList(situation) {
+  const head = document.getElementById('print-header');
+  if (head) {
+    head.textContent = '';
+    head.appendChild(
+      el('div', 'print-title', caseSummaryHeader({ today, situation: situation.label })),
+    );
+  }
+  const list = document.getElementById('print-list');
+  if (!list) return;
+  list.textContent = '';
+  for (const item of caseSummaryItems(currentSummary)) list.appendChild(printItem(item));
+}
+
 // --- Форма --------------------------------------------------------------------
 
 function renderSituationSwitch(current) {
@@ -528,6 +660,13 @@ function render() {
   // Расчёт от выбора ситуации не зависит: buildViewBankruptcy считает все узлы,
   // переключатель решает, что показать.
   const view = buildViewBankruptcy(state.inputs, { today });
+  const visible = new Set(situation.nodes);
+  const visibleCards = view.cards.filter((c) => visible.has(c.id));
+
+  // В сводку идут только узлы выбранной ветви — то же правило, что и на экране.
+  currentSummary = summaryEntries(visibleCards);
+  updateSummaryButtons();
+  renderPrintList(situation);
 
   renderSituationSwitch(situation);
   renderPrimaryField(situation);
@@ -567,4 +706,10 @@ function render() {
 // Запускается только в браузере: проверка оставлена той же, что в apk/app.js,
 // чтобы модуль можно было импортировать вне DOM, не выполняя рендер.
 
-if (typeof document !== 'undefined') render();
+function init() {
+  document.getElementById('copy-terms')?.addEventListener('click', copyTerms);
+  document.getElementById('print-terms')?.addEventListener('click', printTerms);
+  render();
+}
+
+if (typeof document !== 'undefined') init();
