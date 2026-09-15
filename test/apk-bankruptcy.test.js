@@ -6,7 +6,10 @@
 // БАНКРОТСТВО.6 (ст. 213.29, обычный месячный узел, без restoration),
 // БАНКРОТСТВО.7.1 (ст. 61.14 п. 5 и п. 6 — первые узлы с kind:
 // 'capped_term', минимум из нескольких кумулятивных потолков, плюс два
-// restoration-узла, считающих два года от уже вычисленного дедлайна).
+// restoration-узла, считающих два года от уже вычисленного дедлайна) и
+// новый узел ст. 223.6 п. 1 (завершение внесудебного банкротства гражданина
+// — первый узел домена с kind: 'event', та же арифметика computeSimpleTerm,
+// что у обычного месячного узла, но результат не подаваемый срок).
 //
 // Отдельный файл от test/apk-chain.test.js: домен банкротства — отдельный
 // правовой институт (ФЗ № 127-ФЗ), не часть процессуальной цепочки АПК, см.
@@ -32,6 +35,8 @@ import {
   computeSubsidiaryLiabilityInCaseApkRestoration,
   computeSubsidiaryLiabilityPostConclusionApk,
   computeSubsidiaryLiabilityPostConclusionApkRestoration,
+  computeOutOfCourtBankruptcyCompletionApk,
+  OUT_OF_COURT_BANKRUPTCY_COMPLETION_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -674,4 +679,49 @@ test("markExpired: 'capped_term' с дедлайном в будущем не п
   const cards = [{ id: 'capped', kind: 'capped_term', status: 'computed', deadline: '2030-01-15' }];
   markExpired(cards, {}, '2025-06-01', config);
   assert.equal(cards[0].status, 'computed');
+});
+
+// --- Завершение процедуры внесудебного банкротства гражданина (п. 1 ст. 223.6) -
+//
+// Первый узел домена с kind: 'event'. Арифметика — computeSimpleTerm, та же,
+// что у обычного 'month'-узла (ср. тесты выше на ст. 71 п. 8/ст. 142 п. 1);
+// здесь проверяется именно расчёт (compute-функция), форма итоговой карточки
+// (kind: 'event', card.date, status: 'resolved') — в test/apk-bankruptcy-ui.test.js.
+
+test('завершение внесудебного банкротства: шесть календарных месяцев от даты включения сведений в ЕФРСБ', () => {
+  const term = computeOutOfCourtBankruptcyCompletionApk({
+    out_of_court_bankruptcy_initiation_notice_included_date_apk: '2025-03-11',
+  });
+  assert.equal(term.id, 'out_of_court_bankruptcy_completion_apk');
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-09-11');
+  assert.ok(isWorkingDay('2025-09-11'));
+  assert.equal(term.deadline, '2025-09-11');
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'п. 1 ст. 223.6 ФЗ № 127-ФЗ');
+});
+
+test('завершение внесудебного банкротства: результат выпадает на нерабочий день — перенос конца', () => {
+  // 05.01.2025 + 6 месяцев = 05.07.2025 — суббота, перенос на понедельник.
+  const term = computeOutOfCourtBankruptcyCompletionApk({
+    out_of_court_bankruptcy_initiation_notice_included_date_apk: '2025-01-05',
+  });
+  assert.equal(term.raw_deadline, '2025-07-05');
+  assert.ok(!isWorkingDay('2025-07-05'));
+  assert.equal(term.deadline, '2025-07-07');
+  assert.equal(term.shifted, true);
+});
+
+test('завершение внесудебного банкротства: без якоря — явная ошибка с названием поля', () => {
+  assert.throws(
+    () => computeOutOfCourtBankruptcyCompletionApk({}),
+    /out_of_court_bankruptcy_initiation_notice_included_date_apk/,
+  );
+});
+
+test('завершение внесудебного банкротства: без midnight_rule на узле — событие, а не подаваемый срок', () => {
+  // Точечная проверка решения из шапки apk/bankruptcy.js: ч. 5, 6 ст. 114
+  // АПК РФ — про действие, совершаемое стороной, а здесь сторона ничего не
+  // подаёт. Поле сознательно отсутствует, а не пустая строка по недосмотру.
+  assert.equal(OUT_OF_COURT_BANKRUPTCY_COMPLETION_APK.midnight_rule, undefined);
 });

@@ -118,6 +118,17 @@
       .deadline { font-size: 26px; font-weight: 700; letter-spacing: .01em; }
       .norm { color: var(--muted); font-size: 14px; margin-top: 4px; }
 
+      /* Карточка-событие (ст. 223.6 п. 1): строка текста, без карточки —
+         перенесено из apk.html вместе с renderEvent (apk/bankruptcy-app.js). */
+      .event-line {
+        margin: 0 0 14px; padding: 10px 4px 10px 14px;
+        border-left: 3px solid var(--line);
+      }
+      .event-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+      .event-text { font-size: 16px; font-weight: 600; }
+      .event-text.done { color: var(--ok); }
+      .event-head .norm { margin-top: 0; font-size: 13px; }
+
       details.more { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
       details.more > summary {
         cursor: pointer; color: var(--accent); font-size: 14px; font-weight: 600;

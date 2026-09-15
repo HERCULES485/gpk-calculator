@@ -31,6 +31,7 @@ import {
   computeSubsidiaryLiabilityInCaseApkRestoration,
   computeSubsidiaryLiabilityPostConclusionApk,
   computeSubsidiaryLiabilityPostConclusionApkRestoration,
+  computeOutOfCourtBankruptcyCompletionApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -41,6 +42,7 @@ import {
   SUBSIDIARY_LIABILITY_IN_CASE_APK_RESTORATION,
   SUBSIDIARY_LIABILITY_POST_CONCLUSION_APK,
   SUBSIDIARY_LIABILITY_POST_CONCLUSION_APK_RESTORATION,
+  OUT_OF_COURT_BANKRUPTCY_COMPLETION_APK,
 } from './bankruptcy.js';
 
 import {
@@ -165,6 +167,45 @@ export function cappedTermCard(node, result) {
   return card;
 }
 
+// --- Карточка узла-события (kind: 'event') ------------------------------------
+//
+// ПЕРВЫЙ узел домена банкротства этого вида — завершение процедуры
+// внесудебного банкротства (п. 1 ст. 223.6 ФЗ № 127-ФЗ, узел
+// OUT_OF_COURT_BANKRUPTCY_COMPLETION_APK). Не срок, который кто-либо подаёт, —
+// момент смены статуса, наступающий сам по истечении шести месяцев.
+//
+// По образцу eventCard из apk/views.js (там — вступление акта АПК в законную
+// силу): та же тройка полей результата — kind: 'event', status: 'resolved'
+// (не 'computed', как у term), дата в поле card.date (не card.deadline,
+// который у события по смыслу нет — оно не имеет «последнего дня подачи»).
+//
+// Отличие от apk/views.js — не форма карточки, а откуда берётся дата. Там
+// entry.date считается вне computeSimpleTerm: либо вводится явно (дата акта
+// вышестоящей инстанции), либо выводится из дедлайна соседнего узла плюс
+// день, и entry.based_on объясняет, какой из двух путей сработал. Здесь якорь
+// один и явный (дата включения сведений в ЕФРСБ), поэтому дата считается
+// обычным computeSimpleTerm — той же арифметикой, что и у term-узлов этого
+// домена, — а card.based_on этому узлу не нужен и не заполняется: выбирать
+// не из чего, объяснять нечего.
+function eventCard(node, term) {
+  const card = {
+    id: node.id,
+    kind: 'event',
+    title: node.title,
+    status: 'resolved',
+    norm: term.norm.primary,
+    date: term.deadline,
+    details: {
+      collapsed: true,
+      logic: term.logic,
+      calculation: term.norm.calculation,
+      midnight_rule: term.midnight_rule,
+    },
+  };
+  attachCalendarWarning(card, card.date);
+  return card;
+}
+
 // Строители карточек по внутреннему виду узла. Сигнатура карты — (node, term),
 // как в CARD_BUILDERS_APK; workingDayCard из ядра принимает только term, и
 // узел ей не нужен (весь заголовок и норма уже в результате расчёта) — поэтому
@@ -172,10 +213,12 @@ export function cappedTermCard(node, result) {
 //
 // Ключ 'working_day' — выбор строителя, а не вид готовой карточки: сама
 // workingDayCard проставляет kind: 'term', и для markExpired, сводок и
-// страницы такая карточка неотличима от обычного срока.
+// страницы такая карточка неотличима от обычного срока. Ключ 'event',
+// наоборот, совпадает с итоговым card.kind — как и у 'capped_term'.
 const CARD_BUILDERS_BANKRUPTCY = {
   capped_term: cappedTermCard,
   working_day: (_node, term) => workingDayCard(term),
+  event: eventCard,
 };
 
 // --- Зависимости узлов --------------------------------------------------------
@@ -283,6 +326,12 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     node: SUBSIDIARY_LIABILITY_POST_CONCLUSION_APK_RESTORATION,
     deps: subsidiaryPostConclusionDeps,
     compute: (i) => computeSubsidiaryLiabilityPostConclusionApkRestoration(i),
+  },
+  out_of_court_bankruptcy_completion_apk: {
+    node: OUT_OF_COURT_BANKRUPTCY_COMPLETION_APK,
+    kind: 'event',
+    deps: () => ['out_of_court_bankruptcy_initiation_notice_included_date_apk'],
+    compute: (i) => computeOutOfCourtBankruptcyCompletionApk(i),
   },
 };
 
