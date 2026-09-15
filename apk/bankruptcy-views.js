@@ -32,6 +32,7 @@ import {
   computeSubsidiaryLiabilityPostConclusionApk,
   computeSubsidiaryLiabilityPostConclusionApkRestoration,
   computeOutOfCourtBankruptcyCompletionApk,
+  computeOutOfCourtBankruptcyReapplicationApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -43,6 +44,7 @@ import {
   SUBSIDIARY_LIABILITY_POST_CONCLUSION_APK,
   SUBSIDIARY_LIABILITY_POST_CONCLUSION_APK_RESTORATION,
   OUT_OF_COURT_BANKRUPTCY_COMPLETION_APK,
+  OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_APK,
 } from './bankruptcy.js';
 
 import {
@@ -169,24 +171,30 @@ export function cappedTermCard(node, result) {
 
 // --- Карточка узла-события (kind: 'event') ------------------------------------
 //
-// ПЕРВЫЙ узел домена банкротства этого вида — завершение процедуры
-// внесудебного банкротства (п. 1 ст. 223.6 ФЗ № 127-ФЗ, узел
-// OUT_OF_COURT_BANKRUPTCY_COMPLETION_APK). Не срок, который кто-либо подаёт, —
-// момент смены статуса, наступающий сам по истечении шести месяцев.
+// Общий билдер на ДВА узла этого вида: завершение процедуры внесудебного
+// банкротства (п. 1 ст. 223.6, OUT_OF_COURT_BANKRUPTCY_COMPLETION_APK) и
+// право на повторную подачу после возврата заявления (п. 6 ст. 223.2,
+// OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_APK). Оба — не срок, который
+// кто-либо подаёт, а момент смены статуса, наступающий сам.
 //
 // По образцу eventCard из apk/views.js (там — вступление акта АПК в законную
 // силу): та же тройка полей результата — kind: 'event', status: 'resolved'
 // (не 'computed', как у term), дата в поле card.date (не card.deadline,
 // который у события по смыслу нет — оно не имеет «последнего дня подачи»).
 //
+// Текст строки и пояснение — ДАННЫЕ узла (node.event_text_template с
+// плейсхолдером {date}, node.event_hint), а не константа этого билдера или
+// renderEvent: у двух узлов смысл события разный («завершена» vs «право на
+// подачу открыто»), а форма карточки — одна. Билдер только переносит эти
+// два поля в card как есть, не формулирует их сам.
+//
 // Отличие от apk/views.js — не форма карточки, а откуда берётся дата. Там
 // entry.date считается вне computeSimpleTerm: либо вводится явно (дата акта
 // вышестоящей инстанции), либо выводится из дедлайна соседнего узла плюс
-// день, и entry.based_on объясняет, какой из двух путей сработал. Здесь якорь
-// один и явный (дата включения сведений в ЕФРСБ), поэтому дата считается
-// обычным computeSimpleTerm — той же арифметикой, что и у term-узлов этого
-// домена, — а card.based_on этому узлу не нужен и не заполняется: выбирать
-// не из чего, объяснять нечего.
+// день, и entry.based_on объясняет, какой из двух путей сработал. Здесь у
+// обоих узлов якорь один и явный, поэтому дата считается обычным
+// computeSimpleTerm — той же арифметикой, что и у term-узлов этого домена, —
+// а card.based_on им не нужен и не заполняется: выбирать не из чего.
 function eventCard(node, term) {
   const card = {
     id: node.id,
@@ -195,6 +203,12 @@ function eventCard(node, term) {
     status: 'resolved',
     norm: term.norm.primary,
     date: term.deadline,
+    // Текст строки и пояснение — из узла как есть, без изменений: смысл
+    // события у каждого узла свой (завершение процедуры vs открытие права
+    // на повторную подачу), билдер этот текст не формулирует, только
+    // переносит.
+    eventTextTemplate: node.event_text_template,
+    hint: node.event_hint,
     details: {
       collapsed: true,
       logic: term.logic,
@@ -332,6 +346,12 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     kind: 'event',
     deps: () => ['out_of_court_bankruptcy_initiation_notice_included_date_apk'],
     compute: (i) => computeOutOfCourtBankruptcyCompletionApk(i),
+  },
+  out_of_court_bankruptcy_reapplication_apk: {
+    node: OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_APK,
+    kind: 'event',
+    deps: () => ['out_of_court_bankruptcy_return_date_apk'],
+    compute: (i) => computeOutOfCourtBankruptcyReapplicationApk(i),
   },
 };
 

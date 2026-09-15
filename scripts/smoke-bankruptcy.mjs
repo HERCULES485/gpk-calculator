@@ -91,8 +91,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 6,
-  'переключатель ситуаций отрисован не на шесть ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 7,
+  'переключатель ситуаций отрисован не на семь ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -465,6 +465,21 @@ if (await eventLine.count()) {
     !/последний день подачи/i.test(text),
     `карточка-событие несёт подпись срока заявителя, хотя событие не подаётся: «${text}»`,
   );
+  // Точный текст строки и hint — регрессия на обобщение renderEvent под
+  // card.eventTextTemplate/card.hint (задача ст. 223.2 п. 6): раньше эти две
+  // фразы были константой самого renderEvent, теперь — данные узла. Проверка
+  // буква в букву, а не includes(), чтобы перенос в узел не смог незаметно
+  // подменить уже показанную пользователю формулировку.
+  check(
+    (await eventLine.locator('.event-text').innerText()) === 'Процедура завершена 11.09.2025',
+    `текст строки события изменился при обобщении renderEvent: «${await eventLine.locator('.event-text').innerText()}»`,
+  );
+  check(
+    (await eventLine.locator('.hint').innerText()) ===
+      'С этой даты гражданин считается освобождённым от дальнейшего исполнения ' +
+        'требований кредиторов, указанных им в заявлении.',
+    `hint под карточкой-событием изменился при обобщении renderEvent: «${await eventLine.locator('.hint').innerText()}»`,
+  );
   check(
     (await eventLine.locator('.deadline-caption').count()) === 0,
     'у карточки-события есть .deadline-caption — это класс term-карточки',
@@ -488,6 +503,63 @@ check(
   copiedEvent.includes('Завершение процедуры внесудебного банкротства гражданина'),
   'название узла-события не попало в сводку копирования',
 );
+
+// --- Ветвь 7: заявление о внесудебном банкротстве вернули (второй kind: 'event') -
+//
+// ВТОРОЙ узел домена с kind: 'event' — проверяется тот же общий рендерер
+// (renderEvent/eventCard), что и у ст. 223.6 п. 1, но со СВОИМ текстом и
+// hint, а не унаследованными от первого узла по ошибке (регрессия на
+// обобщение renderEvent под card.eventTextTemplate/card.hint). Сырой
+// outerHTML распечатан в консоль — для показа на проверку архитектору.
+
+await chooseSituation('out_of_court_bankruptcy_returned');
+check(
+  (await page.locator('#in-out_of_court_bankruptcy_return_date_apk').count()) === 1,
+  'ветвь "out_of_court_bankruptcy_returned": основное поле не найдено в DOM',
+);
+await page.fill('#in-out_of_court_bankruptcy_return_date_apk', '11.03.2025');
+await settle();
+
+const reapplicationLine = page
+  .locator('.event-line')
+  .filter({ hasText: 'Право на повторную подачу' });
+check(
+  (await reapplicationLine.count()) === 1,
+  'карточка-событие права на повторную подачу не появилась',
+);
+if (await reapplicationLine.count()) {
+  const text = await reapplicationLine.innerText();
+  check(text.includes('11.04.2025'), `дата права на повторную подачу посчитана неверно: «${text}»`);
+  check(
+    text.includes('п. 6 ст. 223.2 ФЗ № 127-ФЗ'),
+    `норма не показана на карточке-событии: «${text}»`,
+  );
+  check(!/последний день подачи/i.test(text), `карточка-событие несёт подпись срока заявителя: «${text}»`);
+  check(
+    (await reapplicationLine.locator('.event-text').innerText()) ===
+      'Право на повторную подачу — с 11.04.2025',
+    `текст строки события не соответствует ожидаемому: «${await reapplicationLine.locator('.event-text').innerText()}»`,
+  );
+  const reapplicationHint = await reapplicationLine.locator('.hint').innerText();
+  check(
+    reapplicationHint ===
+      'С этой даты гражданин вправе повторно обратиться в МФЦ с заявлением о ' +
+        'признании его банкротом во внесудебном порядке.',
+    `hint карточки права на повторную подачу неверен: «${reapplicationHint}»`,
+  );
+  // Не спутан с текстом соседнего узла-события (ст. 223.6 п. 1).
+  check(!text.includes('Процедура завершена'), `текст соседнего узла протёк в эту карточку: «${text}»`);
+  check(
+    !text.includes('освобождённым от дальнейшего исполнения'),
+    `hint соседнего узла протёк в эту карточку: «${text}»`,
+  );
+
+  // Сырой outerHTML — на проверку архитектору.
+  console.log(
+    'REAPPLICATION EVENT CARD outerHTML:',
+    await reapplicationLine.first().evaluate((el) => el.outerHTML),
+  );
+}
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------
 //

@@ -43,7 +43,7 @@ const BANKRUPTCY_NODE_IDS = Object.values(bankruptcyModule)
   )
   .map((v) => v.id);
 
-// Полный набор входных данных на все одиннадцать узлов сразу. Даты — из
+// Полный набор входных данных на все двенадцать узлов сразу. Даты — из
 // тестов расчёта (test/apk-bankruptcy.test.js), кроме тех, что там задавались
 // в отдельных сценариях: здесь важно, что расчёт проходит, а не какие именно
 // получаются числа (их проверяют тесты расчёта).
@@ -60,6 +60,7 @@ const FULL_INPUTS = {
   subsidiary_liability_conduct_date_apk: '2020-01-01',
   bankruptcy_proceeding_conclusion_date_apk: '2022-03-10',
   out_of_court_bankruptcy_initiation_notice_included_date_apk: '2025-03-11',
+  out_of_court_bankruptcy_return_date_apk: '2025-03-11',
 };
 
 const cardById = (view, id) => view.cards.find((c) => c.id === id);
@@ -67,8 +68,8 @@ const incompleteById = (view, id) => view.incomplete.find((n) => n.id === id);
 
 // --- 1. Покрытие ситуаций ------------------------------------------------------
 
-test('банкротство UI: каждый из одиннадцати узлов закреплён ровно за одной ситуацией', () => {
-  assert.equal(BANKRUPTCY_NODE_IDS.length, 11);
+test('банкротство UI: каждый из двенадцати узлов закреплён ровно за одной ситуацией', () => {
+  assert.equal(BANKRUPTCY_NODE_IDS.length, 12);
   assert.doesNotThrow(() => checkSituationCoverage(BANKRUPTCY_NODE_IDS, SITUATIONS_BANKRUPTCY));
   // Обратная сторона того же инварианта: в ситуациях нет узлов-призраков,
   // которых в apk/bankruptcy.js уже (или ещё) нет.
@@ -78,7 +79,7 @@ test('банкротство UI: каждый из одиннадцати узл
   );
 });
 
-test('банкротство UI: шесть ветвей ожидаемого состава, ситуация по умолчанию существует', () => {
+test('банкротство UI: семь ветвей ожидаемого состава, ситуация по умолчанию существует', () => {
   assert.deepEqual(
     SITUATIONS_BANKRUPTCY.map((s) => s.id),
     [
@@ -88,6 +89,7 @@ test('банкротство UI: шесть ветвей ожидаемого с
       'subsidiary_in_case',
       'subsidiary_post_conclusion',
       'out_of_court_bankruptcy',
+      'out_of_court_bankruptcy_returned',
     ],
   );
   assert.ok(SITUATIONS_BANKRUPTCY.some((s) => s.id === DEFAULT_SITUATION_BANKRUPTCY));
@@ -108,9 +110,9 @@ test('банкротство UI: у каждого поля всех ветве�
 
 // --- 2. Полный набор данных ----------------------------------------------------
 
-test('банкротство UI: полный набор данных — одиннадцать карточек, incomplete пуст', () => {
+test('банкротство UI: полный набор данных — двенадцать карточек, incomplete пуст', () => {
   const view = buildViewBankruptcy(FULL_INPUTS);
-  assert.equal(view.cards.length, 11);
+  assert.equal(view.cards.length, 12);
   assert.deepEqual(view.incomplete, []);
   assert.deepEqual(view.stubs, []);
   assert.deepEqual([...view.cards.map((c) => c.id)].sort(), [...BANKRUPTCY_NODE_IDS].sort());
@@ -121,10 +123,10 @@ test('банкротство UI: полный набор данных — оди
   );
 });
 
-test('банкротство UI: пустой ввод — ни одной карточки, все одиннадцать узлов в incomplete', () => {
+test('банкротство UI: пустой ввод — ни одной карточки, все двенадцать узлов в incomplete', () => {
   const view = buildViewBankruptcy({});
   assert.deepEqual(view.cards, []);
-  assert.equal(view.incomplete.length, 11);
+  assert.equal(view.incomplete.length, 12);
   for (const node of view.incomplete) {
     assert.equal(node.status, 'not_computed');
     assert.ok(node.missing_inputs.length > 0);
@@ -322,6 +324,25 @@ test("карточка события: kind 'event', дата в поле date (
   assert.ok(card.details.logic);
 });
 
+test('карточка события: текст строки и hint — ТОЧНО тот же, что был зашит в renderEvent до обобщения', () => {
+  // Регрессия на обобщение renderEvent/eventCard под card.eventTextTemplate/
+  // card.hint (ст. 223.2 п. 6): до этой задачи текст «Процедура завершена
+  // {date}» и hint ниже были константой самого renderEvent, теперь — данные
+  // узла OUT_OF_COURT_BANKRUPTCY_COMPLETION_APK. Проверяется буква в букву,
+  // а не только наличие полей — иначе перенос текста в узел мог бы незаметно
+  // изменить формулировку, которую пользователь уже видел на экране.
+  const view = buildViewBankruptcy({
+    out_of_court_bankruptcy_initiation_notice_included_date_apk: '2025-03-11',
+  });
+  const card = cardById(view, 'out_of_court_bankruptcy_completion_apk');
+  assert.equal(card.eventTextTemplate, 'Процедура завершена {date}');
+  assert.equal(
+    card.hint,
+    'С этой даты гражданин считается освобождённым от дальнейшего исполнения ' +
+      'требований кредиторов, указанных им в заявлении.',
+  );
+});
+
 test('карточка события: перенос на рабочий день отражён в card.date', () => {
   // 05.01.2025 + 6 месяцев = 05.07.2025 — суббота, перенос на понедельник
   // (тот же сценарий, что в тесте расчёта).
@@ -340,6 +361,54 @@ test('карточка события: без якоря — узел в incompl
   assert.deepEqual(
     node.missing_inputs.map((f) => f.id),
     ['out_of_court_bankruptcy_initiation_notice_included_date_apk'],
+  );
+  assert.ok(node.missing_inputs[0].label);
+});
+
+// --- 4b. Второй узел-событие: право на повторную подачу (п. 6 ст. 223.2) -------
+//
+// Тот же билдер eventCard, что и у ст. 223.6 п. 1 (проверено фактчеком до
+// реализации) — здесь проверяется, что ВТОРОЙ узел получает СВОИ текст и
+// hint, а не унаследованные от первого по ошибке.
+
+test("карточка права на повторную подачу: kind 'event', свои дата/норма/текст, не спутаны с узлом ст. 223.6", () => {
+  const view = buildViewBankruptcy({
+    out_of_court_bankruptcy_return_date_apk: '2025-03-11',
+  });
+  const card = cardById(view, 'out_of_court_bankruptcy_reapplication_apk');
+  assert.equal(card.kind, 'event');
+  assert.equal(card.status, 'resolved');
+  assert.equal(card.date, '2025-04-11');
+  assert.equal(card.deadline, undefined);
+  assert.equal(card.norm, 'п. 6 ст. 223.2 ФЗ № 127-ФЗ');
+  assert.equal(card.title, 'Право на повторную подачу заявления о внесудебном банкротстве');
+  assert.equal(card.eventTextTemplate, 'Право на повторную подачу — с {date}');
+  assert.equal(
+    card.hint,
+    'С этой даты гражданин вправе повторно обратиться в МФЦ с заявлением о ' +
+      'признании его банкротом во внесудебном порядке.',
+  );
+  // Не спутан с текстом соседнего узла-события.
+  assert.notEqual(card.eventTextTemplate, 'Процедура завершена {date}');
+});
+
+test('карточка права на повторную подачу: перенос на рабочий день отражён в card.date', () => {
+  // 01.02.2025 + 1 месяц = 01.03.2025 — суббота, перенос на понедельник.
+  const view = buildViewBankruptcy({
+    out_of_court_bankruptcy_return_date_apk: '2025-02-01',
+  });
+  const card = cardById(view, 'out_of_court_bankruptcy_reapplication_apk');
+  assert.equal(card.date, '2025-03-03');
+});
+
+test('карточка права на повторную подачу: без якоря — узел в incomplete с подписью поля', () => {
+  const view = buildViewBankruptcy({});
+  const node = incompleteById(view, 'out_of_court_bankruptcy_reapplication_apk');
+  assert.ok(node);
+  assert.equal(node.kind, 'event');
+  assert.deepEqual(
+    node.missing_inputs.map((f) => f.id),
+    ['out_of_court_bankruptcy_return_date_apk'],
   );
   assert.ok(node.missing_inputs[0].label);
 });
@@ -404,7 +473,7 @@ test('банкротство UI: ни одна карточка не несёт 
   // Негативный тест: признак экспортируемости не должен появиться на карточке
   // по недосмотру — ни как поле ics, ни как метаданные реестра сроков.
   const view = buildViewBankruptcy(FULL_INPUTS);
-  assert.equal(view.cards.length, 11);
+  assert.equal(view.cards.length, 12);
   for (const card of view.cards) {
     assert.equal(card.ics, undefined, `у карточки "${card.id}" появилось поле ics`);
     assert.equal(card.ics_meta, undefined);
