@@ -24,3 +24,5 @@ jobs:
       - run: node scripts/smoke.mjs
 
       - run: node scripts/smoke-apk.mjs
+
+      - run: node scripts/smoke-bankruptcy.mjs
