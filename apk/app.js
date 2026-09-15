@@ -1043,7 +1043,7 @@ function printTerms() {
 function printItem(item) {
   const box = el('div', 'print-item');
   box.appendChild(el('div', 'print-item-title', item.caption ? `${item.title} · ${item.caption}` : item.title));
-  box.appendChild(el('div', 'print-date', isoToRu(item.deadline)));
+  box.appendChild(el('div', 'print-date', item.date));
   box.appendChild(el('div', 'print-norm', item.norm));
   return box;
 }

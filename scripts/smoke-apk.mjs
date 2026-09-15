@@ -98,6 +98,30 @@ if (await appealCard.count()) {
   check(deadline === '11.04.2025', `ждали дедлайн 11.04.2025, получили «${deadline}»`);
 }
 
+// --- Печатный список: дата не пустая (регрессия) --------------------------------
+//
+// printItem() брал isoToRu(item.deadline) — у результата caseSummaryItems() нет
+// поля deadline (дата приходит в поле date, уже отформатированная), поэтому
+// печаталось isoToRu(undefined) === '', и распечатка сроков выходила без дат.
+// web/app.js (ГПК) и apk/bankruptcy-app.js этой ошибки не содержат — сверено при
+// починке. Кнопка активируется тем же currentSummary, что заполняет печатный
+// список, поэтому проверка запускается сразу на карточке из сценария 1.
+check((await page.locator('#print-terms').count()) === 1, 'нет кнопки «Распечатать»');
+check(
+  (await page.locator('#print-terms').isDisabled()) === false,
+  'кнопка «Распечатать» заблокирована при посчитанном сроке',
+);
+const printDates = await page.locator('#print-list .print-date').allInnerTexts();
+check(printDates.length >= 1, 'печатный список пуст при посчитанном сроке');
+check(
+  printDates.every((d) => /^\d{2}\.\d{2}\.\d{4}$/.test(d.trim())),
+  `в печатном списке дата пустая или не в формате ДД.ММ.ГГГГ: ${JSON.stringify(printDates)}`,
+);
+check(
+  printDates.some((d) => d.trim() === '11.04.2025'),
+  `дедлайн апелляционной жалобы не попал в печатный список: ${JSON.stringify(printDates)}`,
+);
+
 // --- Формулировка ссылки на уже показанное поле (задача UI.5, п. 2) -----------
 //
 // subject_category — общее поле трёх узлов восстановления одной ветви; оно
