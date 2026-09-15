@@ -91,8 +91,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 5,
-  'переключатель ситуаций отрисован не на пять ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 6,
+  'переключатель ситуаций отрисован не на шесть ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -428,6 +428,65 @@ check(
 check(
   printDates.some((d) => d.trim() === '20.05.2026'),
   'итоговая дата capped_term не попала в печатный список',
+);
+
+// --- Ветвь 6: внесудебное банкротство гражданина (kind: 'event') --------------
+//
+// ПЕРВЫЙ живой рендер kind: 'event' на этой странице (узел ст. 223.6 п. 1,
+// завершение процедуры внесудебного банкротства). Проверяется: карточка есть,
+// рендерится без ошибок, БЕЗ подписи «последний день подачи» и без классов
+// term-карточки (.deadline-caption/.deadline) — у события их быть не должно,
+// оно не подаётся, а наступает само. Сырой outerHTML карточки распечатан в
+// консоль — тем же способом, что для сценария с ничьёй у capped_term, — для
+// показа на проверку архитектору.
+
+await chooseSituation('out_of_court_bankruptcy');
+check(
+  (await page.locator('#in-out_of_court_bankruptcy_initiation_notice_included_date_apk').count()) ===
+    1,
+  'ветвь "out_of_court_bankruptcy": основное поле не найдено в DOM',
+);
+await page.fill('#in-out_of_court_bankruptcy_initiation_notice_included_date_apk', '11.03.2025');
+await settle();
+
+const eventLine = page.locator('.event-line').filter({ hasText: 'Процедура завершена' });
+check(
+  (await eventLine.count()) === 1,
+  'карточка-событие завершения внесудебного банкротства не появилась',
+);
+if (await eventLine.count()) {
+  const text = await eventLine.innerText();
+  check(text.includes('11.09.2025'), `дата события посчитана неверно: «${text}»`);
+  check(
+    text.includes('п. 1 ст. 223.6 ФЗ № 127-ФЗ'),
+    `норма не показана на карточке-событии: «${text}»`,
+  );
+  check(
+    !/последний день подачи/i.test(text),
+    `карточка-событие несёт подпись срока заявителя, хотя событие не подаётся: «${text}»`,
+  );
+  check(
+    (await eventLine.locator('.deadline-caption').count()) === 0,
+    'у карточки-события есть .deadline-caption — это класс term-карточки',
+  );
+  check(
+    (await eventLine.locator('.deadline').count()) === 0,
+    'у карточки-события есть .deadline — это класс term-карточки',
+  );
+
+  // Сырой outerHTML — на проверку архитектору.
+  console.log('EVENT CARD outerHTML:', await eventLine.first().evaluate((el) => el.outerHTML));
+}
+
+// Сводка: событие тоже попадает в копирование (card.date, не card.deadline —
+// см. summaryEntries в apk/bankruptcy-app.js).
+await page.click('#copy-terms');
+await settle();
+const copiedEvent = await page.evaluate(() => navigator.clipboard.readText());
+check(copiedEvent.includes('11.09.2025'), `дата события не попала в сводку копирования: «${copiedEvent}»`);
+check(
+  copiedEvent.includes('Завершение процедуры внесудебного банкротства гражданина'),
+  'название узла-события не попало в сводку копирования',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------

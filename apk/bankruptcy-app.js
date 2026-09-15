@@ -310,6 +310,44 @@ function expiredNote(card) {
   );
 }
 
+// Строка-событие (ст. 223.6 п. 1): не срок, а момент завершения процедуры
+// внесудебного банкротства и автоматического освобождения гражданина от
+// долгов. Перенос renderEvent из apk/app.js максимально близко к оригиналу —
+// тот же каркас (event-line/event-head/event-text/.norm + hint + calendar_warning
+// + details), поля карточки читаются из тех же имён (card.date, card.norm,
+// details), что подтверждено при сверке с eventCard в apk/views.js:189 и
+// src/views.js.
+//
+// Не перенесено дословно: строка «Основание расчёта: …» и таблица
+// basedOnText из apk/app.js — там она объясняет, какой из ДВУХ путей вычисления
+// сработал (явный ввод даты акта вышестоящей инстанции ИЛИ дедлайн соседнего
+// узла +1 день), и card.based_on для этого обязателен. У этого узла путь
+// вычисления один (единственный явный якорь — дата включения сведений в
+// ЕФРСБ), card.based_on не заполняется (см. apk/bankruptcy-views.js), и
+// строка, ссылающаяся на несуществующее поле, была бы неверна по смыслу —
+// это не «переизобретение формы», а тот самый случай, где текст оригинала
+// domain-специфичен и переносить его буквально означало бы соврать.
+function renderEvent(card) {
+  const box = el('div', 'event-line');
+  const head = el('div', 'event-head');
+  head.appendChild(
+    el('span', 'event-text done', `Процедура завершена ${isoToRu(card.date)}`),
+  );
+  head.appendChild(el('span', 'norm', card.norm));
+  box.appendChild(head);
+  box.appendChild(
+    el(
+      'div',
+      'hint',
+      'С этой даты гражданин считается освобождённым от дальнейшего исполнения ' +
+        'требований кредиторов, указанных им в заявлении.',
+    ),
+  );
+  if (card.calendar_warning) box.appendChild(calendarWarning(card));
+  if (card.details) box.appendChild(renderDetails(card.details));
+  return box;
+}
+
 function renderTermCard(card) {
   const c = el('div', 'card');
   c.appendChild(el('div', 'kicker', 'Срок'));
@@ -454,16 +492,24 @@ let currentSummary = [];
 function summaryEntries(cards) {
   const entries = [];
   for (const card of cards) {
-    if (card.kind !== 'term' && card.kind !== 'capped_term') continue;
-    if (!card.deadline) continue;
-    entries.push({
-      title: card.title,
-      deadline: card.deadline,
-      norm: card.norm,
-      // Все сроки этого домена — сроки заявителя: подпись «последний день
-      // подачи». Сроков суда (kind: 'court') и событий среди узлов нет.
-      kind: 'applicant',
-    });
+    if (card.kind === 'term' || card.kind === 'capped_term') {
+      if (!card.deadline) continue;
+      entries.push({
+        title: card.title,
+        deadline: card.deadline,
+        norm: card.norm,
+        // Сроки заявителя — подпись «последний день подачи». Сроков суда
+        // (kind: 'court') среди узлов этого домена нет.
+        kind: 'applicant',
+      });
+    } else if (card.kind === 'event') {
+      // Дата события — в поле card.date, не card.deadline (у события нет
+      // «последнего дня подачи»); caseSummaryItems() выводит ту же дату без
+      // подписи для kind: 'event' (core/export/links.js:captionFor). Тот же
+      // приём, что и в apk/app.js:summaryEntries для entry_into_force_apk.
+      if (!card.date) continue;
+      entries.push({ title: card.title, deadline: card.date, norm: card.norm, kind: 'event' });
+    }
   }
   return entries;
 }
@@ -683,6 +729,7 @@ function render() {
     if (card) {
       if (card.kind === 'capped_term') root.appendChild(renderCappedTerm(card));
       else if (card.kind === 'error') root.appendChild(renderErrorCard(card));
+      else if (card.kind === 'event') root.appendChild(renderEvent(card));
       // Остальное — обычный срок: и карточка, построенная monthTermCard, и
       // карточка working_day-узла (workingDayCard сама проставляет kind:'term',
       // отдельной ветки ей не нужно).
