@@ -91,8 +91,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 8,
-  'переключатель ситуаций отрисован не на восемь ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 9,
+  'переключатель ситуаций отрисован не на девять ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -613,6 +613,98 @@ if (await priorLine.count()) {
   // Сырой outerHTML — на проверку архитектору.
   console.log('PRIOR-PROCEDURE EVENT CARD outerHTML:', await priorLine.first().evaluate((el) => el.outerHTML));
 }
+
+// --- Ветвь 9: мировое соглашение (ПЕРВЫЙ живой рендер kind: 'window') ----------
+//
+// Результат не одна дата, а две границы. Проверяется: обе показаны с подписями
+// «Не ранее»/«Не позднее», нижняя строго раньше верхней, подписи «последний
+// день подачи» (это term-карточка) на окне нет, а состояний окна ('open'/
+// 'empty') у этого узла не бывает — строки card.note быть не должно. Сырой
+// outerHTML распечатан в консоль на проверку архитектору.
+
+await chooseSituation('settlement_agreement');
+check(
+  (await page.locator('#in-settlement_agreement_conclusion_date_apk').count()) === 1,
+  'ветвь "settlement_agreement": основное поле не найдено в DOM',
+);
+// Якорь в канун новогодних каникул: по календарным дням окно попало бы внутрь
+// праздников, по рабочим — уезжает на две недели вперёд.
+await page.fill('#in-settlement_agreement_conclusion_date_apk', '26.12.2025');
+await settle();
+
+const windowCardLocator = cardByTitle('Заявление об утверждении мирового соглашения');
+check((await windowCardLocator.count()) === 1, 'карточка-окно мирового соглашения не появилась');
+if (await windowCardLocator.count()) {
+  const text = await windowCardLocator.innerText();
+  const captions = await windowCardLocator.locator('.deadline-caption').allInnerTexts();
+  const dates = await windowCardLocator.locator('.deadline').allInnerTexts();
+
+  // Регистр не сравниваем: у .deadline-caption в CSS стоит text-transform:
+  // uppercase, и innerText отдаёт уже отрисованный текст («НЕ РАНЕЕ»), тогда
+  // как в разметке он записан как «Не ранее».
+  check(
+    JSON.stringify(captions.map((t) => t.trim().toLowerCase())) ===
+      JSON.stringify(['не ранее', 'не позднее']),
+    `подписи границ окна неверны: ${JSON.stringify(captions)}`,
+  );
+  check(
+    JSON.stringify(dates.map((t) => t.trim())) === JSON.stringify(['14.01.2026', '21.01.2026']),
+    `границы окна посчитаны неверно: ${JSON.stringify(dates)}`,
+  );
+  check(
+    text.includes('п. 2 ст. 158 ФЗ № 127-ФЗ'),
+    `норма не показана на карточке-окне: «${text}»`,
+  );
+  check(
+    text.includes('Отсчёт рабочих дней с 29.12.2025'),
+    `первый рабочий день не показан на карточке-окне: «${text}»`,
+  );
+  check(
+    text.includes('мировое соглашение заключено: 26.12.2025'),
+    `строка якоря не показана на карточке-окне: «${text}»`,
+  );
+  // Окно — не срок заявителя с одной датой: подписи term-карточки быть не должно.
+  check(
+    !/последний день подачи/i.test(text),
+    `на карточке-окне подпись term-карточки: «${text}»`,
+  );
+  // У этого узла состояний окна не бывает — пояснения .na-reason нет.
+  check(
+    (await windowCardLocator.locator('.na-reason').count()) === 0,
+    'на карточке-окне есть .na-reason — у этого узла состояний окна не бывает',
+  );
+  check(
+    (await windowCardLocator.locator('.cap').count()) === 0,
+    'на карточке-окне есть строки потолков capped_term',
+  );
+
+  // Сырой outerHTML — на проверку архитектору.
+  console.log(
+    'WINDOW CARD outerHTML:',
+    await windowCardLocator.first().evaluate((el) => el.outerHTML),
+  );
+}
+
+// Сводка: окно раскладывается на ДВЕ строки — «подача не ранее» и «не позднее»
+// (см. summaryEntries в apk/bankruptcy-app.js).
+await page.click('#copy-terms');
+await settle();
+const copiedWindow = await page.evaluate(() => navigator.clipboard.readText());
+const windowLines = copiedWindow
+  .split('\n')
+  .filter((line) => line.includes('Заявление об утверждении мирового соглашения'));
+check(
+  windowLines.length === 2,
+  `окно должно давать ровно две строки сводки, получили ${windowLines.length}: ${JSON.stringify(windowLines)}`,
+);
+check(
+  windowLines.some((l) => l.includes('не ранее') && l.includes('14.01.2026')),
+  `в сводке нет строки нижней границы: ${JSON.stringify(windowLines)}`,
+);
+check(
+  windowLines.some((l) => l.includes('не позднее') && l.includes('21.01.2026')),
+  `в сводке нет строки верхней границы: ${JSON.stringify(windowLines)}`,
+);
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------
 //

@@ -41,6 +41,8 @@ import {
   OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_APK,
   computeOutOfCourtBankruptcyReapplicationAfterPriorApk,
   OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_AFTER_PRIOR_APK,
+  computeSettlementAgreementApprovalApplicationApk,
+  SETTLEMENT_AGREEMENT_APPROVAL_APPLICATION_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -834,4 +836,93 @@ test('право на повторную подачу после предыду�
     OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_AFTER_PRIOR_APK.norm_versions[0].norm.calculation,
     OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_APK.norm_versions[0].norm.calculation,
   );
+});
+
+// --- Окно подачи заявления об утверждении мирового соглашения
+// (п. 2 ст. 158) ----------------------------------------------------------------
+//
+// Первый узел домена с kind: 'window' — результат не одна дата, а две границы.
+// Обе считаются тем же computeSimpleTerm, что и обычные сроки, из
+// node.window.earliest/latest; отдельной арифметики у окна нет.
+
+test('мировое соглашение: окно 5–10 рабочих дней с даты заключения', () => {
+  const result = computeSettlementAgreementApprovalApplicationApk({
+    settlement_agreement_conclusion_date_apk: '2025-03-11',
+  });
+  assert.equal(result.id, 'settlement_agreement_approval_application_apk');
+  // 11.03.2025 — вторник; пять рабочих дней истекают 18.03, десять — 25.03.
+  assert.equal(result.earliest_filing_date, '2025-03-18');
+  assert.equal(result.latest_filing_date, '2025-03-25');
+  assert.equal(result.norm.primary, 'п. 2 ст. 158 ФЗ № 127-ФЗ');
+  assert.deepEqual(result.anchors, {
+    settlement_agreement_conclusion_date_apk: '2025-03-11',
+  });
+});
+
+test('мировое соглашение: рабочие дни, не календарные — новогодние каникулы отодвигают обе границы', () => {
+  // Ключевая проверка выбора единицы: по календарным дням окно было бы
+  // 31.12.2025–05.01.2026 (в каникулы), по рабочим — уезжает на две недели.
+  const result = computeSettlementAgreementApprovalApplicationApk({
+    settlement_agreement_conclusion_date_apk: '2025-12-26',
+  });
+  assert.equal(result.earliest_filing_date, '2026-01-14');
+  assert.equal(result.latest_filing_date, '2026-01-21');
+  // Первый рабочий день течения — общий у обеих границ.
+  assert.equal(result.first_working_day, '2025-12-29');
+});
+
+test('мировое соглашение: нижняя граница всегда строго раньше верхней', () => {
+  // 5 < 10 при общем якоре — состояний «окно пустое» и «верхней границы нет»
+  // у этого узла не бывает по конструкции, в отличие от окна ч. 3 ст. 222.1 АПК.
+  for (const anchor of ['2025-01-09', '2025-03-07', '2025-06-30', '2025-12-26']) {
+    const result = computeSettlementAgreementApprovalApplicationApk({
+      settlement_agreement_conclusion_date_apk: anchor,
+    });
+    assert.ok(
+      result.earliest_filing_date < result.latest_filing_date,
+      `якорь ${anchor}: нижняя граница не раньше верхней`,
+    );
+    assert.equal(result.state, undefined, 'у этого окна нет поля state');
+  }
+});
+
+test('мировое соглашение: без якоря — явная ошибка с названием поля', () => {
+  assert.throws(
+    () => computeSettlementAgreementApprovalApplicationApk({}),
+    /settlement_agreement_conclusion_date_apk/,
+  );
+});
+
+test('мировое соглашение: обе границы в рабочих днях, weekend_shift не задан ни у одной', () => {
+  const { window: w } = SETTLEMENT_AGREEMENT_APPROVAL_APPLICATION_APK;
+  assert.deepEqual(w.earliest.duration, { value: 5, unit: 'working_day' });
+  assert.deepEqual(w.latest.duration, { value: 10, unit: 'working_day' });
+  // У working_day-сроков нерабочие дни уже пропущены внутри периода — перенос
+  // конца поверх этого был бы двойным учётом (та же политика, что у ст. 47 п. 1).
+  assert.equal(w.earliest.weekend_shift, undefined);
+  assert.equal(w.latest.weekend_shift, undefined);
+  // Верхнего duration у узла-окна нет: длительностей две, наверх не поднимаются.
+  assert.equal(SETTLEMENT_AGREEMENT_APPROVAL_APPLICATION_APK.duration, undefined);
+});
+
+test('мировое соглашение: судебная процедура — calculation ссылается на АПК, не на ГК', () => {
+  // Заявление представляется в арбитражный суд, поэтому здесь тот же
+  // calculation, что у ст. 47 п. 1, а не формулировка внесудебных узлов
+  // (ст. 223.2/223.6), где суда нет вовсе.
+  assert.deepEqual(
+    SETTLEMENT_AGREEMENT_APPROVAL_APPLICATION_APK.norm_versions[0].norm.calculation,
+    DEBTOR_RESPONSE_BANKRUPTCY_APK.norm_versions[0].norm.calculation,
+  );
+  assert.notDeepEqual(
+    SETTLEMENT_AGREEMENT_APPROVAL_APPLICATION_APK.norm_versions[0].norm.calculation,
+    OUT_OF_COURT_BANKRUPTCY_COMPLETION_APK.norm_versions[0].norm.calculation,
+  );
+});
+
+test('мировое соглашение: одна действующая редакция, предупреждение о будущей — в logic', () => {
+  // Вариант A: текст редакции с 27.07.2027 не сверен и в расчёт не заложен,
+  // norm_versions остаётся одноэлементным (computeSimpleTerm берёт [0]).
+  assert.equal(SETTLEMENT_AGREEMENT_APPROVAL_APPLICATION_APK.norm_versions.length, 1);
+  assert.match(SETTLEMENT_AGREEMENT_APPROVAL_APPLICATION_APK.logic, /27\.07\.2027/);
+  assert.match(SETTLEMENT_AGREEMENT_APPROVAL_APPLICATION_APK.logic, /253-ФЗ/);
 });
