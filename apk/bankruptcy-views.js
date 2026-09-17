@@ -34,6 +34,7 @@ import {
   computeOutOfCourtBankruptcyCompletionApk,
   computeOutOfCourtBankruptcyReapplicationApk,
   computeOutOfCourtBankruptcyReapplicationAfterPriorApk,
+  computeSettlementAgreementApprovalApplicationApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -47,6 +48,7 @@ import {
   OUT_OF_COURT_BANKRUPTCY_COMPLETION_APK,
   OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_APK,
   OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_AFTER_PRIOR_APK,
+  SETTLEMENT_AGREEMENT_APPROVAL_APPLICATION_APK,
 } from './bankruptcy.js';
 
 import {
@@ -227,6 +229,53 @@ function eventCard(node, term) {
   return card;
 }
 
+// --- Карточка узла-окна (kind: 'window') --------------------------------------
+//
+// ПЕРВЫЙ узел домена банкротства этого вида — окно подачи заявления об
+// утверждении мирового соглашения (п. 2 ст. 158 ФЗ № 127-ФЗ). Результат не
+// один дедлайн, а две границы: раньше нижней подавать нельзя, позже верхней —
+// поздно.
+//
+// По образцу windowCard из apk/views.js (ч. 3 ст. 222.1 АПК): те же имена
+// полей — earliest_filing_date/latest_filing_date (не from/to: подписи границ
+// «не ранее»/«не позднее», и нижняя граница сроком на подачу не является), тот
+// же anchors — объект «поле → дата», из которого страница строит строки «от
+// чего посчитана граница».
+//
+// НЕ перенесены state/note и ветка 'open': у образца границы считаются от
+// РАЗНЫХ якорей, из-за чего верхней границы может ещё не быть, а окно может
+// оказаться пустым. Здесь якорь один и общий, 5 < 10 всегда — обе границы
+// определены с момента ввода якоря, и ни одно из этих состояний возникнуть не
+// может. Ветка, которая никогда не выполнится, в карточку не переносится.
+//
+// first_working_day — из результата как есть: у working_day-окна он общий для
+// обеих границ (один якорь, один offset_start), и без него непонятно, почему
+// окно уехало вперёд, если сразу за датой заключения идут праздничные дни. Тот
+// же приём, что у term-карточки working_day-узла ст. 47 п. 1.
+function windowCard(node, result) {
+  const card = {
+    id: node.id,
+    kind: 'window',
+    title: node.title,
+    status: 'computed',
+    norm: result.norm.primary,
+    earliest_filing_date: result.earliest_filing_date,
+    latest_filing_date: result.latest_filing_date,
+    first_working_day: result.first_working_day,
+    anchors: result.anchors,
+    details: {
+      collapsed: true,
+      logic: result.logic,
+      calculation: result.norm.calculation,
+      midnight_rule: result.midnight_rule,
+    },
+  };
+  // Предупреждение календаря — по верхней границе: именно она последний день
+  // срока, и именно она переносится, если выпала на нерабочий день.
+  attachCalendarWarning(card, card.latest_filing_date);
+  return card;
+}
+
 // Строители карточек по внутреннему виду узла. Сигнатура карты — (node, term),
 // как в CARD_BUILDERS_APK; workingDayCard из ядра принимает только term, и
 // узел ей не нужен (весь заголовок и норма уже в результате расчёта) — поэтому
@@ -240,6 +289,7 @@ const CARD_BUILDERS_BANKRUPTCY = {
   capped_term: cappedTermCard,
   working_day: (_node, term) => workingDayCard(term),
   event: eventCard,
+  window: windowCard,
 };
 
 // --- Зависимости узлов --------------------------------------------------------
@@ -365,6 +415,12 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     kind: 'event',
     deps: () => ['out_of_court_bankruptcy_prior_procedure_end_date_apk'],
     compute: (i) => computeOutOfCourtBankruptcyReapplicationAfterPriorApk(i),
+  },
+  settlement_agreement_approval_application_apk: {
+    node: SETTLEMENT_AGREEMENT_APPROVAL_APPLICATION_APK,
+    kind: 'window',
+    deps: () => ['settlement_agreement_conclusion_date_apk'],
+    compute: (i) => computeSettlementAgreementApprovalApplicationApk(i),
   },
 };
 

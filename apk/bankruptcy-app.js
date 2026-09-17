@@ -353,6 +353,55 @@ function renderEvent(card) {
   return box;
 }
 
+// Подписи якорей окна: от чего посчитана каждая граница. Живут здесь, в слое
+// страницы, а не в узле — это объяснение результата пользователю, а не
+// содержание нормы (тот же принцип, что у WINDOW_ANCHOR_CAPTION_APK в
+// apk/app.js).
+const WINDOW_ANCHOR_CAPTION_BANKRUPTCY = {
+  settlement_agreement_conclusion_date_apk: 'мировое соглашение заключено',
+};
+
+// Карточка узла-окна (п. 2 ст. 158): не один дедлайн, а две границы — раньше
+// нижней подавать нельзя, позже верхней поздно. Перенос renderWindow из
+// apk/app.js максимально близко к оригиналу: тот же каркас (kicker «Окно
+// подачи», подписи «Не ранее»/«Не позднее» над каждой датой, норма, строки
+// якорей, calendar_warning, details) и те же имена полей карточки
+// (earliest_filing_date/latest_filing_date, anchors).
+//
+// Не перенесены: класс 'not-applicable' на состоянии 'empty', строка card.note
+// и прочерк вместо верхней границы на состоянии 'open'. У этого узла якорь
+// один и общий для обеих границ, 5 < 10 всегда — ни пустого окна, ни
+// неопределённой верхней границы быть не может, и card.state/card.note
+// карточка не несёт (см. apk/bankruptcy-views.js).
+function renderWindow(card) {
+  const c = el('div', 'card');
+  c.appendChild(el('div', 'kicker', 'Окно подачи'));
+  c.appendChild(el('h2', null, card.title));
+
+  c.appendChild(el('div', 'deadline-caption', 'Не ранее'));
+  c.appendChild(el('div', 'deadline', isoToRu(card.earliest_filing_date)));
+  c.appendChild(el('div', 'deadline-caption', 'Не позднее'));
+  c.appendChild(el('div', 'deadline', isoToRu(card.latest_filing_date)));
+  c.appendChild(el('div', 'norm', card.norm));
+
+  // Первый рабочий день течения — общий у обеих границ; без него непонятно,
+  // почему окно уехало вперёд, если сразу за якорем идут праздничные дни.
+  if (card.first_working_day) {
+    c.appendChild(el('div', 'hint', `Отсчёт рабочих дней с ${isoToRu(card.first_working_day)}`));
+  }
+
+  // От чего посчитана каждая граница — иначе две даты неотличимы по источнику.
+  for (const [field, date] of Object.entries(card.anchors)) {
+    c.appendChild(
+      el('div', 'hint', `${WINDOW_ANCHOR_CAPTION_BANKRUPTCY[field]}: ${isoToRu(date)}`),
+    );
+  }
+
+  if (card.calendar_warning) c.appendChild(calendarWarning(card));
+  if (card.details) c.appendChild(renderDetails(card.details));
+  return c;
+}
+
 function renderTermCard(card) {
   const c = el('div', 'card');
   c.appendChild(el('div', 'kicker', 'Срок'));
@@ -514,6 +563,25 @@ function summaryEntries(cards) {
       // приём, что и в apk/app.js:summaryEntries для entry_into_force_apk.
       if (!card.date) continue;
       entries.push({ title: card.title, deadline: card.date, norm: card.norm, kind: 'event' });
+    } else if (card.kind === 'window') {
+      // caseSummaryItems в ядре принимает одну дату на запись, поэтому окно
+      // раскладывается на две записи с разными подписями границ — тот же приём,
+      // что в apk/app.js:summaryEntries. Нижняя граница идёт как 'event':
+      // подпись «последний день подачи» к ней не относится (подать в этот день
+      // ещё нельзя), у kind 'event' её нет. Верхняя — как 'applicant': она и
+      // есть последний день подачи.
+      entries.push({
+        title: `${card.title} — подача не ранее`,
+        deadline: card.earliest_filing_date,
+        norm: card.norm,
+        kind: 'event',
+      });
+      entries.push({
+        title: `${card.title} — подача не позднее`,
+        deadline: card.latest_filing_date,
+        norm: card.norm,
+        kind: 'applicant',
+      });
     }
   }
   return entries;
@@ -735,6 +803,7 @@ function render() {
       if (card.kind === 'capped_term') root.appendChild(renderCappedTerm(card));
       else if (card.kind === 'error') root.appendChild(renderErrorCard(card));
       else if (card.kind === 'event') root.appendChild(renderEvent(card));
+      else if (card.kind === 'window') root.appendChild(renderWindow(card));
       // Остальное — обычный срок: и карточка, построенная monthTermCard, и
       // карточка working_day-узла (workingDayCard сама проставляет kind:'term',
       // отдельной ветки ей не нужно).
