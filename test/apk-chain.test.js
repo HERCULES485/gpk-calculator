@@ -39,6 +39,9 @@
 // кассации: исполнительный лист на решение третейского суда, признание и
 // приведение в исполнение иностранного решения, признание иностранного
 // решения без принудительного исполнения.
+// ст. 39 ч. 5, ст. 46 ч. 7, ст. 50 ч. 4, ст. 51 ч. 3.1, ст. 130 ч. 7,
+// ст. 188.1 — сокращённый (десятидневный) срок ОБЫЧНОЙ апелляции вместо
+// общего месяца ч. 3 ст. 188 (не прямая кассация).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -105,6 +108,18 @@ import {
   FOREIGN_JUDGMENT_ENFORCEMENT_CASSATION_APK,
   computeForeignJudgmentRecognitionCassationApk,
   FOREIGN_JUDGMENT_RECOGNITION_CASSATION_APK,
+  computeCaseTransferJurisdictionAppealApk,
+  CASE_TRANSFER_JURISDICTION_APPEAL_APK,
+  computeCoplaintiffCodefendantRefusalAppealApk,
+  COPLAINTIFF_CODEFENDANT_REFUSAL_APPEAL_APK,
+  computeThirdPartyClaimRefusalAppealApk,
+  THIRD_PARTY_CLAIM_REFUSAL_APPEAL_APK,
+  computeThirdPartyNoClaimRefusalAppealApk,
+  THIRD_PARTY_NO_CLAIM_REFUSAL_APPEAL_APK,
+  computeCaseConsolidationSeveranceRefusalAppealApk,
+  CASE_CONSOLIDATION_SEVERANCE_REFUSAL_APPEAL_APK,
+  computeSpecialRulingAppealApk,
+  SPECIAL_RULING_APPEAL_APK,
 } from '../apk/chain.js';
 // Нужен ровно для одной проверки: узел-окно не должен попасть в реестр .ics
 // (см. последний тест файла) — граница решения по экспорту.
@@ -2478,4 +2493,169 @@ test('три новых узла прямой кассации — разные 
   // это разные узлы под разными нормами, а не один узел под тремя именами.
   assert.equal(a.deadline, b.deadline);
   assert.equal(b.deadline, c.deadline);
+});
+
+// Задача — шесть узлов сокращённого (десятидневного) срока ОБЫЧНОЙ
+// апелляции (ч. 5 ст. 39, ч. 7 ст. 46, ч. 4 ст. 50, ч. 3.1 ст. 51, ч. 7
+// ст. 130, ст. 188.1 АПК РФ) — не прямая кассация, в отличие от блока выше.
+// Перенос по образцу уже существующих working_day-узлов домена
+// (ADMIN_LIABILITY_IMPOSITION_APPEAL_APK и др.).
+
+test('передача дела по подсудности (ч. 5 ст. 39): десять рабочих дней от даты вынесения определения, без праздничных кластеров рядом', () => {
+  const term = computeCaseTransferJurisdictionAppealApk({
+    case_transfer_jurisdiction_ruling_date_apk: '2025-03-02',
+  });
+  assert.equal(term.anchor, '2025-03-02');
+  assert.equal(term.first_working_day, '2025-03-03');
+  assert.equal(term.deadline, '2025-03-14');
+  assert.equal(term.shifted, false); // weekend_shift к working_day не применяется
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 5 ст. 39 АПК РФ');
+});
+
+test('передача дела по подсудности (ч. 5 ст. 39): рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeCaseTransferJurisdictionAppealApk({
+    case_transfer_jurisdiction_ruling_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-21');
+  assert.notEqual(term.deadline, '2026-01-05');
+});
+
+test('передача дела по подсудности (ч. 5 ст. 39): без case_transfer_jurisdiction_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeCaseTransferJurisdictionAppealApk({}),
+    /case_transfer_jurisdiction_ruling_date_apk/,
+  );
+});
+
+test('отказ во вступлении соистца/привлечении соответчика (ч. 7 ст. 46): десять рабочих дней от даты вынесения определения', () => {
+  const term = computeCoplaintiffCodefendantRefusalAppealApk({
+    coplaintiff_codefendant_refusal_ruling_date_apk: '2025-03-02',
+  });
+  assert.equal(term.first_working_day, '2025-03-03');
+  assert.equal(term.deadline, '2025-03-14');
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 7 ст. 46 АПК РФ');
+});
+
+test('отказ во вступлении соистца/привлечении соответчика (ч. 7 ст. 46): без coplaintiff_codefendant_refusal_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeCoplaintiffCodefendantRefusalAppealApk({}),
+    /coplaintiff_codefendant_refusal_ruling_date_apk/,
+  );
+});
+
+test('отказ во вступлении третьего лица с самостоятельными требованиями (ч. 4 ст. 50): десять рабочих дней от даты вынесения определения', () => {
+  const term = computeThirdPartyClaimRefusalAppealApk({
+    third_party_claim_refusal_ruling_date_apk: '2025-03-02',
+  });
+  assert.equal(term.first_working_day, '2025-03-03');
+  assert.equal(term.deadline, '2025-03-14');
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 4 ст. 50 АПК РФ');
+});
+
+test('отказ во вступлении третьего лица с самостоятельными требованиями (ч. 4 ст. 50): без third_party_claim_refusal_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeThirdPartyClaimRefusalAppealApk({}),
+    /third_party_claim_refusal_ruling_date_apk/,
+  );
+});
+
+test('отказ во вступлении третьего лица без самостоятельных требований (ч. 3.1 ст. 51): десять рабочих дней от даты вынесения определения', () => {
+  const term = computeThirdPartyNoClaimRefusalAppealApk({
+    third_party_no_claim_refusal_ruling_date_apk: '2025-03-02',
+  });
+  assert.equal(term.first_working_day, '2025-03-03');
+  assert.equal(term.deadline, '2025-03-14');
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 3.1 ст. 51 АПК РФ');
+});
+
+test('отказ во вступлении третьего лица без самостоятельных требований (ч. 3.1 ст. 51): без third_party_no_claim_refusal_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeThirdPartyNoClaimRefusalAppealApk({}),
+    /third_party_no_claim_refusal_ruling_date_apk/,
+  );
+});
+
+test('третьи лица (ч. 4 ст. 50 и ч. 3.1 ст. 51): разные id, разные normы, разные поля ввода — не один узел под двумя именами', () => {
+  assert.notEqual(
+    THIRD_PARTY_CLAIM_REFUSAL_APPEAL_APK.id,
+    THIRD_PARTY_NO_CLAIM_REFUSAL_APPEAL_APK.id,
+  );
+  assert.notEqual(
+    THIRD_PARTY_CLAIM_REFUSAL_APPEAL_APK.norm_versions[0].norm.primary,
+    THIRD_PARTY_NO_CLAIM_REFUSAL_APPEAL_APK.norm_versions[0].norm.primary,
+  );
+});
+
+test('отказ в объединении дел/выделении требований (ч. 7 ст. 130): десять рабочих дней от даты вынесения определения', () => {
+  const term = computeCaseConsolidationSeveranceRefusalAppealApk({
+    case_consolidation_severance_refusal_ruling_date_apk: '2025-03-02',
+  });
+  assert.equal(term.first_working_day, '2025-03-03');
+  assert.equal(term.deadline, '2025-03-14');
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 7 ст. 130 АПК РФ');
+});
+
+test('отказ в объединении дел/выделении требований (ч. 7 ст. 130): без case_consolidation_severance_refusal_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeCaseConsolidationSeveranceRefusalAppealApk({}),
+    /case_consolidation_severance_refusal_ruling_date_apk/,
+  );
+});
+
+test('частное определение (ст. 188.1): десять рабочих дней от даты вынесения, будний день без переноса', () => {
+  const term = computeSpecialRulingAppealApk({
+    special_ruling_issued_date_apk: '2025-03-02',
+  });
+  assert.equal(term.first_working_day, '2025-03-03');
+  assert.equal(term.deadline, '2025-03-14');
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ст. 188.1 АПК РФ');
+});
+
+test('частное определение (ст. 188.1): без special_ruling_issued_date_apk — понятная ошибка', () => {
+  assert.throws(() => computeSpecialRulingAppealApk({}), /special_ruling_issued_date_apk/);
+});
+
+test('частное определение (ст. 188.1): источник срока — толкование Пленума (clarification), а не буква статьи, в отличие от остальных пяти узлов', () => {
+  // Сама ст. 188.1 срока не устанавливает — clarification прямо называет
+  // пункт Постановления, который и есть источник самого срока.
+  assert.equal(
+    SPECIAL_RULING_APPEAL_APK.norm_versions[0].norm.clarification,
+    'п. 2 Постановления Пленума ВС РФ от 30.06.2020 № 12',
+  );
+  // У остальных пяти узлов этой группы clarification нет — статья прямо
+  // называет десятидневный срок сама.
+  for (const node of [
+    CASE_TRANSFER_JURISDICTION_APPEAL_APK,
+    COPLAINTIFF_CODEFENDANT_REFUSAL_APPEAL_APK,
+    THIRD_PARTY_CLAIM_REFUSAL_APPEAL_APK,
+    THIRD_PARTY_NO_CLAIM_REFUSAL_APPEAL_APK,
+    CASE_CONSOLIDATION_SEVERANCE_REFUSAL_APPEAL_APK,
+  ]) {
+    assert.equal(node.norm_versions[0].norm.clarification, undefined);
+  }
+});
+
+test('шесть узлов сокращённой апелляции: без restoration_norm и без weekend_shift — тот же паттерн, что у остальных working_day-узлов домена', () => {
+  const nodes = [
+    CASE_TRANSFER_JURISDICTION_APPEAL_APK,
+    COPLAINTIFF_CODEFENDANT_REFUSAL_APPEAL_APK,
+    THIRD_PARTY_CLAIM_REFUSAL_APPEAL_APK,
+    THIRD_PARTY_NO_CLAIM_REFUSAL_APPEAL_APK,
+    CASE_CONSOLIDATION_SEVERANCE_REFUSAL_APPEAL_APK,
+    SPECIAL_RULING_APPEAL_APK,
+  ];
+  const ids = nodes.map((n) => n.id);
+  assert.equal(new Set(ids).size, 6); // все шесть узлов различны
+  for (const node of nodes) {
+    assert.equal(node.restoration_norm, undefined);
+    assert.equal(node.weekend_shift, undefined);
+    assert.deepEqual(node.norm_versions[0].norm.calculation, ['ч. 3 ст. 113 АПК РФ']);
+  }
 });
