@@ -35,6 +35,10 @@
 // домена apk/ (задача АДМОТВЕТСТВЕННОСТЬ.2).
 // ст. 141 ч. 11 — кассационное обжалование определения об утверждении
 // мирового соглашения, прямая кассация в обход апелляции.
+// ст. 240 ч. 5, ст. 245 ч. 3, ст. 245.1 ч. 14 — та же категория прямой
+// кассации: исполнительный лист на решение третейского суда, признание и
+// приведение в исполнение иностранного решения, признание иностранного
+// решения без принудительного исполнения.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -95,6 +99,12 @@ import {
   ADMIN_LIABILITY_CHALLENGE_APPEAL_APK,
   computeSettlementApprovalCassationApk,
   SETTLEMENT_APPROVAL_CASSATION_APK,
+  computeArbitralEnforcementWritCassationApk,
+  ARBITRAL_ENFORCEMENT_WRIT_CASSATION_APK,
+  computeForeignJudgmentEnforcementCassationApk,
+  FOREIGN_JUDGMENT_ENFORCEMENT_CASSATION_APK,
+  computeForeignJudgmentRecognitionCassationApk,
+  FOREIGN_JUDGMENT_RECOGNITION_CASSATION_APK,
 } from '../apk/chain.js';
 // Нужен ровно для одной проверки: узел-окно не должен попасть в реестр .ics
 // (см. последний тест файла) — граница решения по экспорту.
@@ -2331,4 +2341,141 @@ test('кассация мирового соглашения (ч. 11 ст. 141):
   assert.equal(SETTLEMENT_APPROVAL_CASSATION_APK.restoration_norm, undefined);
   assert.equal(term.restoration_norm, undefined);
   assert.equal(typeof computeSettlementApprovalCassationApkRestoration, 'undefined');
+});
+
+// Задача — ещё три узла той же категории прямой кассации в обход апелляции
+// (п. 7 Постановления Пленума ВС РФ от 30.06.2020 № 13): ч. 5 ст. 240 (лист
+// на решение третейского суда), ч. 3 ст. 245 (признание и приведение в
+// исполнение иностранного решения), ч. 14 ст. 245.1 (признание иностранного
+// решения без принудительного исполнения). Перенос по образцу узла ч. 11
+// ст. 141 выше.
+
+test('кассация листа на решение третейского суда (ч. 5 ст. 240): один месяц со дня вынесения определения, будний день без переноса', () => {
+  const term = computeArbitralEnforcementWritCassationApk({
+    arbitral_enforcement_writ_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11'); // пятница, рабочий день
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 5 ст. 240 АПК РФ');
+});
+
+test('кассация листа на решение третейского суда (ч. 5 ст. 240): перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeArbitralEnforcementWritCassationApk({
+    arbitral_enforcement_writ_ruling_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('кассация листа на решение третейского суда (ч. 5 ст. 240): без arbitral_enforcement_writ_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeArbitralEnforcementWritCassationApk({}),
+    /arbitral_enforcement_writ_ruling_date_apk/,
+  );
+});
+
+test('кассация листа на решение третейского суда (ч. 5 ст. 240): calculation тот же, что у ч. 11 ст. 141, без ст. 223, без restoration_norm', () => {
+  assert.deepEqual(
+    ARBITRAL_ENFORCEMENT_WRIT_CASSATION_APK.norm_versions[0].norm.calculation,
+    SETTLEMENT_APPROVAL_CASSATION_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(ARBITRAL_ENFORCEMENT_WRIT_CASSATION_APK.restoration_norm, undefined);
+  assert.equal(typeof computeArbitralEnforcementWritCassationApkRestoration, 'undefined');
+});
+
+test('признание и приведение в исполнение иностранного решения (ч. 3 ст. 245): один месяц со дня вынесения определения, будний день без переноса', () => {
+  const term = computeForeignJudgmentEnforcementCassationApk({
+    foreign_judgment_enforcement_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11'); // пятница, рабочий день
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 3 ст. 245 АПК РФ');
+});
+
+test('признание и приведение в исполнение иностранного решения (ч. 3 ст. 245): перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeForeignJudgmentEnforcementCassationApk({
+    foreign_judgment_enforcement_ruling_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('признание и приведение в исполнение иностранного решения (ч. 3 ст. 245): без foreign_judgment_enforcement_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeForeignJudgmentEnforcementCassationApk({}),
+    /foreign_judgment_enforcement_ruling_date_apk/,
+  );
+});
+
+test('признание и приведение в исполнение иностранного решения (ч. 3 ст. 245): calculation тот же, что у ч. 11 ст. 141, без restoration_norm', () => {
+  assert.deepEqual(
+    FOREIGN_JUDGMENT_ENFORCEMENT_CASSATION_APK.norm_versions[0].norm.calculation,
+    SETTLEMENT_APPROVAL_CASSATION_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(FOREIGN_JUDGMENT_ENFORCEMENT_CASSATION_APK.restoration_norm, undefined);
+  assert.equal(typeof computeForeignJudgmentEnforcementCassationApkRestoration, 'undefined');
+});
+
+test('признание иностранного решения без принудительного исполнения (ч. 14 ст. 245.1): один месяц со дня вынесения определения, будний день без переноса', () => {
+  const term = computeForeignJudgmentRecognitionCassationApk({
+    foreign_judgment_recognition_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11'); // пятница, рабочий день
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 14 ст. 245.1 АПК РФ');
+});
+
+test('признание иностранного решения без принудительного исполнения (ч. 14 ст. 245.1): перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeForeignJudgmentRecognitionCassationApk({
+    foreign_judgment_recognition_ruling_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('признание иностранного решения без принудительного исполнения (ч. 14 ст. 245.1): без foreign_judgment_recognition_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeForeignJudgmentRecognitionCassationApk({}),
+    /foreign_judgment_recognition_ruling_date_apk/,
+  );
+});
+
+test('признание иностранного решения без принудительного исполнения (ч. 14 ст. 245.1): calculation тот же, что у ч. 11 ст. 141, без restoration_norm', () => {
+  assert.deepEqual(
+    FOREIGN_JUDGMENT_RECOGNITION_CASSATION_APK.norm_versions[0].norm.calculation,
+    SETTLEMENT_APPROVAL_CASSATION_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(FOREIGN_JUDGMENT_RECOGNITION_CASSATION_APK.restoration_norm, undefined);
+  assert.equal(typeof computeForeignJudgmentRecognitionCassationApkRestoration, 'undefined');
+});
+
+test('три новых узла прямой кассации — разные id, разные нормы, разные поля ввода (не один узел под тремя именами)', () => {
+  const inputs = { arbitral_enforcement_writ_ruling_date_apk: '2025-03-11' };
+  const a = computeArbitralEnforcementWritCassationApk(inputs);
+  const b = computeForeignJudgmentEnforcementCassationApk({
+    foreign_judgment_enforcement_ruling_date_apk: '2025-03-11',
+  });
+  const c = computeForeignJudgmentRecognitionCassationApk({
+    foreign_judgment_recognition_ruling_date_apk: '2025-03-11',
+  });
+  const ids = [a.id, b.id, c.id];
+  assert.equal(new Set(ids).size, 3);
+  const norms = [a.norm.primary, b.norm.primary, c.norm.primary];
+  assert.equal(new Set(norms).size, 3);
+  // Тот же дедлайн у всех трёх (одна и та же дата и та же арифметика), но
+  // это разные узлы под разными нормами, а не один узел под тремя именами.
+  assert.equal(a.deadline, b.deadline);
+  assert.equal(b.deadline, c.deadline);
 });
