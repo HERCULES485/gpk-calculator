@@ -33,6 +33,8 @@
 // ст. 206 ч. 4 и ст. 211 ч. 5 — сокращённый срок апелляции по делам об
 // административной ответственности, четвёртый и пятый working_day-узлы
 // домена apk/ (задача АДМОТВЕТСТВЕННОСТЬ.2).
+// ст. 141 ч. 11 — кассационное обжалование определения об утверждении
+// мирового соглашения, прямая кассация в обход апелляции.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -91,6 +93,8 @@ import {
   ADMIN_LIABILITY_IMPOSITION_APPEAL_APK,
   computeAdminLiabilityChallengeAppealApk,
   ADMIN_LIABILITY_CHALLENGE_APPEAL_APK,
+  computeSettlementApprovalCassationApk,
+  SETTLEMENT_APPROVAL_CASSATION_APK,
 } from '../apk/chain.js';
 // Нужен ровно для одной проверки: узел-окно не должен попасть в реестр .ics
 // (см. последний тест файла) — граница решения по экспорту.
@@ -2271,4 +2275,60 @@ test('ч. 4 ст. 206 и ч. 5 ст. 211: одна и та же дата даё�
   assert.notEqual(imposition.norm.primary, challenge.norm.primary);
   assert.equal(imposition.norm.primary, 'ч. 4 ст. 206 АПК РФ');
   assert.equal(challenge.norm.primary, 'ч. 5 ст. 211 АПК РФ');
+});
+
+// Задача — кассационное обжалование определения об утверждении мирового
+// соглашения (ч. 11 ст. 141 АПК РФ). Прямая кассация в обход апелляции.
+
+test('кассация мирового соглашения (ч. 11 ст. 141): один месяц со дня вынесения определения, будний день без переноса', () => {
+  const term = computeSettlementApprovalCassationApk({
+    settlement_approval_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11'); // пятница, рабочий день
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 11 ст. 141 АПК РФ');
+});
+
+test('кассация мирового соглашения (ч. 11 ст. 141): перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeSettlementApprovalCassationApk({
+    settlement_approval_ruling_date_apk: '2025-02-01',
+  });
+  // 01.02.2025 + 1 месяц = 01.03.2025 — суббота, перенос на 03.03.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('кассация мирового соглашения (ч. 11 ст. 141): без settlement_approval_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeSettlementApprovalCassationApk({}),
+    /settlement_approval_ruling_date_apk/,
+  );
+});
+
+test('кассация мирового соглашения (ч. 11 ст. 141): прямая кассация — calculation тот же, что у обычных месячных узлов, без ссылки на ст. 188', () => {
+  // Норма отсылает к ст. 141, а не к ст. 188 — но арифметика месячного срока
+  // (ч. 4 ст. 113, ч. 2, 4 ст. 114 АПК РФ) та же, что у остальных месячных
+  // узлов домена (не working_day-цитата ч. 3 ст. 113, как у ст. 188).
+  assert.deepEqual(SETTLEMENT_APPROVAL_CASSATION_APK.norm_versions[0].norm.calculation, [
+    'ч. 4 ст. 113',
+    'ч. 2, 4 ст. 114 АПК РФ',
+  ]);
+});
+
+test('кассация мирового соглашения (ч. 11 ст. 141): объём задачи — без restoration_norm и без связанного restoration-узла', () => {
+  // Норма не упоминает восстановление вовсе. В отличие от ГПК-аналога
+  // (settlement_approval_cassation_appeal, src/chain.js, restoration_norm:
+  // 'ст. 112 ГПК РФ'), здесь restoration_norm сознательно не заводится — ни
+  // один узел АПК его не несёт (см. apk/views.js, ACTION_FACT_INPUT_APK).
+  const term = computeSettlementApprovalCassationApk({
+    settlement_approval_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.id, 'settlement_approval_cassation_apk');
+  assert.equal(SETTLEMENT_APPROVAL_CASSATION_APK.restoration_norm, undefined);
+  assert.equal(term.restoration_norm, undefined);
+  assert.equal(typeof computeSettlementApprovalCassationApkRestoration, 'undefined');
 });

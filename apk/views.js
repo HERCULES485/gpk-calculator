@@ -44,6 +44,7 @@ import {
   computeAdministrativeLiabilityChallengeApk,
   computeAdminLiabilityImpositionAppealApk,
   computeAdminLiabilityChallengeAppealApk,
+  computeSettlementApprovalCassationApk,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -71,6 +72,7 @@ import {
   ADMINISTRATIVE_LIABILITY_CHALLENGE_APK,
   ADMIN_LIABILITY_IMPOSITION_APPEAL_APK,
   ADMIN_LIABILITY_CHALLENGE_APPEAL_APK,
+  SETTLEMENT_APPROVAL_CASSATION_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -537,6 +539,17 @@ const NODE_REQUIREMENTS = {
     node: ADMIN_LIABILITY_CHALLENGE_APPEAL_APK,
     deps: () => ['first_instance_decision_date_apk'],
     compute: (i) => computeAdminLiabilityChallengeAppealApk(i),
+  },
+  // Обычный term-узел (kind не указан — по умолчанию 'term', карточка строится
+  // через monthTermCard тем же общим путём, что и остальные месячные узлы).
+  // Без restoration_norm: ни один узел АПК его не несёт (см. комментарий к
+  // ACTION_FACT_INPUT_APK ниже) — в отличие от ГПК-аналога
+  // (settlement_approval_cassation_appeal, src/chain.js), у которого
+  // restoration_norm задан.
+  settlement_approval_cassation_apk: {
+    node: SETTLEMENT_APPROVAL_CASSATION_APK,
+    deps: () => ['settlement_approval_ruling_date_apk'],
+    compute: (i) => computeSettlementApprovalCassationApk(i),
   },
 };
 
