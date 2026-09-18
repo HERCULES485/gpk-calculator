@@ -35,6 +35,7 @@ import {
   computeOutOfCourtBankruptcyReapplicationApk,
   computeOutOfCourtBankruptcyReapplicationAfterPriorApk,
   computeSettlementAgreementApprovalApplicationApk,
+  computeSettlementAgreementReviewApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -49,6 +50,7 @@ import {
   OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_APK,
   OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_AFTER_PRIOR_APK,
   SETTLEMENT_AGREEMENT_APPROVAL_APPLICATION_APK,
+  SETTLEMENT_AGREEMENT_REVIEW_APK,
 } from './bankruptcy.js';
 
 import {
@@ -421,6 +423,15 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     kind: 'window',
     deps: () => ['settlement_agreement_conclusion_date_apk'],
     compute: (i) => computeSettlementAgreementApprovalApplicationApk(i),
+  },
+  // Обычный term-узел (kind не указан — по умолчанию 'term', карточка строится
+  // через monthTermCard уже существующим общим путём buildViewBankruptcy).
+  // Регистрация здесь обязательна для любого узла независимо от вида карточки
+  // — это не новый билдер и не правка диспетчера/renderTermCard.
+  settlement_agreement_review_apk: {
+    node: SETTLEMENT_AGREEMENT_REVIEW_APK,
+    deps: () => ['settlement_agreement_review_circumstances_discovered_date_apk'],
+    compute: (i) => computeSettlementAgreementReviewApk(i),
   },
 };
 

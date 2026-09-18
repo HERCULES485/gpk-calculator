@@ -43,6 +43,8 @@ import {
   OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_AFTER_PRIOR_APK,
   computeSettlementAgreementApprovalApplicationApk,
   SETTLEMENT_AGREEMENT_APPROVAL_APPLICATION_APK,
+  computeSettlementAgreementReviewApk,
+  SETTLEMENT_AGREEMENT_REVIEW_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -925,4 +927,64 @@ test('мировое соглашение: одна действующая ре�
   assert.equal(SETTLEMENT_AGREEMENT_APPROVAL_APPLICATION_APK.norm_versions.length, 1);
   assert.match(SETTLEMENT_AGREEMENT_APPROVAL_APPLICATION_APK.logic, /27\.07\.2027/);
   assert.match(SETTLEMENT_AGREEMENT_APPROVAL_APPLICATION_APK.logic, /253-ФЗ/);
+});
+
+// Задача — пересмотр определения об утверждении мирового соглашения по
+// вновь открывшимся обстоятельствам (п. 2 ст. 162 ФЗ № 127-ФЗ). Десятый узел
+// домена, обычный месячный term — тот же паттерн, что и у ст. 213.29
+// (БАНКРОТСТВО.6) выше, другой якорь и другая норма.
+
+test('пересмотр определения об утверждении мирового соглашения: один месяц с даты открытия обстоятельств, будний день без переноса', () => {
+  const term = computeSettlementAgreementReviewApk({
+    settlement_agreement_review_circumstances_discovered_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11'); // пятница, рабочий день
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'п. 2 ст. 162 ФЗ № 127-ФЗ');
+});
+
+test('пересмотр определения об утверждении мирового соглашения: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeSettlementAgreementReviewApk({
+    settlement_agreement_review_circumstances_discovered_date_apk: '2025-02-01',
+  });
+  // 01.02.2025 + 1 месяц = 01.03.2025 — суббота, перенос на 03.03.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('пересмотр определения об утверждении мирового соглашения: без settlement_agreement_review_circumstances_discovered_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeSettlementAgreementReviewApk({}),
+    /settlement_agreement_review_circumstances_discovered_date_apk/,
+  );
+});
+
+test('пересмотр определения об утверждении мирового соглашения: судебная процедура, календарный месяц — calculation ссылается на АПК, тот же паттерн, что у ст. 213.29', () => {
+  // Пересматривает определение арбитражный суд, и единица — календарный
+  // месяц (как у ст. 213.29, а не working_day, как у ст. 47 п. 1 и ст. 158
+  // п. 2 — там другая часть ст. 113 АПК РФ) — тот же calculation, что у
+  // ст. 213.29, а не формулировка внесудебных узлов (ст. 223.2/223.6), где
+  // суда нет вовсе.
+  assert.deepEqual(
+    SETTLEMENT_AGREEMENT_REVIEW_APK.norm_versions[0].norm.calculation,
+    BANKRUPTCY_COMPLETION_REVIEW_APK.norm_versions[0].norm.calculation,
+  );
+  assert.notDeepEqual(
+    SETTLEMENT_AGREEMENT_REVIEW_APK.norm_versions[0].norm.calculation,
+    OUT_OF_COURT_BANKRUPTCY_COMPLETION_APK.norm_versions[0].norm.calculation,
+  );
+});
+
+test('пересмотр определения об утверждении мирового соглашения: midnight_rule присутствует, без потолков и restoration', () => {
+  const term = computeSettlementAgreementReviewApk({
+    settlement_agreement_review_circumstances_discovered_date_apk: '2025-03-11',
+  });
+  assert.equal(term.id, 'settlement_agreement_review_apk');
+  assert.match(SETTLEMENT_AGREEMENT_REVIEW_APK.midnight_rule, /ст\. 114 АПК РФ/);
+  assert.equal(SETTLEMENT_AGREEMENT_REVIEW_APK.restoration_norm, undefined);
+  assert.equal(term.caps, undefined);
 });
