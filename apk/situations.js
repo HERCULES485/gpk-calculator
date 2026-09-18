@@ -219,6 +219,41 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['settlement_approval_cassation_apk'],
   },
+  {
+    id: 'arbitral_enforcement_writ_cassation',
+    label: 'Выдан исполнительный лист на решение третейского суда — хочу обжаловать',
+    // Тот же образец, что у settlement_approval_cassation: один primary_field,
+    // прямая кассация в обход апелляции (ч. 5 ст. 240 АПК РФ). Отдельная
+    // ветвь и от settlement_approval_cassation, и от двух ветвей об
+    // иностранных решениях ниже: разные категории дел, разные нормы, разные
+    // поля — узлы не делят якорь.
+    primary_field: 'arbitral_enforcement_writ_ruling_date_apk',
+    fields: [],
+    nodes: ['arbitral_enforcement_writ_cassation_apk'],
+  },
+  {
+    id: 'foreign_judgment_enforcement_cassation',
+    label: 'Признано и приведено в исполнение иностранное решение — хочу обжаловать',
+    // Ч. 3 ст. 245 АПК РФ — решение ТРЕБУЕТ принудительного исполнения.
+    // Отдельная ветвь от foreign_judgment_recognition_cassation ниже: там
+    // решение исполнения не требует — разный предмет дела, разная норма,
+    // разное поле.
+    primary_field: 'foreign_judgment_enforcement_ruling_date_apk',
+    fields: [],
+    nodes: ['foreign_judgment_enforcement_cassation_apk'],
+  },
+  {
+    id: 'foreign_judgment_recognition_cassation',
+    label: 'Признано иностранное решение, не требующее принудительного исполнения — хочу обжаловать',
+    // Ч. 14 ст. 245.1 АПК РФ — решение НЕ требует принудительного исполнения.
+    // Не слита с foreign_judgment_enforcement_cassation выше по той же
+    // причине, по которой не слиты settlement_agreement и
+    // settlement_agreement_review в банкротном домене: разные стадии/предметы
+    // одного института, взаимоисключающие для пользователя ситуации.
+    primary_field: 'foreign_judgment_recognition_ruling_date_apk',
+    fields: [],
+    nodes: ['foreign_judgment_recognition_cassation_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';

@@ -45,6 +45,9 @@ import {
   computeAdminLiabilityImpositionAppealApk,
   computeAdminLiabilityChallengeAppealApk,
   computeSettlementApprovalCassationApk,
+  computeArbitralEnforcementWritCassationApk,
+  computeForeignJudgmentEnforcementCassationApk,
+  computeForeignJudgmentRecognitionCassationApk,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -73,6 +76,9 @@ import {
   ADMIN_LIABILITY_IMPOSITION_APPEAL_APK,
   ADMIN_LIABILITY_CHALLENGE_APPEAL_APK,
   SETTLEMENT_APPROVAL_CASSATION_APK,
+  ARBITRAL_ENFORCEMENT_WRIT_CASSATION_APK,
+  FOREIGN_JUDGMENT_ENFORCEMENT_CASSATION_APK,
+  FOREIGN_JUDGMENT_RECOGNITION_CASSATION_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -550,6 +556,23 @@ const NODE_REQUIREMENTS = {
     node: SETTLEMENT_APPROVAL_CASSATION_APK,
     deps: () => ['settlement_approval_ruling_date_apk'],
     compute: (i) => computeSettlementApprovalCassationApk(i),
+  },
+  // Тот же институт прямой кассации, тот же паттерн регистрации — три узла
+  // ниже перенесены по образцу settlement_approval_cassation_apk выше.
+  arbitral_enforcement_writ_cassation_apk: {
+    node: ARBITRAL_ENFORCEMENT_WRIT_CASSATION_APK,
+    deps: () => ['arbitral_enforcement_writ_ruling_date_apk'],
+    compute: (i) => computeArbitralEnforcementWritCassationApk(i),
+  },
+  foreign_judgment_enforcement_cassation_apk: {
+    node: FOREIGN_JUDGMENT_ENFORCEMENT_CASSATION_APK,
+    deps: () => ['foreign_judgment_enforcement_ruling_date_apk'],
+    compute: (i) => computeForeignJudgmentEnforcementCassationApk(i),
+  },
+  foreign_judgment_recognition_cassation_apk: {
+    node: FOREIGN_JUDGMENT_RECOGNITION_CASSATION_APK,
+    deps: () => ['foreign_judgment_recognition_ruling_date_apk'],
+    compute: (i) => computeForeignJudgmentRecognitionCassationApk(i),
   },
 };
 
