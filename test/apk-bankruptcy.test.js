@@ -45,6 +45,8 @@ import {
   SETTLEMENT_AGREEMENT_APPROVAL_APPLICATION_APK,
   computeSettlementAgreementReviewApk,
   SETTLEMENT_AGREEMENT_REVIEW_APK,
+  computeAppraiserInvolvementRequestApk,
+  APPRAISER_INVOLVEMENT_REQUEST_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -986,5 +988,63 @@ test('пересмотр определения об утверждении ми
   assert.equal(term.id, 'settlement_agreement_review_apk');
   assert.match(SETTLEMENT_AGREEMENT_REVIEW_APK.midnight_rule, /ст\. 114 АПК РФ/);
   assert.equal(SETTLEMENT_AGREEMENT_REVIEW_APK.restoration_norm, undefined);
+  assert.equal(term.caps, undefined);
+});
+
+// Задача — требование кредитора (уполномоченного органа) о привлечении
+// независимого оценщика (п. 5.1 ст. 110 ФЗ № 127-ФЗ). Первый узел процедуры
+// внешнего управления в этом домене. Второй в домене working_day-узел —
+// тот же образец, что у ст. 47 п. 1 (debtor_response_bankruptcy_apk).
+
+test('требование о привлечении оценщика: тридцать рабочих дней от даты включения сведений в ЕФРСБ, без праздничных кластеров рядом', () => {
+  const term = computeAppraiserInvolvementRequestApk({
+    inventory_results_included_date_apk: '2025-03-02',
+  });
+  assert.equal(term.anchor, '2025-03-02');
+  assert.equal(term.first_working_day, '2025-03-03');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false); // weekend_shift к working_day не применяется
+  assert.deepEqual(term.duration, { value: 30, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'п. 5.1 ст. 110 ФЗ № 127-ФЗ');
+});
+
+test('требование о привлечении оценщика: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeAppraiserInvolvementRequestApk({
+    inventory_results_included_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-02-18');
+});
+
+test('требование о привлечении оценщика: без inventory_results_included_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeAppraiserInvolvementRequestApk({}),
+    /inventory_results_included_date_apk/,
+  );
+});
+
+test('требование о привлечении оценщика: логика явно отражает условие права — порог 2% от суммы требований в реестре', () => {
+  // Право на подачу требования само по себе этим узлом не проверяется (нет
+  // поля/дискриминатора для суммы требования и общей суммы реестра) — условие
+  // применимости отражено текстом в logic, чтобы не ввести пользователя в
+  // заблуждение, если порог не достигнут.
+  assert.match(APPRAISER_INVOLVEMENT_REQUEST_APK.logic, /два процента/);
+  assert.match(APPRAISER_INVOLVEMENT_REQUEST_APK.logic, /право не возникает/);
+});
+
+test('требование о привлечении оценщика: АПК-цитата с применением через ст. 223 (тот же паттерн, что у ст. 47 п. 1)', () => {
+  assert.deepEqual(
+    APPRAISER_INVOLVEMENT_REQUEST_APK.norm_versions[0].norm.calculation,
+    DEBTOR_RESPONSE_BANKRUPTCY_APK.norm_versions[0].norm.calculation,
+  );
+});
+
+test('требование о привлечении оценщика: без restoration-полей', () => {
+  const term = computeAppraiserInvolvementRequestApk({
+    inventory_results_included_date_apk: '2025-03-02',
+  });
+  assert.equal(term.id, 'appraiser_involvement_request_apk');
+  assert.equal(APPRAISER_INVOLVEMENT_REQUEST_APK.restoration_norm, undefined);
   assert.equal(term.caps, undefined);
 });

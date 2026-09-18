@@ -180,6 +180,20 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['settlement_agreement_review_apk'],
   },
+  {
+    id: 'appraiser_involvement_request',
+    label: 'Внешнее управление или конкурсное производство — не согласен с результатами инвентаризации',
+    // Первая ветвь процедуры внешнего управления в этом домене (см.
+    // комментарий к узлу в apk/bankruptcy.js). Единственное поле ветви —
+    // дата включения сведений о результатах инвентаризации в ЕФРСБ, тот же
+    // образец, что у остальных одноузловых ветвей. Условие права (порог 2%
+    // от суммы требований в реестре) в форму не выведено — это не дата и не
+    // дискриминатор состояния, а числовое условие применимости, отражённое
+    // текстом на карточке (см. logic узла).
+    primary_field: 'inventory_results_included_date_apk',
+    fields: [],
+    nodes: ['appraiser_involvement_request_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';

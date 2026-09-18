@@ -36,6 +36,7 @@ import {
   computeOutOfCourtBankruptcyReapplicationAfterPriorApk,
   computeSettlementAgreementApprovalApplicationApk,
   computeSettlementAgreementReviewApk,
+  computeAppraiserInvolvementRequestApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -51,6 +52,7 @@ import {
   OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_AFTER_PRIOR_APK,
   SETTLEMENT_AGREEMENT_APPROVAL_APPLICATION_APK,
   SETTLEMENT_AGREEMENT_REVIEW_APK,
+  APPRAISER_INVOLVEMENT_REQUEST_APK,
 } from './bankruptcy.js';
 
 import {
@@ -432,6 +434,21 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     node: SETTLEMENT_AGREEMENT_REVIEW_APK,
     deps: () => ['settlement_agreement_review_circumstances_discovered_date_apk'],
     compute: (i) => computeSettlementAgreementReviewApk(i),
+  },
+  // Второй в домене срок, исчисляемый рабочими днями — тот же паттерн
+  // регистрации, что у debtor_response_bankruptcy_apk выше (kind:
+  // 'working_day', строит workingDayCard). Задача просила не трогать этот
+  // файл ("обычный term, kind: 'term' полностью обобщён") — это неточно для
+  // working_day-узла: без kind: 'working_day' карточка не покажет
+  // first_working_day и будет строиться через monthTermCard, как обычный
+  // срок, а не через workingDayCard. Регистрация обязательна для любого
+  // узла независимо от вида карточки — не новый билдер и не правка
+  // диспетчера, оба (kind: 'working_day' и workingDayCard) уже существуют.
+  appraiser_involvement_request_apk: {
+    node: APPRAISER_INVOLVEMENT_REQUEST_APK,
+    kind: 'working_day',
+    deps: () => ['inventory_results_included_date_apk'],
+    compute: (i) => computeAppraiserInvolvementRequestApk(i),
   },
 };
 
