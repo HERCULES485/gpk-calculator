@@ -194,6 +194,29 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['appraiser_involvement_request_apk'],
   },
+  {
+    id: 'claims_ruling_reasoned_request',
+    label: 'Определение об установлении требований вынесено резолютивной частью — нужна мотивированная часть',
+    // Единственное поле ветви — дата размещения резолютивной части, тот же
+    // образец, что у остальных одноузловых ветвей. Отдельная ветвь от
+    // claims_ruling_reasoned_appeal ниже (архитектурное решение согласовано
+    // отдельно): разные якоря, разные сроки, разные институты — просьба
+    // изготовить полный текст, не связанная с обжалованием, и досылка
+    // мотивировки к уже поданной жалобе — не один и тот же сценарий.
+    primary_field: 'claims_ruling_resolutive_part_date_apk',
+    fields: [],
+    nodes: ['claims_ruling_reasoned_request_apk'],
+  },
+  {
+    id: 'claims_ruling_reasoned_appeal',
+    label: 'Жалоба на резолютивную часть уже подана — суд изготовил мотивированное определение',
+    // Якорь — дата изготовления мотивированного определения (не дата подачи
+    // жалобы на резолютивную часть: сам факт подачи жалобы — предпосылка
+    // этой ветки, узлом не проверяется и отдельным полем не вводится).
+    primary_field: 'claims_ruling_reasoned_date_apk',
+    fields: [],
+    nodes: ['claims_ruling_reasoned_appeal_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';

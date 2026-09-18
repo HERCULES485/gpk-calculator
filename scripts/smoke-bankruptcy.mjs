@@ -91,8 +91,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 11,
-  'переключатель ситуаций отрисован не на одиннадцать ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 13,
+  'переключатель ситуаций отрисован не на тринадцать ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -772,6 +772,71 @@ const appraiserHtml = await appraiserCard.evaluate((el) => el.outerHTML);
 check(
   appraiserHtml.includes('два процента'),
   `условие права (2% от суммы требований) не показано на карточке: «${appraiserHtml}»`,
+);
+
+// --- Ветвь 12: заявление о составлении мотивированного определения (абз. 3 п. 2 ст. 71) ---
+//
+// Третий в домене working_day-узел.
+
+await chooseSituation('claims_ruling_reasoned_request');
+check(
+  (await page.locator('#in-claims_ruling_resolutive_part_date_apk').count()) === 1,
+  'ветвь "claims_ruling_reasoned_request": основное поле не найдено в DOM',
+);
+await page.fill('#in-claims_ruling_resolutive_part_date_apk', '26.12.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви заявления о мотивированном определении ожидалась одна карточка',
+);
+const reasonedRequestCard = cardByTitle('Заявление о составлении мотивированного определения');
+check(
+  (await reasonedRequestCard.count()) === 1,
+  'карточка заявления о мотивированном определении не появилась',
+);
+check(
+  (await deadlineOf(reasonedRequestCard)) === '14.01.2026',
+  `ждали дедлайн 14.01.2026, получили «${await deadlineOf(reasonedRequestCard)}»`,
+);
+check(
+  (await reasonedRequestCard.innerText()).includes('абз. 3 п. 2 ст. 71 ФЗ № 127-ФЗ'),
+  'норма абз. 3 п. 2 ст. 71 ФЗ № 127-ФЗ не показана на карточке',
+);
+
+// --- Ветвь 13: мотивированная часть жалобы (абз. 4 п. 2 ст. 71) ----------------
+//
+// Четвёртый в домене working_day-узел. Проверяем, что текст на карточке явно
+// называет срок дополнительным к уже поданной жалобе, а не заменой срока
+// обжалования (текст внутри свёрнутого <details> — проверка через outerHTML).
+
+await chooseSituation('claims_ruling_reasoned_appeal');
+check(
+  (await page.locator('#in-claims_ruling_reasoned_date_apk').count()) === 1,
+  'ветвь "claims_ruling_reasoned_appeal": основное поле не найдено в DOM',
+);
+await page.fill('#in-claims_ruling_reasoned_date_apk', '26.12.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви мотивированной части жалобы ожидалась одна карточка',
+);
+const reasonedAppealCard = cardByTitle('Мотивированная часть жалобы на определение об установлении требований кредиторов');
+check(
+  (await reasonedAppealCard.count()) === 1,
+  'карточка мотивированной части жалобы не появилась',
+);
+check(
+  (await deadlineOf(reasonedAppealCard)) === '28.01.2026',
+  `ждали дедлайн 28.01.2026, получили «${await deadlineOf(reasonedAppealCard)}»`,
+);
+const reasonedAppealHtml = await reasonedAppealCard.evaluate((el) => el.outerHTML);
+check(
+  reasonedAppealHtml.includes('абз. 4 п. 2 ст. 71 ФЗ № 127-ФЗ'),
+  'норма абз. 4 п. 2 ст. 71 ФЗ № 127-ФЗ не показана на карточке',
+);
+check(
+  reasonedAppealHtml.includes('не входит') && reasonedAppealHtml.includes('не заменяет'),
+  `на карточке не отражено, что срок дополнительный, а не замена срока обжалования: «${reasonedAppealHtml}»`,
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------

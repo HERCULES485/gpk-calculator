@@ -37,6 +37,8 @@ import {
   computeSettlementAgreementApprovalApplicationApk,
   computeSettlementAgreementReviewApk,
   computeAppraiserInvolvementRequestApk,
+  computeClaimsRulingReasonedRequestApk,
+  computeClaimsRulingReasonedAppealApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -53,6 +55,8 @@ import {
   SETTLEMENT_AGREEMENT_APPROVAL_APPLICATION_APK,
   SETTLEMENT_AGREEMENT_REVIEW_APK,
   APPRAISER_INVOLVEMENT_REQUEST_APK,
+  CLAIMS_RULING_REASONED_REQUEST_APK,
+  CLAIMS_RULING_REASONED_APPEAL_APK,
 } from './bankruptcy.js';
 
 import {
@@ -449,6 +453,20 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     kind: 'working_day',
     deps: () => ['inventory_results_included_date_apk'],
     compute: (i) => computeAppraiserInvolvementRequestApk(i),
+  },
+  // Третий и четвёртый working_day-узлы домена — тот же паттерн, что у
+  // appraiser_involvement_request_apk выше.
+  claims_ruling_reasoned_request_apk: {
+    node: CLAIMS_RULING_REASONED_REQUEST_APK,
+    kind: 'working_day',
+    deps: () => ['claims_ruling_resolutive_part_date_apk'],
+    compute: (i) => computeClaimsRulingReasonedRequestApk(i),
+  },
+  claims_ruling_reasoned_appeal_apk: {
+    node: CLAIMS_RULING_REASONED_APPEAL_APK,
+    kind: 'working_day',
+    deps: () => ['claims_ruling_reasoned_date_apk'],
+    compute: (i) => computeClaimsRulingReasonedAppealApk(i),
   },
 };
 
