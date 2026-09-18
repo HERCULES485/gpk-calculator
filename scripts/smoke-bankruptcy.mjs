@@ -91,8 +91,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 9,
-  'переключатель ситуаций отрисован не на девять ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 10,
+  'переключатель ситуаций отрисован не на десять ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -704,6 +704,33 @@ check(
 check(
   windowLines.some((l) => l.includes('не позднее') && l.includes('21.01.2026')),
   `в сводке нет строки верхней границы: ${JSON.stringify(windowLines)}`,
+);
+
+// --- Ветвь 10: пересмотр определения об утверждении мирового соглашения --------
+//
+// Перенос по образцу: обычный месячный term-узел (та же механика, что и у
+// ветви 3, ст. 213.29), без потолков, восстановления и другого kind.
+
+await chooseSituation('settlement_agreement_review');
+check(
+  (await page.locator('#in-settlement_agreement_review_circumstances_discovered_date_apk').count()) === 1,
+  'ветвь "settlement_agreement_review": основное поле не найдено в DOM',
+);
+await page.fill('#in-settlement_agreement_review_circumstances_discovered_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви пересмотра мирового соглашения ожидалась одна карточка',
+);
+const reviewCard = cardByTitle('Пересмотр определения об утверждении мирового соглашения');
+check((await reviewCard.count()) === 1, 'карточка пересмотра определения не появилась');
+check(
+  (await deadlineOf(reviewCard)) === '11.04.2025',
+  `срок пересмотра определения посчитан неверно: ${await deadlineOf(reviewCard)}`,
+);
+check(
+  (await reviewCard.innerText()).includes('п. 2 ст. 162 ФЗ № 127-ФЗ'),
+  'норма п. 2 ст. 162 ФЗ № 127-ФЗ не показана на карточке пересмотра',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------
