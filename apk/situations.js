@@ -254,6 +254,59 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['foreign_judgment_recognition_cassation_apk'],
   },
+  {
+    id: 'case_transfer_jurisdiction_appeal',
+    label: 'Суд решил вопрос о передаче дела по подсудности — хочу обжаловать',
+    // Ч. 5 ст. 39 АПК РФ. Один primary_field, тот же образец, что у
+    // остальных одноузловых ветвей этого домена. Обычная апелляция с
+    // сокращённым сроком — не путать с ветвями прямой кассации выше.
+    primary_field: 'case_transfer_jurisdiction_ruling_date_apk',
+    fields: [],
+    nodes: ['case_transfer_jurisdiction_appeal_apk'],
+  },
+  {
+    id: 'coplaintiff_codefendant_refusal_appeal',
+    label: 'Суд отказал во вступлении соистца или привлечении соответчика — хочу обжаловать',
+    // Ч. 7 ст. 46 АПК РФ.
+    primary_field: 'coplaintiff_codefendant_refusal_ruling_date_apk',
+    fields: [],
+    nodes: ['coplaintiff_codefendant_refusal_appeal_apk'],
+  },
+  {
+    id: 'third_party_claim_refusal_appeal',
+    label: 'Суд отказал во вступлении третьего лица с самостоятельными требованиями — хочу обжаловать',
+    // Ч. 4 ст. 50 АПК РФ. Отдельная от third_party_no_claim_refusal_appeal
+    // ниже ветвь: разный процессуальный статус третьего лица.
+    primary_field: 'third_party_claim_refusal_ruling_date_apk',
+    fields: [],
+    nodes: ['third_party_claim_refusal_appeal_apk'],
+  },
+  {
+    id: 'third_party_no_claim_refusal_appeal',
+    label: 'Суд отказал во вступлении третьего лица без самостоятельных требований — хочу обжаловать',
+    // Ч. 3.1 ст. 51 АПК РФ.
+    primary_field: 'third_party_no_claim_refusal_ruling_date_apk',
+    fields: [],
+    nodes: ['third_party_no_claim_refusal_appeal_apk'],
+  },
+  {
+    id: 'case_consolidation_severance_refusal_appeal',
+    label: 'Суд отказал в объединении дел или выделении требований — хочу обжаловать',
+    // Ч. 7 ст. 130 АПК РФ.
+    primary_field: 'case_consolidation_severance_refusal_ruling_date_apk',
+    fields: [],
+    nodes: ['case_consolidation_severance_refusal_appeal_apk'],
+  },
+  {
+    id: 'special_ruling_appeal',
+    label: 'Суд вынес частное определение — хочу обжаловать',
+    // Ст. 188.1 АПК РФ. Единственная ветвь из шести без отклонённого
+    // ходатайства: суд выносит частное определение по собственной
+    // инициативе, поэтому якорь — просто дата вынесения.
+    primary_field: 'special_ruling_issued_date_apk',
+    fields: [],
+    nodes: ['special_ruling_appeal_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';

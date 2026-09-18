@@ -83,8 +83,8 @@ check(
   'нет основного поля даты решения',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 17,
-  'переключатель ситуаций отрисован не на семнадцать ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 23,
+  'переключатель ситуаций отрисован не на двадцать три ветви',
 );
 
 // --- 1. Полный цикл: дата решения → карточка апелляционной жалобы --------------
@@ -333,6 +333,12 @@ const PRIMARY_FIELD_BRANCHES = [
   ['arbitral_enforcement_writ_cassation', 'arbitral_enforcement_writ_ruling_date_apk'],
   ['foreign_judgment_enforcement_cassation', 'foreign_judgment_enforcement_ruling_date_apk'],
   ['foreign_judgment_recognition_cassation', 'foreign_judgment_recognition_ruling_date_apk'],
+  ['case_transfer_jurisdiction_appeal', 'case_transfer_jurisdiction_ruling_date_apk'],
+  ['coplaintiff_codefendant_refusal_appeal', 'coplaintiff_codefendant_refusal_ruling_date_apk'],
+  ['third_party_claim_refusal_appeal', 'third_party_claim_refusal_ruling_date_apk'],
+  ['third_party_no_claim_refusal_appeal', 'third_party_no_claim_refusal_ruling_date_apk'],
+  ['case_consolidation_severance_refusal_appeal', 'case_consolidation_severance_refusal_ruling_date_apk'],
+  ['special_ruling_appeal', 'special_ruling_issued_date_apk'],
 ];
 for (const [situationId, fieldId] of PRIMARY_FIELD_BRANCHES) {
   await chooseSituation(situationId);

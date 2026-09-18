@@ -48,6 +48,12 @@ import {
   computeArbitralEnforcementWritCassationApk,
   computeForeignJudgmentEnforcementCassationApk,
   computeForeignJudgmentRecognitionCassationApk,
+  computeCaseTransferJurisdictionAppealApk,
+  computeCoplaintiffCodefendantRefusalAppealApk,
+  computeThirdPartyClaimRefusalAppealApk,
+  computeThirdPartyNoClaimRefusalAppealApk,
+  computeCaseConsolidationSeveranceRefusalAppealApk,
+  computeSpecialRulingAppealApk,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -79,6 +85,12 @@ import {
   ARBITRAL_ENFORCEMENT_WRIT_CASSATION_APK,
   FOREIGN_JUDGMENT_ENFORCEMENT_CASSATION_APK,
   FOREIGN_JUDGMENT_RECOGNITION_CASSATION_APK,
+  CASE_TRANSFER_JURISDICTION_APPEAL_APK,
+  COPLAINTIFF_CODEFENDANT_REFUSAL_APPEAL_APK,
+  THIRD_PARTY_CLAIM_REFUSAL_APPEAL_APK,
+  THIRD_PARTY_NO_CLAIM_REFUSAL_APPEAL_APK,
+  CASE_CONSOLIDATION_SEVERANCE_REFUSAL_APPEAL_APK,
+  SPECIAL_RULING_APPEAL_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -573,6 +585,39 @@ const NODE_REQUIREMENTS = {
     node: FOREIGN_JUDGMENT_RECOGNITION_CASSATION_APK,
     deps: () => ['foreign_judgment_recognition_ruling_date_apk'],
     compute: (i) => computeForeignJudgmentRecognitionCassationApk(i),
+  },
+  // Шесть узлов ниже — сокращённый (десятидневный) срок ОБЫЧНОЙ апелляции
+  // (не прямая кассация, как три узла выше) — тот же паттерн регистрации,
+  // что и у остальных working_day-узлов домена.
+  case_transfer_jurisdiction_appeal_apk: {
+    node: CASE_TRANSFER_JURISDICTION_APPEAL_APK,
+    deps: () => ['case_transfer_jurisdiction_ruling_date_apk'],
+    compute: (i) => computeCaseTransferJurisdictionAppealApk(i),
+  },
+  coplaintiff_codefendant_refusal_appeal_apk: {
+    node: COPLAINTIFF_CODEFENDANT_REFUSAL_APPEAL_APK,
+    deps: () => ['coplaintiff_codefendant_refusal_ruling_date_apk'],
+    compute: (i) => computeCoplaintiffCodefendantRefusalAppealApk(i),
+  },
+  third_party_claim_refusal_appeal_apk: {
+    node: THIRD_PARTY_CLAIM_REFUSAL_APPEAL_APK,
+    deps: () => ['third_party_claim_refusal_ruling_date_apk'],
+    compute: (i) => computeThirdPartyClaimRefusalAppealApk(i),
+  },
+  third_party_no_claim_refusal_appeal_apk: {
+    node: THIRD_PARTY_NO_CLAIM_REFUSAL_APPEAL_APK,
+    deps: () => ['third_party_no_claim_refusal_ruling_date_apk'],
+    compute: (i) => computeThirdPartyNoClaimRefusalAppealApk(i),
+  },
+  case_consolidation_severance_refusal_appeal_apk: {
+    node: CASE_CONSOLIDATION_SEVERANCE_REFUSAL_APPEAL_APK,
+    deps: () => ['case_consolidation_severance_refusal_ruling_date_apk'],
+    compute: (i) => computeCaseConsolidationSeveranceRefusalAppealApk(i),
+  },
+  special_ruling_appeal_apk: {
+    node: SPECIAL_RULING_APPEAL_APK,
+    deps: () => ['special_ruling_issued_date_apk'],
+    compute: (i) => computeSpecialRulingAppealApk(i),
   },
 };
 
