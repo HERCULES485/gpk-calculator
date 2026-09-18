@@ -1643,3 +1643,55 @@ export function computeClaimsRulingReasonedAppealApk(inputs) {
   }
   return computeSimpleTerm(CLAIMS_RULING_REASONED_APPEAL_APK, anchor);
 }
+
+// Оплата покупателем по договору купли-продажи предприятия должника на
+// торгах (п. 19 ст. 110 ФЗ № 127-ФЗ). Пятый working_day-узел домена — тот
+// же паттерн, что у ст. 47 п. 1 и п. 5.1 ст. 110 (третий раз, отдельного
+// обоснования не требует). Без потолков и restoration — норма их не
+// упоминает.
+
+export const ENTERPRISE_SALE_PAYMENT_APK = {
+  id: 'enterprise_sale_payment_apk',
+  title: 'Оплата по договору купли-продажи предприятия должника на торгах',
+  duration: { value: 30, unit: 'working_day' },
+  anchor: { offset_start: 1 },
+  logic:
+    'При продаже предприятия оплата в соответствии с договором купли-продажи ' +
+    'предприятия должна быть осуществлена покупателем в течение тридцати дней ' +
+    'со дня подписания этого договора (п. 19 ст. 110 ФЗ № 127-ФЗ). Срок ' +
+    'исчисляется днями — нерабочие дни не включаются (ч. 3 ст. 113 АПК РФ, ' +
+    'применяется через ст. 223 АПК РФ); течение начинается со дня, следующего ' +
+    'за подписанием договора.',
+  midnight_rule:
+    'ч. 5, 6 ст. 114 АПК РФ — процессуальное действие может быть совершено, а ' +
+    'оплата произведена, до 24:00 последнего дня срока.',
+  norm_versions: [
+    {
+      id: 'current',
+      from: null,
+      to: null,
+      anchor: { offset_start: 1 },
+      norm: {
+        primary: 'п. 19 ст. 110 ФЗ № 127-ФЗ',
+        calculation: ['ч. 3 ст. 113 АПК РФ', 'ст. 223 АПК РФ'],
+      },
+    },
+  ],
+};
+
+/**
+ * Срок оплаты покупателем по договору купли-продажи предприятия должника
+ * на торгах по п. 19 ст. 110 ФЗ № 127-ФЗ. Тридцать рабочих дней со дня
+ * подписания договора купли-продажи предприятия.
+ * @param {{ enterprise_sale_agreement_signed_date_apk: string }} inputs
+ */
+export function computeEnterpriseSalePaymentApk(inputs) {
+  const anchor = inputs?.enterprise_sale_agreement_signed_date_apk;
+  if (anchor == null) {
+    throw new Error(
+      'Обязательна дата подписания договора купли-продажи предприятия ' +
+        '(enterprise_sale_agreement_signed_date_apk)',
+    );
+  }
+  return computeSimpleTerm(ENTERPRISE_SALE_PAYMENT_APK, anchor);
+}
