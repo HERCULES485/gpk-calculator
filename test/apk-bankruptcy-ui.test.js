@@ -43,7 +43,7 @@ const BANKRUPTCY_NODE_IDS = Object.values(bankruptcyModule)
   )
   .map((v) => v.id);
 
-// Полный набор входных данных на все шестнадцать узлов сразу. Даты — из
+// Полный набор входных данных на все восемнадцать узлов сразу. Даты — из
 // тестов расчёта (test/apk-bankruptcy.test.js), кроме тех, что там задавались
 // в отдельных сценариях: здесь важно, что расчёт проходит, а не какие именно
 // получаются числа (их проверяют тесты расчёта).
@@ -65,6 +65,8 @@ const FULL_INPUTS = {
   settlement_agreement_conclusion_date_apk: '2025-03-11',
   settlement_agreement_review_circumstances_discovered_date_apk: '2025-03-11',
   inventory_results_included_date_apk: '2025-03-11',
+  claims_ruling_resolutive_part_date_apk: '2025-03-11',
+  claims_ruling_reasoned_date_apk: '2025-03-11',
 };
 
 const cardById = (view, id) => view.cards.find((c) => c.id === id);
@@ -72,8 +74,8 @@ const incompleteById = (view, id) => view.incomplete.find((n) => n.id === id);
 
 // --- 1. Покрытие ситуаций ------------------------------------------------------
 
-test('банкротство UI: каждый из шестнадцати узлов закреплён ровно за одной ситуацией', () => {
-  assert.equal(BANKRUPTCY_NODE_IDS.length, 16);
+test('банкротство UI: каждый из восемнадцати узлов закреплён ровно за одной ситуацией', () => {
+  assert.equal(BANKRUPTCY_NODE_IDS.length, 18);
   assert.doesNotThrow(() => checkSituationCoverage(BANKRUPTCY_NODE_IDS, SITUATIONS_BANKRUPTCY));
   // Обратная сторона того же инварианта: в ситуациях нет узлов-призраков,
   // которых в apk/bankruptcy.js уже (или ещё) нет.
@@ -83,7 +85,7 @@ test('банкротство UI: каждый из шестнадцати узл
   );
 });
 
-test('банкротство UI: одиннадцать ветвей ожидаемого состава, ситуация по умолчанию существует', () => {
+test('банкротство UI: тринадцать ветвей ожидаемого состава, ситуация по умолчанию существует', () => {
   assert.deepEqual(
     SITUATIONS_BANKRUPTCY.map((s) => s.id),
     [
@@ -98,6 +100,8 @@ test('банкротство UI: одиннадцать ветвей ожида�
       'settlement_agreement',
       'settlement_agreement_review',
       'appraiser_involvement_request',
+      'claims_ruling_reasoned_request',
+      'claims_ruling_reasoned_appeal',
     ],
   );
   assert.ok(SITUATIONS_BANKRUPTCY.some((s) => s.id === DEFAULT_SITUATION_BANKRUPTCY));
@@ -118,9 +122,9 @@ test('банкротство UI: у каждого поля всех ветве�
 
 // --- 2. Полный набор данных ----------------------------------------------------
 
-test('банкротство UI: полный набор данных — шестнадцать карточек, incomplete пуст', () => {
+test('банкротство UI: полный набор данных — восемнадцать карточек, incomplete пуст', () => {
   const view = buildViewBankruptcy(FULL_INPUTS);
-  assert.equal(view.cards.length, 16);
+  assert.equal(view.cards.length, 18);
   assert.deepEqual(view.incomplete, []);
   assert.deepEqual(view.stubs, []);
   assert.deepEqual([...view.cards.map((c) => c.id)].sort(), [...BANKRUPTCY_NODE_IDS].sort());
@@ -131,10 +135,10 @@ test('банкротство UI: полный набор данных — шес
   );
 });
 
-test('банкротство UI: пустой ввод — ни одной карточки, все шестнадцать узлов в incomplete', () => {
+test('банкротство UI: пустой ввод — ни одной карточки, все восемнадцать узлов в incomplete', () => {
   const view = buildViewBankruptcy({});
   assert.deepEqual(view.cards, []);
-  assert.equal(view.incomplete.length, 16);
+  assert.equal(view.incomplete.length, 18);
   for (const node of view.incomplete) {
     assert.equal(node.status, 'not_computed');
     assert.ok(node.missing_inputs.length > 0);
@@ -176,6 +180,44 @@ test('банкротство UI: требование о привлечении 
     ['inventory_results_included_date_apk'],
   );
   assert.ok(node.missing_inputs[0].label);
+});
+
+test('банкротство UI: третий и четвёртый working_day-узлы домена (п. 2 ст. 71) — тоже показывают первый рабочий день', () => {
+  const view = buildViewBankruptcy({
+    claims_ruling_resolutive_part_date_apk: '2025-12-26',
+    claims_ruling_reasoned_date_apk: '2025-12-26',
+  });
+  const request = cardById(view, 'claims_ruling_reasoned_request_apk');
+  assert.equal(request.kind, 'term');
+  assert.equal(request.unit, 'working_day');
+  assert.ok(request.first_working_day, 'first_working_day должен быть на карточке заявления');
+  assert.equal(request.norm, 'абз. 3 п. 2 ст. 71 ФЗ № 127-ФЗ');
+
+  const appeal = cardById(view, 'claims_ruling_reasoned_appeal_apk');
+  assert.equal(appeal.kind, 'term');
+  assert.equal(appeal.unit, 'working_day');
+  assert.ok(appeal.first_working_day, 'first_working_day должен быть на карточке мотивированной части жалобы');
+  assert.equal(appeal.norm, 'абз. 4 п. 2 ст. 71 ФЗ № 127-ФЗ');
+  // Разные длительности — не один и тот же узел под двумя именами.
+  assert.notEqual(request.deadline, appeal.deadline);
+});
+
+test('банкротство UI: п. 2 ст. 71 — без данных оба узла в incomplete со своими полями', () => {
+  const view = buildViewBankruptcy({});
+  const request = incompleteById(view, 'claims_ruling_reasoned_request_apk');
+  const appeal = incompleteById(view, 'claims_ruling_reasoned_appeal_apk');
+  assert.ok(request);
+  assert.ok(appeal);
+  assert.deepEqual(
+    request.missing_inputs.map((f) => f.id),
+    ['claims_ruling_resolutive_part_date_apk'],
+  );
+  assert.deepEqual(
+    appeal.missing_inputs.map((f) => f.id),
+    ['claims_ruling_reasoned_date_apk'],
+  );
+  assert.ok(request.missing_inputs[0].label);
+  assert.ok(appeal.missing_inputs[0].label);
 });
 
 // --- 3. Карточка capped_term ---------------------------------------------------
@@ -614,7 +656,7 @@ test('банкротство UI: ни одна карточка не несёт 
   // Негативный тест: признак экспортируемости не должен появиться на карточке
   // по недосмотру — ни как поле ics, ни как метаданные реестра сроков.
   const view = buildViewBankruptcy(FULL_INPUTS);
-  assert.equal(view.cards.length, 16);
+  assert.equal(view.cards.length, 18);
   for (const card of view.cards) {
     assert.equal(card.ics, undefined, `у карточки "${card.id}" появилось поле ics`);
     assert.equal(card.ics_meta, undefined);

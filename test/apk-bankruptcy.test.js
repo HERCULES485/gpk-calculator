@@ -47,6 +47,10 @@ import {
   SETTLEMENT_AGREEMENT_REVIEW_APK,
   computeAppraiserInvolvementRequestApk,
   APPRAISER_INVOLVEMENT_REQUEST_APK,
+  computeClaimsRulingReasonedRequestApk,
+  CLAIMS_RULING_REASONED_REQUEST_APK,
+  computeClaimsRulingReasonedAppealApk,
+  CLAIMS_RULING_REASONED_APPEAL_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -1047,4 +1051,95 @@ test('требование о привлечении оценщика: без re
   assert.equal(term.id, 'appraiser_involvement_request_apk');
   assert.equal(APPRAISER_INVOLVEMENT_REQUEST_APK.restoration_norm, undefined);
   assert.equal(term.caps, undefined);
+});
+
+// Задача — два узла п. 2 ст. 71 ФЗ № 127-ФЗ: заявление о составлении
+// мотивированного определения (абз. 3) и мотивированная часть уже поданной
+// жалобы (абз. 4). Третий и четвёртый working_day-узлы домена.
+
+test('заявление о мотивированном определении (абз. 3 п. 2 ст. 71): пять рабочих дней от даты размещения резолютивной части', () => {
+  const term = computeClaimsRulingReasonedRequestApk({
+    claims_ruling_resolutive_part_date_apk: '2025-03-02',
+  });
+  assert.equal(term.anchor, '2025-03-02');
+  assert.equal(term.first_working_day, '2025-03-03');
+  assert.equal(term.deadline, '2025-03-07');
+  assert.equal(term.shifted, false); // weekend_shift к working_day не применяется
+  assert.deepEqual(term.duration, { value: 5, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'абз. 3 п. 2 ст. 71 ФЗ № 127-ФЗ');
+});
+
+test('заявление о мотивированном определении (абз. 3 п. 2 ст. 71): рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeClaimsRulingReasonedRequestApk({
+    claims_ruling_resolutive_part_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-14');
+});
+
+test('заявление о мотивированном определении (абз. 3 п. 2 ст. 71): без claims_ruling_resolutive_part_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeClaimsRulingReasonedRequestApk({}),
+    /claims_ruling_resolutive_part_date_apk/,
+  );
+});
+
+test('заявление о мотивированном определении (абз. 3 п. 2 ст. 71): АПК-цитата как у ст. 47 п. 1 и п. 5.1 ст. 110, без restoration', () => {
+  assert.deepEqual(
+    CLAIMS_RULING_REASONED_REQUEST_APK.norm_versions[0].norm.calculation,
+    DEBTOR_RESPONSE_BANKRUPTCY_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(CLAIMS_RULING_REASONED_REQUEST_APK.restoration_norm, undefined);
+});
+
+test('мотивированная часть жалобы (абз. 4 п. 2 ст. 71): пятнадцать рабочих дней от даты изготовления мотивированного определения', () => {
+  const term = computeClaimsRulingReasonedAppealApk({
+    claims_ruling_reasoned_date_apk: '2025-03-02',
+  });
+  assert.equal(term.anchor, '2025-03-02');
+  assert.equal(term.first_working_day, '2025-03-03');
+  assert.equal(term.deadline, '2025-03-21');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 15, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'абз. 4 п. 2 ст. 71 ФЗ № 127-ФЗ');
+});
+
+test('мотивированная часть жалобы (абз. 4 п. 2 ст. 71): рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeClaimsRulingReasonedAppealApk({
+    claims_ruling_reasoned_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-28');
+});
+
+test('мотивированная часть жалобы (абз. 4 п. 2 ст. 71): без claims_ruling_reasoned_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeClaimsRulingReasonedAppealApk({}),
+    /claims_ruling_reasoned_date_apk/,
+  );
+});
+
+test('мотивированная часть жалобы (абз. 4 п. 2 ст. 71): АПК-цитата как у остальных working_day-узлов, без restoration', () => {
+  assert.deepEqual(
+    CLAIMS_RULING_REASONED_APPEAL_APK.norm_versions[0].norm.calculation,
+    DEBTOR_RESPONSE_BANKRUPTCY_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(CLAIMS_RULING_REASONED_APPEAL_APK.restoration_norm, undefined);
+});
+
+test('мотивированная часть жалобы (абз. 4 п. 2 ст. 71): logic явно отражает, что срок ДОПОЛНИТЕЛЬНЫЙ к уже поданной жалобе, не замена срока обжалования', () => {
+  assert.match(CLAIMS_RULING_REASONED_APPEAL_APK.logic, /не входит/);
+  assert.match(CLAIMS_RULING_REASONED_APPEAL_APK.logic, /не заменяет/);
+  // Пятидневный внутренний срок суда упомянут текстом, но не заведён
+  // отдельным узлом.
+  assert.match(CLAIMS_RULING_REASONED_APPEAL_APK.logic, /срок суда/);
+});
+
+test('два узла п. 2 ст. 71: разные id, разные normы, разные поля ввода — не один узел под двумя именами', () => {
+  assert.notEqual(CLAIMS_RULING_REASONED_REQUEST_APK.id, CLAIMS_RULING_REASONED_APPEAL_APK.id);
+  assert.notEqual(
+    CLAIMS_RULING_REASONED_REQUEST_APK.norm_versions[0].norm.primary,
+    CLAIMS_RULING_REASONED_APPEAL_APK.norm_versions[0].norm.primary,
+  );
+  assert.notDeepEqual(CLAIMS_RULING_REASONED_REQUEST_APK.duration, CLAIMS_RULING_REASONED_APPEAL_APK.duration);
 });
