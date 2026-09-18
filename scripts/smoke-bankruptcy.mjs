@@ -91,8 +91,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 10,
-  'переключатель ситуаций отрисован не на десять ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 11,
+  'переключатель ситуаций отрисован не на одиннадцать ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -731,6 +731,47 @@ check(
 check(
   (await reviewCard.innerText()).includes('п. 2 ст. 162 ФЗ № 127-ФЗ'),
   'норма п. 2 ст. 162 ФЗ № 127-ФЗ не показана на карточке пересмотра',
+);
+
+// --- Ветвь 11: требование о привлечении независимого оценщика ------------------
+//
+// Второй в домене working_day-узел (первый — ст. 47 п. 1, ветвь 1 выше):
+// тридцать рабочих дней, проверяем, что first_working_day не теряется и на
+// этой карточке — тот же приём, что у ветви 1.
+
+await chooseSituation('appraiser_involvement_request');
+check(
+  (await page.locator('#in-inventory_results_included_date_apk').count()) === 1,
+  'ветвь "appraiser_involvement_request": основное поле не найдено в DOM',
+);
+await page.fill('#in-inventory_results_included_date_apk', '26.12.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви требования о привлечении оценщика ожидалась одна карточка',
+);
+const appraiserCard = cardByTitle('Требование о привлечении независимого оценщика');
+check((await appraiserCard.count()) === 1, 'карточка требования о привлечении оценщика не появилась');
+check(
+  (await deadlineOf(appraiserCard)) === '18.02.2026',
+  `ждали дедлайн 18.02.2026, получили «${await deadlineOf(appraiserCard)}»`,
+);
+const appraiserText = await appraiserCard.innerText();
+check(
+  appraiserText.includes('Отсчёт рабочих дней с 29.12.2025'),
+  `первый рабочий день не показан на карточке: «${appraiserText}»`,
+);
+check(
+  appraiserText.includes('п. 5.1 ст. 110 ФЗ № 127-ФЗ'),
+  'норма п. 5.1 ст. 110 ФЗ № 127-ФЗ не показана на карточке',
+);
+// «Два процента» — в логике исчисления внутри свёрнутого <details>, туда
+// innerText не заглядывает (контент не отрисован, пока блок не раскрыт) —
+// проверяем через outerHTML, как у остальных карточек в этом файле.
+const appraiserHtml = await appraiserCard.evaluate((el) => el.outerHTML);
+check(
+  appraiserHtml.includes('два процента'),
+  `условие права (2% от суммы требований) не показано на карточке: «${appraiserHtml}»`,
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------
