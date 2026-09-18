@@ -206,6 +206,19 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['admin_liability_imposition_appeal_apk', 'admin_liability_challenge_appeal_apk'],
   },
+  {
+    id: 'settlement_approval_cassation',
+    label: 'Утверждено мировое соглашение — хочу обжаловать',
+    // Единственное поле ветви — дата вынесения определения об утверждении
+    // мирового соглашения, тот же образец, что у court_order и остальных
+    // одноузловых ветвей. Не путать с bankruptcy-доменом: это определение
+    // арбитражного суда по обычному делу (ч. 11 ст. 141 АПК РФ), а не
+    // банкротное мировое соглашение (apk/bankruptcy*.js, ст. 158, 162 ФЗ
+    // № 127-ФЗ) — разные институты, разные узлы, разные поля.
+    primary_field: 'settlement_approval_ruling_date_apk',
+    fields: [],
+    nodes: ['settlement_approval_cassation_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';
