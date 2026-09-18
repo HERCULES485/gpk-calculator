@@ -51,6 +51,8 @@ import {
   CLAIMS_RULING_REASONED_REQUEST_APK,
   computeClaimsRulingReasonedAppealApk,
   CLAIMS_RULING_REASONED_APPEAL_APK,
+  computeEnterpriseSalePaymentApk,
+  ENTERPRISE_SALE_PAYMENT_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -1142,4 +1144,52 @@ test('два узла п. 2 ст. 71: разные id, разные normы, ра
     CLAIMS_RULING_REASONED_APPEAL_APK.norm_versions[0].norm.primary,
   );
   assert.notDeepEqual(CLAIMS_RULING_REASONED_REQUEST_APK.duration, CLAIMS_RULING_REASONED_APPEAL_APK.duration);
+});
+
+// Задача — оплата покупателем по договору купли-продажи предприятия
+// должника на торгах (п. 19 ст. 110 ФЗ № 127-ФЗ). Пятый working_day-узел
+// домена.
+
+test('оплата по договору купли-продажи предприятия: тридцать рабочих дней от даты подписания договора, без праздничных кластеров рядом', () => {
+  const term = computeEnterpriseSalePaymentApk({
+    enterprise_sale_agreement_signed_date_apk: '2025-03-02',
+  });
+  assert.equal(term.anchor, '2025-03-02');
+  assert.equal(term.first_working_day, '2025-03-03');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false); // weekend_shift к working_day не применяется
+  assert.deepEqual(term.duration, { value: 30, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'п. 19 ст. 110 ФЗ № 127-ФЗ');
+});
+
+test('оплата по договору купли-продажи предприятия: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeEnterpriseSalePaymentApk({
+    enterprise_sale_agreement_signed_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-02-18');
+});
+
+test('оплата по договору купли-продажи предприятия: без enterprise_sale_agreement_signed_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeEnterpriseSalePaymentApk({}),
+    /enterprise_sale_agreement_signed_date_apk/,
+  );
+});
+
+test('оплата по договору купли-продажи предприятия: АПК-цитата как у ст. 47 п. 1 и п. 5.1 ст. 110, без restoration', () => {
+  assert.deepEqual(
+    ENTERPRISE_SALE_PAYMENT_APK.norm_versions[0].norm.calculation,
+    DEBTOR_RESPONSE_BANKRUPTCY_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(ENTERPRISE_SALE_PAYMENT_APK.restoration_norm, undefined);
+});
+
+test('оплата по договору купли-продажи предприятия: без restoration-полей', () => {
+  const term = computeEnterpriseSalePaymentApk({
+    enterprise_sale_agreement_signed_date_apk: '2025-03-02',
+  });
+  assert.equal(term.id, 'enterprise_sale_payment_apk');
+  assert.equal(term.caps, undefined);
 });

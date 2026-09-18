@@ -91,8 +91,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 13,
-  'переключатель ситуаций отрисован не на тринадцать ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 14,
+  'переключатель ситуаций отрисован не на четырнадцать ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -837,6 +837,40 @@ check(
 check(
   reasonedAppealHtml.includes('не входит') && reasonedAppealHtml.includes('не заменяет'),
   `на карточке не отражено, что срок дополнительный, а не замена срока обжалования: «${reasonedAppealHtml}»`,
+);
+
+// --- Ветвь 14: оплата по договору купли-продажи предприятия (п. 19 ст. 110) ----
+//
+// Пятый в домене working_day-узел.
+
+await chooseSituation('enterprise_sale_payment');
+check(
+  (await page.locator('#in-enterprise_sale_agreement_signed_date_apk').count()) === 1,
+  'ветвь "enterprise_sale_payment": основное поле не найдено в DOM',
+);
+await page.fill('#in-enterprise_sale_agreement_signed_date_apk', '26.12.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви оплаты по договору купли-продажи предприятия ожидалась одна карточка',
+);
+const enterprisePaymentCard = cardByTitle('Оплата по договору купли-продажи предприятия должника на торгах');
+check(
+  (await enterprisePaymentCard.count()) === 1,
+  'карточка оплаты по договору купли-продажи предприятия не появилась',
+);
+check(
+  (await deadlineOf(enterprisePaymentCard)) === '18.02.2026',
+  `ждали дедлайн 18.02.2026, получили «${await deadlineOf(enterprisePaymentCard)}»`,
+);
+const enterprisePaymentText = await enterprisePaymentCard.innerText();
+check(
+  enterprisePaymentText.includes('Отсчёт рабочих дней с 29.12.2025'),
+  `первый рабочий день не показан на карточке: «${enterprisePaymentText}»`,
+);
+check(
+  enterprisePaymentText.includes('п. 19 ст. 110 ФЗ № 127-ФЗ'),
+  'норма п. 19 ст. 110 ФЗ № 127-ФЗ не показана на карточке',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------

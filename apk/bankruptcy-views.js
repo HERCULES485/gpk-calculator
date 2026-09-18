@@ -39,6 +39,7 @@ import {
   computeAppraiserInvolvementRequestApk,
   computeClaimsRulingReasonedRequestApk,
   computeClaimsRulingReasonedAppealApk,
+  computeEnterpriseSalePaymentApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -57,6 +58,7 @@ import {
   APPRAISER_INVOLVEMENT_REQUEST_APK,
   CLAIMS_RULING_REASONED_REQUEST_APK,
   CLAIMS_RULING_REASONED_APPEAL_APK,
+  ENTERPRISE_SALE_PAYMENT_APK,
 } from './bankruptcy.js';
 
 import {
@@ -467,6 +469,13 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     kind: 'working_day',
     deps: () => ['claims_ruling_reasoned_date_apk'],
     compute: (i) => computeClaimsRulingReasonedAppealApk(i),
+  },
+  // Пятый working_day-узел домена — тот же паттерн регистрации.
+  enterprise_sale_payment_apk: {
+    node: ENTERPRISE_SALE_PAYMENT_APK,
+    kind: 'working_day',
+    deps: () => ['enterprise_sale_agreement_signed_date_apk'],
+    compute: (i) => computeEnterpriseSalePaymentApk(i),
   },
 };
 

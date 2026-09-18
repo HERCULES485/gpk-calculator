@@ -217,6 +217,15 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['claims_ruling_reasoned_appeal_apk'],
   },
+  {
+    id: 'enterprise_sale_payment',
+    label: 'Выиграл торги как покупатель — нужно оплатить',
+    // Единственное поле ветви — дата подписания договора купли-продажи
+    // предприятия, тот же образец, что у остальных одноузловых ветвей.
+    primary_field: 'enterprise_sale_agreement_signed_date_apk',
+    fields: [],
+    nodes: ['enterprise_sale_payment_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';
