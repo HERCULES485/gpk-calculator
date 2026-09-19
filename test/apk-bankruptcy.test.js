@@ -53,6 +53,8 @@ import {
   CLAIMS_RULING_REASONED_APPEAL_APK,
   computeEnterpriseSalePaymentApk,
   ENTERPRISE_SALE_PAYMENT_APK,
+  computeSettlementAgreementRejectionAppealApk,
+  SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -1191,5 +1193,68 @@ test('оплата по договору купли-продажи предпр�
     enterprise_sale_agreement_signed_date_apk: '2025-03-02',
   });
   assert.equal(term.id, 'enterprise_sale_payment_apk');
+  assert.equal(term.caps, undefined);
+});
+
+// Задача — обжалование отказа в утверждении мирового соглашения (п. 3
+// ст. 160, ч. 1 ст. 61 ФЗ № 127-ФЗ). Двадцатый узел домена, обычный
+// месячный term — тот же паттерн, что и у ст. 162 п. 2 выше, другой якорь.
+//
+// Архитектурная особенность, согласованная отдельно: ст. 160 ч. 3 даёт
+// институт (право на обжалование отказа), но не число срока; число — из
+// отдельной общей ч. 1 ст. 61. norm.primary поэтому ссылается на ч. 1
+// ст. 61, а не на ст. 160 ч. 3.
+
+test('обжалование отказа в утверждении мирового соглашения: один месяц с даты изготовления определения, будний день без переноса', () => {
+  const term = computeSettlementAgreementRejectionAppealApk({
+    settlement_agreement_rejection_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11'); // пятница, рабочий день
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
+});
+
+test('обжалование отказа в утверждении мирового соглашения: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeSettlementAgreementRejectionAppealApk({
+    settlement_agreement_rejection_ruling_date_apk: '2025-02-01',
+  });
+  // 01.02.2025 + 1 месяц = 01.03.2025 — суббота, перенос на 03.03.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('обжалование отказа в утверждении мирового соглашения: без settlement_agreement_rejection_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeSettlementAgreementRejectionAppealApk({}),
+    /settlement_agreement_rejection_ruling_date_apk/,
+  );
+});
+
+test('обжалование отказа в утверждении мирового соглашения: primary — ч. 1 ст. 61 (источник числа), а не ст. 160 ч. 3 (даёт только институт)', () => {
+  assert.equal(
+    SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK.norm_versions[0].norm.primary,
+    'ч. 1 ст. 61 ФЗ № 127-ФЗ',
+  );
+  assert.doesNotMatch(SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK.norm_versions[0].norm.primary, /160/);
+});
+
+test('обжалование отказа в утверждении мирового соглашения: calculation буквально тот же набор, что у ст. 162 п. 2', () => {
+  assert.deepEqual(
+    SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK.norm_versions[0].norm.calculation,
+    SETTLEMENT_AGREEMENT_REVIEW_APK.norm_versions[0].norm.calculation,
+  );
+});
+
+test('обжалование отказа в утверждении мирового соглашения: midnight_rule присутствует, без потолков и restoration', () => {
+  const term = computeSettlementAgreementRejectionAppealApk({
+    settlement_agreement_rejection_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.id, 'settlement_agreement_rejection_appeal_apk');
+  assert.match(SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK.midnight_rule, /ст\. 114 АПК РФ/);
+  assert.equal(SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK.restoration_norm, undefined);
   assert.equal(term.caps, undefined);
 });

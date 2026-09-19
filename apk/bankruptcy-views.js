@@ -40,6 +40,7 @@ import {
   computeClaimsRulingReasonedRequestApk,
   computeClaimsRulingReasonedAppealApk,
   computeEnterpriseSalePaymentApk,
+  computeSettlementAgreementRejectionAppealApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -59,6 +60,7 @@ import {
   CLAIMS_RULING_REASONED_REQUEST_APK,
   CLAIMS_RULING_REASONED_APPEAL_APK,
   ENTERPRISE_SALE_PAYMENT_APK,
+  SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK,
 } from './bankruptcy.js';
 
 import {
@@ -476,6 +478,14 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     kind: 'working_day',
     deps: () => ['enterprise_sale_agreement_signed_date_apk'],
     compute: (i) => computeEnterpriseSalePaymentApk(i),
+  },
+  // Обычный месячный узел — тот же паттерн регистрации, что у
+  // settlement_agreement_review_apk выше (без kind: карточка строится через
+  // monthTermCard уже существующим общим путём buildViewBankruptcy).
+  settlement_agreement_rejection_appeal_apk: {
+    node: SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK,
+    deps: () => ['settlement_agreement_rejection_ruling_date_apk'],
+    compute: (i) => computeSettlementAgreementRejectionAppealApk(i),
   },
 };
 
