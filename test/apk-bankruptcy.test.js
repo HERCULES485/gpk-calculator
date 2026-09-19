@@ -79,6 +79,8 @@ import {
   EXTERNAL_MANAGEMENT_CREDITOR_NOTIFICATION_APK,
   computeExternalManagementReportSpecialCompletionApk,
   EXTERNAL_MANAGEMENT_REPORT_SPECIAL_COMPLETION_APK,
+  computeBankruptcyPropertySaleProposalApk,
+  BANKRUPTCY_PROPERTY_SALE_PROPOSAL_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -1879,4 +1881,58 @@ test('якорь ст. 116 — другое поле, чем якорь ст. 11
   );
   // Узел ст. 117 п. 2 существует независимо и не переиспользован здесь.
   assert.equal(EXTERNAL_MANAGEMENT_REPORT_ON_FULL_SATISFACTION_APK.norm_versions[0].norm.primary, 'п. 2 ст. 117 ФЗ № 127-ФЗ');
+});
+
+// Задача — предложения о порядке продажи имущества должника (п. 1.1
+// ст. 110 ФЗ № 127-ФЗ). Узел 33 домена. Якорь двойной (альтернативный, не
+// составной): дата окончания инвентаризации ИЛИ дата окончания оценки —
+// одно поле на оба события, тот же приём, что у
+// OUT_OF_COURT_BANKRUPTCY_REAPPLICATION_APK (п. 6 ст. 223.2).
+
+test('предложения о порядке продажи имущества: один месяц с даты окончания инвентаризации/оценки, будний день без переноса', () => {
+  const term = computeBankruptcyPropertySaleProposalApk({
+    property_inventory_or_valuation_completion_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'п. 1.1 ст. 110 ФЗ № 127-ФЗ');
+});
+
+test('предложения о порядке продажи имущества: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeBankruptcyPropertySaleProposalApk({
+    property_inventory_or_valuation_completion_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('предложения о порядке продажи имущества: без property_inventory_or_valuation_completion_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeBankruptcyPropertySaleProposalApk({}),
+    /property_inventory_or_valuation_completion_date_apk/,
+  );
+});
+
+test('предложения о порядке продажи имущества: calculation — тот же массив, что у месячных duty-узлов домена (ст. 142 п. 1), без restoration', () => {
+  assert.deepEqual(
+    BANKRUPTCY_PROPERTY_SALE_PROPOSAL_APK.norm_versions[0].norm.calculation,
+    CREDITORS_REGISTER_CLOSURE_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(BANKRUPTCY_PROPERTY_SALE_PROPOSAL_APK.restoration_norm, undefined);
+});
+
+test('предложения о порядке продажи имущества: одно и то же поле обслуживает обе альтернативные даты нормы (инвентаризация или оценка)', () => {
+  // Само поле не различает, какое из двух событий фактически произошло —
+  // расчёт от даты, поданной пользователем, идентичен в обоих случаях.
+  const fromInventory = computeBankruptcyPropertySaleProposalApk({
+    property_inventory_or_valuation_completion_date_apk: '2025-03-11',
+  });
+  const fromValuation = computeBankruptcyPropertySaleProposalApk({
+    property_inventory_or_valuation_completion_date_apk: '2025-03-11',
+  });
+  assert.deepEqual(fromInventory, fromValuation);
 });

@@ -335,6 +335,17 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['external_management_creditor_notification_apk', 'external_management_report_special_completion_apk'],
   },
+  {
+    id: 'bankruptcy_property_sale_proposal',
+    label: 'Конкурсное производство: предложения о порядке продажи имущества должника',
+    // Единственное поле ветви — дата окончания инвентаризации ИЛИ оценки
+    // (два альтернативных события, одно поле — см. комментарий к узлу в
+    // apk/bankruptcy.js), тот же образец, что у остальных одноузловых
+    // ветвей.
+    primary_field: 'property_inventory_or_valuation_completion_date_apk',
+    fields: [],
+    nodes: ['bankruptcy_property_sale_proposal_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';
