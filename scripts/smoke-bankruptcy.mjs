@@ -91,8 +91,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 27,
-  'переключатель ситуаций отрисован не на двадцать семь ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 29,
+  'переключатель ситуаций отрисован не на двадцать девять ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -1258,6 +1258,58 @@ check(
 check(
   registryInclusionText.includes('п. 5.1 ст. 110 ФЗ № 127-ФЗ'),
   'норма п. 5.1 ст. 110 ФЗ № 127-ФЗ не показана на карточке включения отчёта в ЕФРСБ',
+);
+
+// --- Ветвь 28: обжалование определения об утверждении порядка продажи предприятия (ст. 110 п. 7.1) ---
+
+await chooseSituation('enterprise_sale_procedure_approval_appeal');
+check(
+  (await page.locator('#in-enterprise_sale_procedure_approval_ruling_date_apk').count()) === 1,
+  'ветвь "enterprise_sale_procedure_approval_appeal": основное поле не найдено в DOM',
+);
+await page.fill('#in-enterprise_sale_procedure_approval_ruling_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви обжалования порядка продажи предприятия ожидалась одна карточка',
+);
+const enterpriseProcedureCard = cardByTitle(
+  'Обжалование определения об утверждении порядка, сроков и условий продажи предприятия должника',
+);
+check((await enterpriseProcedureCard.count()) === 1, 'карточка обжалования порядка продажи предприятия не появилась');
+check(
+  (await deadlineOf(enterpriseProcedureCard)) === '11.04.2025',
+  `срок обжалования посчитан неверно: ${await deadlineOf(enterpriseProcedureCard)}`,
+);
+check(
+  (await enterpriseProcedureCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
+  'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке обжалования порядка продажи предприятия',
+);
+
+// --- Ветвь 29: обжалование определения об утверждении порядка продажи имущества (ст. 139 п. 1.1) ---
+
+await chooseSituation('property_sale_procedure_approval_appeal');
+check(
+  (await page.locator('#in-property_sale_procedure_approval_ruling_date_apk').count()) === 1,
+  'ветвь "property_sale_procedure_approval_appeal": основное поле не найдено в DOM',
+);
+await page.fill('#in-property_sale_procedure_approval_ruling_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви обжалования порядка продажи имущества ожидалась одна карточка',
+);
+const propertyProcedureCard = cardByTitle(
+  'Обжалование определения об утверждении порядка, сроков и условий продажи имущества должника',
+);
+check((await propertyProcedureCard.count()) === 1, 'карточка обжалования порядка продажи имущества не появилась');
+check(
+  (await deadlineOf(propertyProcedureCard)) === '11.04.2025',
+  `срок обжалования посчитан неверно: ${await deadlineOf(propertyProcedureCard)}`,
+);
+check(
+  (await propertyProcedureCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
+  'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке обжалования порядка продажи имущества',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------
