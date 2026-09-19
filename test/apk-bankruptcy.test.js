@@ -83,6 +83,10 @@ import {
   BANKRUPTCY_PROPERTY_SALE_PROPOSAL_APK,
   computeAppraisalReportRegistryInclusionApk,
   APPRAISAL_REPORT_REGISTRY_INCLUSION_APK,
+  computeEnterpriseSaleProcedureApprovalAppealApk,
+  ENTERPRISE_SALE_PROCEDURE_APPROVAL_APPEAL_APK,
+  computePropertySaleProcedureApprovalAppealApk,
+  PROPERTY_SALE_PROCEDURE_APPROVAL_APPEAL_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -1985,4 +1989,121 @@ test('включение отчёта об оценке в ЕФРСБ: тот ж
   assert.equal(APPRAISAL_REPORT_REGISTRY_INCLUSION_APK.norm_versions[0].norm.primary, 'п. 5.1 ст. 110 ФЗ № 127-ФЗ');
   assert.equal(APPRAISER_INVOLVEMENT_REQUEST_APK.norm_versions[0].norm.primary, 'п. 5.1 ст. 110 ФЗ № 127-ФЗ');
   assert.notDeepEqual(APPRAISAL_REPORT_REGISTRY_INCLUSION_APK.duration, APPRAISER_INVOLVEMENT_REQUEST_APK.duration);
+});
+
+// Задача — два узла обжалования определений об утверждении порядка,
+// сроков и условий продажи (ст. 110 п. 7.1 — предприятие; ст. 139 п. 1.1 —
+// имущество). Узлы 35-36 домена, пятый и шестой узлы группы обжалования по
+// общему правилу ч. 1 ст. 61 ФЗ № 127-ФЗ.
+
+// 1) Ст. 110 п. 7.1 — продажа предприятия должника.
+
+test('обжалование определения об утверждении порядка продажи предприятия: один месяц с даты изготовления определения, будний день без переноса', () => {
+  const term = computeEnterpriseSaleProcedureApprovalAppealApk({
+    enterprise_sale_procedure_approval_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
+});
+
+test('обжалование определения об утверждении порядка продажи предприятия: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeEnterpriseSaleProcedureApprovalAppealApk({
+    enterprise_sale_procedure_approval_ruling_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('обжалование определения об утверждении порядка продажи предприятия: без enterprise_sale_procedure_approval_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeEnterpriseSaleProcedureApprovalAppealApk({}),
+    /enterprise_sale_procedure_approval_ruling_date_apk/,
+  );
+});
+
+test('обжалование определения об утверждении порядка продажи предприятия: primary — ч. 1 ст. 61, не ст. 110', () => {
+  assert.equal(
+    ENTERPRISE_SALE_PROCEDURE_APPROVAL_APPEAL_APK.norm_versions[0].norm.primary,
+    'ч. 1 ст. 61 ФЗ № 127-ФЗ',
+  );
+  assert.doesNotMatch(
+    ENTERPRISE_SALE_PROCEDURE_APPROVAL_APPEAL_APK.norm_versions[0].norm.primary,
+    /110/,
+  );
+});
+
+test('обжалование определения об утверждении порядка продажи предприятия: calculation буквально тот же набор, что у ст. 160, без restoration', () => {
+  assert.deepEqual(
+    ENTERPRISE_SALE_PROCEDURE_APPROVAL_APPEAL_APK.norm_versions[0].norm.calculation,
+    SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(ENTERPRISE_SALE_PROCEDURE_APPROVAL_APPEAL_APK.restoration_norm, undefined);
+});
+
+// 2) Ст. 139 п. 1.1 — продажа имущества должника (россыпью).
+
+test('обжалование определения об утверждении порядка продажи имущества: один месяц с даты изготовления определения, будний день без переноса', () => {
+  const term = computePropertySaleProcedureApprovalAppealApk({
+    property_sale_procedure_approval_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
+});
+
+test('обжалование определения об утверждении порядка продажи имущества: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computePropertySaleProcedureApprovalAppealApk({
+    property_sale_procedure_approval_ruling_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('обжалование определения об утверждении порядка продажи имущества: без property_sale_procedure_approval_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computePropertySaleProcedureApprovalAppealApk({}),
+    /property_sale_procedure_approval_ruling_date_apk/,
+  );
+});
+
+test('обжалование определения об утверждении порядка продажи имущества: primary — ч. 1 ст. 61, не ст. 139', () => {
+  assert.equal(
+    PROPERTY_SALE_PROCEDURE_APPROVAL_APPEAL_APK.norm_versions[0].norm.primary,
+    'ч. 1 ст. 61 ФЗ № 127-ФЗ',
+  );
+  assert.doesNotMatch(
+    PROPERTY_SALE_PROCEDURE_APPROVAL_APPEAL_APK.norm_versions[0].norm.primary,
+    /139/,
+  );
+});
+
+test('обжалование определения об утверждении порядка продажи имущества: calculation буквально тот же набор, что у ст. 160, без restoration', () => {
+  assert.deepEqual(
+    PROPERTY_SALE_PROCEDURE_APPROVAL_APPEAL_APK.norm_versions[0].norm.calculation,
+    SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(PROPERTY_SALE_PROCEDURE_APPROVAL_APPEAL_APK.restoration_norm, undefined);
+});
+
+test('два узла обжалования порядка продажи: разные id (предприятие vs имущество), не один узел под двумя именами', () => {
+  assert.notEqual(
+    ENTERPRISE_SALE_PROCEDURE_APPROVAL_APPEAL_APK.id,
+    PROPERTY_SALE_PROCEDURE_APPROVAL_APPEAL_APK.id,
+  );
+  for (const node of [
+    ENTERPRISE_SALE_PROCEDURE_APPROVAL_APPEAL_APK,
+    PROPERTY_SALE_PROCEDURE_APPROVAL_APPEAL_APK,
+  ]) {
+    assert.equal(node.norm_versions[0].norm.primary, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
+    assert.equal(node.restoration_norm, undefined);
+  }
 });

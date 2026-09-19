@@ -357,6 +357,24 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['appraisal_report_registry_inclusion_apk'],
   },
+  {
+    id: 'enterprise_sale_procedure_approval_appeal',
+    label: 'Обжалование определения об утверждении порядка продажи предприятия должника',
+    primary_field: 'enterprise_sale_procedure_approval_ruling_date_apk',
+    fields: [],
+    nodes: ['enterprise_sale_procedure_approval_appeal_apk'],
+  },
+  {
+    id: 'property_sale_procedure_approval_appeal',
+    label: 'Обжалование определения об утверждении порядка продажи имущества должника',
+    // Отдельная от enterprise_sale_procedure_approval_appeal ветвь: разные
+    // институты (продажа предприятия целиком по ст. 110 vs продажа
+    // имущества россыпью по ст. 139) при зеркальной по тексту норме — см.
+    // комментарий к узлам в apk/bankruptcy.js.
+    primary_field: 'property_sale_procedure_approval_ruling_date_apk',
+    fields: [],
+    nodes: ['property_sale_procedure_approval_appeal_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';
