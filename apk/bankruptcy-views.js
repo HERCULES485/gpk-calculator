@@ -51,6 +51,8 @@ import {
   computeExternalManagementReportSubmissionApk,
   computeExternalManagementReportOnFullSatisfactionApk,
   computeExternalManagementHandoverApk,
+  computeExternalManagementCreditorNotificationApk,
+  computeExternalManagementReportSpecialCompletionApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -81,6 +83,8 @@ import {
   EXTERNAL_MANAGEMENT_REPORT_SUBMISSION_APK,
   EXTERNAL_MANAGEMENT_REPORT_ON_FULL_SATISFACTION_APK,
   EXTERNAL_MANAGEMENT_HANDOVER_APK,
+  EXTERNAL_MANAGEMENT_CREDITOR_NOTIFICATION_APK,
+  EXTERNAL_MANAGEMENT_REPORT_SPECIAL_COMPLETION_APK,
 } from './bankruptcy.js';
 
 import {
@@ -565,6 +569,20 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     kind: 'working_day',
     deps: () => ['receiver_approved_date_apk'],
     compute: (i) => computeExternalManagementHandoverApk(i),
+  },
+  // Последние два узла главы VI — тот же паттерн регистрации working_day,
+  // что и у остальных duty-узлов домена, из одного и того же поля ввода.
+  external_management_creditor_notification_apk: {
+    node: EXTERNAL_MANAGEMENT_CREDITOR_NOTIFICATION_APK,
+    kind: 'working_day',
+    deps: () => ['external_management_third_party_satisfaction_date_apk'],
+    compute: (i) => computeExternalManagementCreditorNotificationApk(i),
+  },
+  external_management_report_special_completion_apk: {
+    node: EXTERNAL_MANAGEMENT_REPORT_SPECIAL_COMPLETION_APK,
+    kind: 'working_day',
+    deps: () => ['external_management_third_party_satisfaction_date_apk'],
+    compute: (i) => computeExternalManagementReportSpecialCompletionApk(i),
   },
 };
 

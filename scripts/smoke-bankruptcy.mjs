@@ -91,8 +91,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 24,
-  'переключатель ситуаций отрисован не на двадцать четыре ветви',
+  (await page.locator('#situation input[type=radio]').count()) === 25,
+  'переключатель ситуаций отрисован не на двадцать пять ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -1153,6 +1153,51 @@ check(
 check(
   handoverText.includes('п. 3 ст. 123 ФЗ № 127-ФЗ'),
   'норма п. 3 ст. 123 ФЗ № 127-ФЗ не показана на карточке передачи дел',
+);
+
+// --- Ветвь 25: особое завершение внешнего управления при погашении требований
+// третьим лицом/учредителями/собственником имущества (ст. 116, два узла) ------
+//
+// Последняя ветвь главы VI: два узла из одного и того же якоря — тот же
+// приём, что у ветви external_management_plan.
+
+await chooseSituation('external_management_third_party_satisfaction');
+check(
+  (await page.locator('#in-external_management_third_party_satisfaction_date_apk').count()) === 1,
+  'ветвь "external_management_third_party_satisfaction": основное поле не найдено в DOM',
+);
+await page.fill('#in-external_management_third_party_satisfaction_date_apk', '26.12.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 2,
+  'в ветви особого завершения внешнего управления ожидались две карточки',
+);
+const notificationCard = cardByTitle(
+  'Уведомление кредиторов об удовлетворении требований третьим лицом, учредителями или собственником имущества должника',
+);
+check((await notificationCard.count()) === 1, 'карточка уведомления кредиторов не появилась');
+check(
+  (await deadlineOf(notificationCard)) === '21.01.2026',
+  `срок уведомления кредиторов посчитан неверно: ${await deadlineOf(notificationCard)}`,
+);
+const notificationText = await notificationCard.innerText();
+check(
+  notificationText.includes('Отсчёт рабочих дней с 29.12.2025'),
+  `первый рабочий день не показан на карточке уведомления: «${notificationText}»`,
+);
+check(
+  notificationText.includes('п. 1 ст. 116 ФЗ № 127-ФЗ'),
+  'норма п. 1 ст. 116 ФЗ № 127-ФЗ не показана на карточке уведомления кредиторов',
+);
+const specialReportCard = cardByTitle('Направление отчёта внешнего управляющего в суд без рассмотрения собранием кредиторов');
+check((await specialReportCard.count()) === 1, 'карточка отчёта без рассмотрения собранием не появилась');
+check(
+  (await deadlineOf(specialReportCard)) === '27.01.2026',
+  `срок отчёта посчитан неверно: ${await deadlineOf(specialReportCard)}`,
+);
+check(
+  (await specialReportCard.innerText()).includes('п. 2 ст. 116 ФЗ № 127-ФЗ'),
+  'норма п. 2 ст. 116 ФЗ № 127-ФЗ не показана на карточке отчёта без рассмотрения собранием',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------

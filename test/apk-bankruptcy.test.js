@@ -75,6 +75,10 @@ import {
   EXTERNAL_MANAGEMENT_REPORT_ON_FULL_SATISFACTION_APK,
   computeExternalManagementHandoverApk,
   EXTERNAL_MANAGEMENT_HANDOVER_APK,
+  computeExternalManagementCreditorNotificationApk,
+  EXTERNAL_MANAGEMENT_CREDITOR_NOTIFICATION_APK,
+  computeExternalManagementReportSpecialCompletionApk,
+  EXTERNAL_MANAGEMENT_REPORT_SPECIAL_COMPLETION_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -1776,4 +1780,103 @@ test('шесть узлов обязанностей внешнего управ
     assert.notEqual(node.norm_versions[0].norm.primary, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
     assert.equal(node.restoration_norm, undefined);
   }
+});
+
+// Задача — два узла особого завершения внешнего управления при погашении
+// требований третьим лицом/учредителями/собственником имущества (п. 1, п. 2
+// ст. 116 ФЗ № 127-ФЗ). Узлы 31-32 домена, последние узлы главы VI.
+
+// 1) П. 1 ст. 116 — уведомление кредиторов.
+
+test('уведомление кредиторов об удовлетворении третьим лицом: десять рабочих дней с даты окончания исполнения, без праздничных кластеров рядом', () => {
+  const term = computeExternalManagementCreditorNotificationApk({
+    external_management_third_party_satisfaction_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-03-25');
+  assert.equal(term.deadline, '2025-03-25');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'п. 1 ст. 116 ФЗ № 127-ФЗ');
+});
+
+test('уведомление кредиторов об удовлетворении третьим лицом: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeExternalManagementCreditorNotificationApk({
+    external_management_third_party_satisfaction_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-21');
+});
+
+test('уведомление кредиторов об удовлетворении третьим лицом: без external_management_third_party_satisfaction_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeExternalManagementCreditorNotificationApk({}),
+    /external_management_third_party_satisfaction_date_apk/,
+  );
+});
+
+test('уведомление кредиторов об удовлетворении третьим лицом: calculation — тот же массив, что у остальных working_day-узлов домена, без restoration', () => {
+  assert.deepEqual(
+    EXTERNAL_MANAGEMENT_CREDITOR_NOTIFICATION_APK.norm_versions[0].norm.calculation,
+    EXTERNAL_MANAGEMENT_HANDOVER_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(EXTERNAL_MANAGEMENT_CREDITOR_NOTIFICATION_APK.restoration_norm, undefined);
+});
+
+// 2) П. 2 ст. 116 — отчёт в суд без рассмотрения собранием.
+// Якорь — тот же, что у узла 1 (интерпретация архитектора, см. комментарий
+// к узлу в apk/bankruptcy.js).
+
+test('отчёт в суд без рассмотрения собранием: четырнадцать рабочих дней с той же даты, что и узел уведомления, без праздничных кластеров рядом', () => {
+  const term = computeExternalManagementReportSpecialCompletionApk({
+    external_management_third_party_satisfaction_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-03-31');
+  assert.equal(term.deadline, '2025-03-31');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 14, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'п. 2 ст. 116 ФЗ № 127-ФЗ');
+});
+
+test('отчёт в суд без рассмотрения собранием: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeExternalManagementReportSpecialCompletionApk({
+    external_management_third_party_satisfaction_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-27');
+});
+
+test('отчёт в суд без рассмотрения собранием: без external_management_third_party_satisfaction_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeExternalManagementReportSpecialCompletionApk({}),
+    /external_management_third_party_satisfaction_date_apk/,
+  );
+});
+
+test('отчёт в суд без рассмотрения собранием: разные узлы с узлом 1 (разные id, разная длительность, общий якорь), без restoration', () => {
+  assert.notEqual(
+    EXTERNAL_MANAGEMENT_REPORT_SPECIAL_COMPLETION_APK.id,
+    EXTERNAL_MANAGEMENT_CREDITOR_NOTIFICATION_APK.id,
+  );
+  assert.notDeepEqual(
+    EXTERNAL_MANAGEMENT_REPORT_SPECIAL_COMPLETION_APK.duration,
+    EXTERNAL_MANAGEMENT_CREDITOR_NOTIFICATION_APK.duration,
+  );
+  assert.deepEqual(
+    EXTERNAL_MANAGEMENT_REPORT_SPECIAL_COMPLETION_APK.norm_versions[0].norm.calculation,
+    EXTERNAL_MANAGEMENT_CREDITOR_NOTIFICATION_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(EXTERNAL_MANAGEMENT_REPORT_SPECIAL_COMPLETION_APK.restoration_norm, undefined);
+});
+
+test('якорь ст. 116 — другое поле, чем якорь ст. 117 п. 2 (разные институты удовлетворения требований)', () => {
+  assert.notEqual(
+    'external_management_third_party_satisfaction_date_apk',
+    'external_management_full_satisfaction_date_apk',
+  );
+  // Узел ст. 117 п. 2 существует независимо и не переиспользован здесь.
+  assert.equal(EXTERNAL_MANAGEMENT_REPORT_ON_FULL_SATISFACTION_APK.norm_versions[0].norm.primary, 'п. 2 ст. 117 ФЗ № 127-ФЗ');
 });
