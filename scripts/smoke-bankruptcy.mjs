@@ -91,8 +91,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 26,
-  'переключатель ситуаций отрисован не на двадцать шесть ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 27,
+  'переключатель ситуаций отрисован не на двадцать семь ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -1226,6 +1226,38 @@ check(
 check(
   (await saleProposalCard.innerText()).includes('п. 1.1 ст. 110 ФЗ № 127-ФЗ'),
   'норма п. 1.1 ст. 110 ФЗ № 127-ФЗ не показана на карточке предложений о порядке продажи',
+);
+
+// --- Ветвь 27: включение отчёта об оценке в ЕФРСБ (п. 5.1 ст. 110, 2 раб. дня) ---
+//
+// Тот же пункт 5.1, что и у ветви appraiser_involvement_request, но
+// отдельный узел с отдельным якорем.
+
+await chooseSituation('appraisal_report_registry_inclusion');
+check(
+  (await page.locator('#in-appraisal_report_copy_received_date_apk').count()) === 1,
+  'ветвь "appraisal_report_registry_inclusion": основное поле не найдено в DOM',
+);
+await page.fill('#in-appraisal_report_copy_received_date_apk', '26.12.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви включения отчёта об оценке в ЕФРСБ ожидалась одна карточка',
+);
+const registryInclusionCard = cardByTitle('Включение сведений об отчёте об оценке имущества должника в ЕФРСБ');
+check((await registryInclusionCard.count()) === 1, 'карточка включения отчёта об оценке в ЕФРСБ не появилась');
+check(
+  (await deadlineOf(registryInclusionCard)) === '30.12.2025',
+  `срок включения отчёта в ЕФРСБ посчитан неверно: ${await deadlineOf(registryInclusionCard)}`,
+);
+const registryInclusionText = await registryInclusionCard.innerText();
+check(
+  registryInclusionText.includes('Отсчёт рабочих дней с 29.12.2025'),
+  `первый рабочий день не показан на карточке: «${registryInclusionText}»`,
+);
+check(
+  registryInclusionText.includes('п. 5.1 ст. 110 ФЗ № 127-ФЗ'),
+  'норма п. 5.1 ст. 110 ФЗ № 127-ФЗ не показана на карточке включения отчёта в ЕФРСБ',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------

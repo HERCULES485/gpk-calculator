@@ -54,6 +54,7 @@ import {
   computeExternalManagementCreditorNotificationApk,
   computeExternalManagementReportSpecialCompletionApk,
   computeBankruptcyPropertySaleProposalApk,
+  computeAppraisalReportRegistryInclusionApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -87,6 +88,7 @@ import {
   EXTERNAL_MANAGEMENT_CREDITOR_NOTIFICATION_APK,
   EXTERNAL_MANAGEMENT_REPORT_SPECIAL_COMPLETION_APK,
   BANKRUPTCY_PROPERTY_SALE_PROPOSAL_APK,
+  APPRAISAL_REPORT_REGISTRY_INCLUSION_APK,
 } from './bankruptcy.js';
 
 import {
@@ -592,6 +594,12 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     node: BANKRUPTCY_PROPERTY_SALE_PROPOSAL_APK,
     deps: () => ['property_inventory_or_valuation_completion_date_apk'],
     compute: (i) => computeBankruptcyPropertySaleProposalApk(i),
+  },
+  appraisal_report_registry_inclusion_apk: {
+    node: APPRAISAL_REPORT_REGISTRY_INCLUSION_APK,
+    kind: 'working_day',
+    deps: () => ['appraisal_report_copy_received_date_apk'],
+    compute: (i) => computeAppraisalReportRegistryInclusionApk(i),
   },
 };
 

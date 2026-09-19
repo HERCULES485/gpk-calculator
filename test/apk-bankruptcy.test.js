@@ -81,6 +81,8 @@ import {
   EXTERNAL_MANAGEMENT_REPORT_SPECIAL_COMPLETION_APK,
   computeBankruptcyPropertySaleProposalApk,
   BANKRUPTCY_PROPERTY_SALE_PROPOSAL_APK,
+  computeAppraisalReportRegistryInclusionApk,
+  APPRAISAL_REPORT_REGISTRY_INCLUSION_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -1935,4 +1937,52 @@ test('предложения о порядке продажи имущества
     property_inventory_or_valuation_completion_date_apk: '2025-03-11',
   });
   assert.deepEqual(fromInventory, fromValuation);
+});
+
+// Задача — включение сведений об отчёте об оценке имущества должника в
+// ЕФРСБ (п. 5.1 ст. 110 ФЗ № 127-ФЗ). Узел 34 домена — четвёртый и
+// последний срок-остаток этого пункта, отдельный от
+// APPRAISER_INVOLVEMENT_REQUEST_APK (тот же пункт, другой якорь).
+
+test('включение отчёта об оценке в ЕФРСБ: два рабочих дня с даты поступления копии отчёта, без праздничных кластеров рядом', () => {
+  const term = computeAppraisalReportRegistryInclusionApk({
+    appraisal_report_copy_received_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-03-13');
+  assert.equal(term.deadline, '2025-03-13');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 2, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'п. 5.1 ст. 110 ФЗ № 127-ФЗ');
+});
+
+test('включение отчёта об оценке в ЕФРСБ: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeAppraisalReportRegistryInclusionApk({
+    appraisal_report_copy_received_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2025-12-30');
+});
+
+test('включение отчёта об оценке в ЕФРСБ: без appraisal_report_copy_received_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeAppraisalReportRegistryInclusionApk({}),
+    /appraisal_report_copy_received_date_apk/,
+  );
+});
+
+test('включение отчёта об оценке в ЕФРСБ: calculation — тот же массив, что у остальных working_day duty-узлов домена, без restoration', () => {
+  assert.deepEqual(
+    APPRAISAL_REPORT_REGISTRY_INCLUSION_APK.norm_versions[0].norm.calculation,
+    DEBTOR_RESPONSE_BANKRUPTCY_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(APPRAISAL_REPORT_REGISTRY_INCLUSION_APK.restoration_norm, undefined);
+});
+
+test('включение отчёта об оценке в ЕФРСБ: тот же пункт 5.1, что и требование о привлечении оценщика, но разные узлы с разными якорями', () => {
+  assert.notEqual(APPRAISAL_REPORT_REGISTRY_INCLUSION_APK.id, APPRAISER_INVOLVEMENT_REQUEST_APK.id);
+  assert.equal(APPRAISAL_REPORT_REGISTRY_INCLUSION_APK.norm_versions[0].norm.primary, 'п. 5.1 ст. 110 ФЗ № 127-ФЗ');
+  assert.equal(APPRAISER_INVOLVEMENT_REQUEST_APK.norm_versions[0].norm.primary, 'п. 5.1 ст. 110 ФЗ № 127-ФЗ');
+  assert.notDeepEqual(APPRAISAL_REPORT_REGISTRY_INCLUSION_APK.duration, APPRAISER_INVOLVEMENT_REQUEST_APK.duration);
 });
