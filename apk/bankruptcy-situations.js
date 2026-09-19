@@ -226,6 +226,19 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['enterprise_sale_payment_apk'],
   },
+  {
+    id: 'settlement_agreement_rejection_appeal',
+    label: 'Суд отказал в утверждении мирового соглашения — обжалование',
+    // Отдельная от settlement_agreement/settlement_agreement_review ветвь:
+    // здесь суд УЖЕ рассмотрел заявление и ОТКАЗАЛ (ст. 160 ч. 3), а не ещё
+    // не рассмотрел (settlement_agreement) и не УЖЕ утвердил (review) —
+    // три взаимоисключающие стадии одного института. Единственное поле
+    // ветви — дата изготовления определения об отказе в полном объёме, тот
+    // же образец, что у остальных одноузловых ветвей.
+    primary_field: 'settlement_agreement_rejection_ruling_date_apk',
+    fields: [],
+    nodes: ['settlement_agreement_rejection_appeal_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';

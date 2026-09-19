@@ -91,8 +91,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 14,
-  'переключатель ситуаций отрисован не на четырнадцать ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 15,
+  'переключатель ситуаций отрисован не на пятнадцать ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -871,6 +871,35 @@ check(
 check(
   enterprisePaymentText.includes('п. 19 ст. 110 ФЗ № 127-ФЗ'),
   'норма п. 19 ст. 110 ФЗ № 127-ФЗ не показана на карточке',
+);
+
+// --- Ветвь 15: обжалование отказа в утверждении мирового соглашения -----------
+//
+// Перенос по образцу: обычный месячный term-узел (та же механика, что и у
+// ветви 10, ст. 162 п. 2). Норма отсылает к отдельной общей статье за
+// числом срока — norm.primary на карточке должен быть ч. 1 ст. 61, а не
+// ст. 160 ч. 3.
+
+await chooseSituation('settlement_agreement_rejection_appeal');
+check(
+  (await page.locator('#in-settlement_agreement_rejection_ruling_date_apk').count()) === 1,
+  'ветвь "settlement_agreement_rejection_appeal": основное поле не найдено в DOM',
+);
+await page.fill('#in-settlement_agreement_rejection_ruling_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви обжалования отказа в утверждении мирового соглашения ожидалась одна карточка',
+);
+const rejectionAppealCard = cardByTitle('Обжалование отказа в утверждении мирового соглашения');
+check((await rejectionAppealCard.count()) === 1, 'карточка обжалования отказа не появилась');
+check(
+  (await deadlineOf(rejectionAppealCard)) === '11.04.2025',
+  `срок обжалования отказа посчитан неверно: ${await deadlineOf(rejectionAppealCard)}`,
+);
+check(
+  (await rejectionAppealCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
+  'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке обжалования отказа',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------
