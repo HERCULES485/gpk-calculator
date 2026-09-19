@@ -346,6 +346,17 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['bankruptcy_property_sale_proposal_apk'],
   },
+  {
+    id: 'appraisal_report_registry_inclusion',
+    label: 'Внешний управляющий: включение отчёта об оценке имущества в ЕФРСБ',
+    // Отдельная от appraiser_involvement_request ветвь: тот же пункт 5.1
+    // ст. 110, но другой якорь (дата поступления копии отчёта, а не дата
+    // включения сведений об инвентаризации) — см. комментарий к узлу в
+    // apk/bankruptcy.js.
+    primary_field: 'appraisal_report_copy_received_date_apk',
+    fields: [],
+    nodes: ['appraisal_report_registry_inclusion_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';
