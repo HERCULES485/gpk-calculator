@@ -91,8 +91,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 25,
-  'переключатель ситуаций отрисован не на двадцать пять ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 26,
+  'переключатель ситуаций отрисован не на двадцать шесть ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -1198,6 +1198,34 @@ check(
 check(
   (await specialReportCard.innerText()).includes('п. 2 ст. 116 ФЗ № 127-ФЗ'),
   'норма п. 2 ст. 116 ФЗ № 127-ФЗ не показана на карточке отчёта без рассмотрения собранием',
+);
+
+// --- Ветвь 26: предложения о порядке продажи имущества должника (п. 1.1 ст. 110) ---
+//
+// Обычный месячный term-узел с альтернативным (не составным) якорем — одно
+// поле обслуживает и «дата окончания инвентаризации», и «дата окончания
+// оценки».
+
+await chooseSituation('bankruptcy_property_sale_proposal');
+check(
+  (await page.locator('#in-property_inventory_or_valuation_completion_date_apk').count()) === 1,
+  'ветвь "bankruptcy_property_sale_proposal": основное поле не найдено в DOM',
+);
+await page.fill('#in-property_inventory_or_valuation_completion_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви предложений о порядке продажи имущества ожидалась одна карточка',
+);
+const saleProposalCard = cardByTitle('Представление предложений о порядке продажи имущества должника');
+check((await saleProposalCard.count()) === 1, 'карточка предложений о порядке продажи не появилась');
+check(
+  (await deadlineOf(saleProposalCard)) === '11.04.2025',
+  `срок представления предложений посчитан неверно: ${await deadlineOf(saleProposalCard)}`,
+);
+check(
+  (await saleProposalCard.innerText()).includes('п. 1.1 ст. 110 ФЗ № 127-ФЗ'),
+  'норма п. 1.1 ст. 110 ФЗ № 127-ФЗ не показана на карточке предложений о порядке продажи',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------

@@ -53,6 +53,7 @@ import {
   computeExternalManagementHandoverApk,
   computeExternalManagementCreditorNotificationApk,
   computeExternalManagementReportSpecialCompletionApk,
+  computeBankruptcyPropertySaleProposalApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -85,6 +86,7 @@ import {
   EXTERNAL_MANAGEMENT_HANDOVER_APK,
   EXTERNAL_MANAGEMENT_CREDITOR_NOTIFICATION_APK,
   EXTERNAL_MANAGEMENT_REPORT_SPECIAL_COMPLETION_APK,
+  BANKRUPTCY_PROPERTY_SALE_PROPOSAL_APK,
 } from './bankruptcy.js';
 
 import {
@@ -583,6 +585,13 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     kind: 'working_day',
     deps: () => ['external_management_third_party_satisfaction_date_apk'],
     compute: (i) => computeExternalManagementReportSpecialCompletionApk(i),
+  },
+  // Обычный месячный узел — без kind, карточка строится через monthTermCard
+  // уже существующим общим путём buildViewBankruptcy.
+  bankruptcy_property_sale_proposal_apk: {
+    node: BANKRUPTCY_PROPERTY_SALE_PROPOSAL_APK,
+    deps: () => ['property_inventory_or_valuation_completion_date_apk'],
+    compute: (i) => computeBankruptcyPropertySaleProposalApk(i),
   },
 };
 
