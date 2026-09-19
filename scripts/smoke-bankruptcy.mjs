@@ -91,8 +91,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 19,
-  'переключатель ситуаций отрисован не на девятнадцать ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 24,
+  'переключатель ситуаций отрисован не на двадцать четыре ветви',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -1004,6 +1004,155 @@ check(
 check(
   (await termExpiryRefusalCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
   'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке отказа в удовлетворении ходатайства',
+);
+
+// --- Ветвь 20: план внешнего управления (два узла из одного якоря) ------------
+//
+// Разработка плана (месяц) и созыв собрания по плану (два месяца) — два
+// независимых обязательства внешнего управляющего из одной и той же даты
+// утверждения. Тот же приём, что у ветви subsidiary_in_case (базовый узел +
+// restoration делят одно поле).
+
+await chooseSituation('external_management_plan');
+check(
+  (await page.locator('#in-external_management_manager_approved_date_apk').count()) === 1,
+  'ветвь "external_management_plan": основное поле не найдено в DOM',
+);
+await page.fill('#in-external_management_manager_approved_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 2,
+  'в ветви плана внешнего управления ожидались две карточки',
+);
+const planDevCard = cardByTitle('Разработка плана внешнего управления');
+check((await planDevCard.count()) === 1, 'карточка разработки плана не появилась');
+check(
+  (await deadlineOf(planDevCard)) === '11.04.2025',
+  `срок разработки плана посчитан неверно: ${await deadlineOf(planDevCard)}`,
+);
+check(
+  (await planDevCard.innerText()).includes('ст. 106 п. 1 ФЗ № 127-ФЗ'),
+  'норма ст. 106 п. 1 ФЗ № 127-ФЗ не показана на карточке разработки плана',
+);
+const planMeetingCard = cardByTitle('Созыв собрания кредиторов для рассмотрения плана внешнего управления');
+check((await planMeetingCard.count()) === 1, 'карточка созыва собрания не появилась');
+check(
+  (await deadlineOf(planMeetingCard)) === '12.05.2025',
+  `срок созыва собрания посчитан неверно: ${await deadlineOf(planMeetingCard)}`,
+);
+check(
+  (await planMeetingCard.innerText()).includes('ч. 2 ст. 107 ФЗ № 127-ФЗ'),
+  'норма ч. 2 ст. 107 ФЗ № 127-ФЗ не показана на карточке созыва собрания',
+);
+
+// --- Ветвь 21: представление плана внешнего управления в суд (5 раб. дней) ----
+
+await chooseSituation('external_management_plan_submission');
+check(
+  (await page.locator('#in-external_management_plan_meeting_date_apk').count()) === 1,
+  'ветвь "external_management_plan_submission": основное поле не найдено в DOM',
+);
+await page.fill('#in-external_management_plan_meeting_date_apk', '26.12.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви представления плана в суд ожидалась одна карточка',
+);
+const planSubmissionCard = cardByTitle('Представление плана внешнего управления в арбитражный суд');
+check((await planSubmissionCard.count()) === 1, 'карточка представления плана не появилась');
+check(
+  (await deadlineOf(planSubmissionCard)) === '14.01.2026',
+  `срок представления плана посчитан неверно: ${await deadlineOf(planSubmissionCard)}`,
+);
+const planSubmissionText = await planSubmissionCard.innerText();
+check(
+  planSubmissionText.includes('Отсчёт рабочих дней с 29.12.2025'),
+  `первый рабочий день не показан на карточке: «${planSubmissionText}»`,
+);
+check(
+  planSubmissionText.includes('п. 4 ст. 107 ФЗ № 127-ФЗ'),
+  'норма п. 4 ст. 107 ФЗ № 127-ФЗ не показана на карточке представления плана',
+);
+
+// --- Ветвь 22: направление отчёта и протокола собрания в суд (5 раб. дней) ----
+
+await chooseSituation('external_management_report_submission');
+check(
+  (await page.locator('#in-external_management_report_meeting_date_apk').count()) === 1,
+  'ветвь "external_management_report_submission": основное поле не найдено в DOM',
+);
+await page.fill('#in-external_management_report_meeting_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви направления отчёта в суд ожидалась одна карточка',
+);
+const reportSubmissionCard = cardByTitle(
+  'Направление в арбитражный суд отчёта внешнего управляющего и протокола собрания кредиторов',
+);
+check((await reportSubmissionCard.count()) === 1, 'карточка направления отчёта не появилась');
+check(
+  (await deadlineOf(reportSubmissionCard)) === '18.03.2025',
+  `срок направления отчёта посчитан неверно: ${await deadlineOf(reportSubmissionCard)}`,
+);
+check(
+  (await reportSubmissionCard.innerText()).includes('п. 2 ст. 119 ФЗ № 127-ФЗ'),
+  'норма п. 2 ст. 119 ФЗ № 127-ФЗ не показана на карточке направления отчёта',
+);
+
+// --- Ветвь 23: отчёт при полном удовлетворении требований кредиторов ----------
+
+await chooseSituation('external_management_report_on_full_satisfaction');
+check(
+  (await page.locator('#in-external_management_full_satisfaction_date_apk').count()) === 1,
+  'ветвь "external_management_report_on_full_satisfaction": основное поле не найдено в DOM',
+);
+await page.fill('#in-external_management_full_satisfaction_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви отчёта при полном удовлетворении требований ожидалась одна карточка',
+);
+const fullSatisfactionCard = cardByTitle(
+  'Уведомление кредиторов и представление отчёта при полном удовлетворении требований в ходе внешнего управления',
+);
+check((await fullSatisfactionCard.count()) === 1, 'карточка отчёта при полном удовлетворении не появилась');
+check(
+  (await deadlineOf(fullSatisfactionCard)) === '11.04.2025',
+  `срок отчёта посчитан неверно: ${await deadlineOf(fullSatisfactionCard)}`,
+);
+check(
+  (await fullSatisfactionCard.innerText()).includes('п. 2 ст. 117 ФЗ № 127-ФЗ'),
+  'норма п. 2 ст. 117 ФЗ № 127-ФЗ не показана на карточке отчёта',
+);
+
+// --- Ветвь 24: передача дел конкурсному управляющему (3 раб. дня) -------------
+
+await chooseSituation('external_management_handover');
+check(
+  (await page.locator('#in-receiver_approved_date_apk').count()) === 1,
+  'ветвь "external_management_handover": основное поле не найдено в DOM',
+);
+await page.fill('#in-receiver_approved_date_apk', '26.12.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви передачи дел конкурсному управляющему ожидалась одна карточка',
+);
+const handoverCard = cardByTitle('Передача дел внешним управляющим конкурсному управляющему');
+check((await handoverCard.count()) === 1, 'карточка передачи дел не появилась');
+check(
+  (await deadlineOf(handoverCard)) === '12.01.2026',
+  `срок передачи дел посчитан неверно: ${await deadlineOf(handoverCard)}`,
+);
+const handoverText = await handoverCard.innerText();
+check(
+  handoverText.includes('Отсчёт рабочих дней с 29.12.2025'),
+  `первый рабочий день не показан на карточке: «${handoverText}»`,
+);
+check(
+  handoverText.includes('п. 3 ст. 123 ФЗ № 127-ФЗ'),
+  'норма п. 3 ст. 123 ФЗ № 127-ФЗ не показана на карточке передачи дел',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------

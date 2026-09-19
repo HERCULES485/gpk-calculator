@@ -63,6 +63,18 @@ import {
   EXTERNAL_MANAGEMENT_PLAN_INVALIDATION_APPEAL_APK,
   computeExternalManagementTermExpiryRefusalAppealApk,
   EXTERNAL_MANAGEMENT_TERM_EXPIRY_REFUSAL_APPEAL_APK,
+  computeExternalManagementPlanDevelopmentApk,
+  EXTERNAL_MANAGEMENT_PLAN_DEVELOPMENT_APK,
+  computeExternalManagementPlanMeetingApk,
+  EXTERNAL_MANAGEMENT_PLAN_MEETING_APK,
+  computeExternalManagementPlanSubmissionApk,
+  EXTERNAL_MANAGEMENT_PLAN_SUBMISSION_APK,
+  computeExternalManagementReportSubmissionApk,
+  EXTERNAL_MANAGEMENT_REPORT_SUBMISSION_APK,
+  computeExternalManagementReportOnFullSatisfactionApk,
+  EXTERNAL_MANAGEMENT_REPORT_ON_FULL_SATISFACTION_APK,
+  computeExternalManagementHandoverApk,
+  EXTERNAL_MANAGEMENT_HANDOVER_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -1519,6 +1531,249 @@ test('четыре узла обжалования внешнего управл
       node.norm_versions[0].norm.calculation,
       SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK.norm_versions[0].norm.calculation,
     );
+    assert.equal(node.restoration_norm, undefined);
+  }
+});
+
+// Задача — шесть узлов обязанностей внешнего управляющего по срокам
+// (ст. 106 п. 1; ч. 2, п. 4 ст. 107; п. 2 ст. 117; п. 2 ст. 119; п. 3
+// ст. 123 ФЗ № 127-ФЗ). Узлы 25-30 домена. ДРУГОЙ тип узла, чем группа
+// обжалования выше: primary — сама статья-основание, число срока в ней же,
+// никакого расхождения primary/ч. 1 ст. 61.
+
+// 1) Ст. 106 п. 1 — разработка плана внешнего управления.
+
+test('разработка плана внешнего управления: один месяц с даты утверждения внешнего управляющего, будний день без переноса', () => {
+  const term = computeExternalManagementPlanDevelopmentApk({
+    external_management_manager_approved_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ст. 106 п. 1 ФЗ № 127-ФЗ');
+});
+
+test('разработка плана внешнего управления: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeExternalManagementPlanDevelopmentApk({
+    external_management_manager_approved_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('разработка плана внешнего управления: без external_management_manager_approved_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeExternalManagementPlanDevelopmentApk({}),
+    /external_management_manager_approved_date_apk/,
+  );
+});
+
+test('разработка плана внешнего управления: calculation — тот же массив, что у месячных duty-узлов домена (ст. 142 п. 1), без restoration', () => {
+  assert.deepEqual(
+    EXTERNAL_MANAGEMENT_PLAN_DEVELOPMENT_APK.norm_versions[0].norm.calculation,
+    CREDITORS_REGISTER_CLOSURE_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(EXTERNAL_MANAGEMENT_PLAN_DEVELOPMENT_APK.restoration_norm, undefined);
+});
+
+// 2) Ч. 2 ст. 107 — созыв собрания кредиторов для рассмотрения плана.
+// Тот же якорь, что у узла 1 (external_management_manager_approved_date_apk).
+
+test('созыв собрания по плану внешнего управления: два месяца с даты утверждения внешнего управляющего, перенос через выходной (11.05.2025 — воскресенье)', () => {
+  const term = computeExternalManagementPlanMeetingApk({
+    external_management_manager_approved_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-05-11');
+  assert.equal(term.deadline, '2025-05-12');
+  assert.equal(term.shifted, true);
+  assert.deepEqual(term.duration, { value: 2, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 2 ст. 107 ФЗ № 127-ФЗ');
+});
+
+test('созыв собрания по плану внешнего управления: без external_management_manager_approved_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeExternalManagementPlanMeetingApk({}),
+    /external_management_manager_approved_date_apk/,
+  );
+});
+
+test('созыв собрания по плану внешнего управления: разные узлы с узлом 1 (разные id, разная длительность из одного якоря)', () => {
+  assert.notEqual(EXTERNAL_MANAGEMENT_PLAN_MEETING_APK.id, EXTERNAL_MANAGEMENT_PLAN_DEVELOPMENT_APK.id);
+  assert.notDeepEqual(EXTERNAL_MANAGEMENT_PLAN_MEETING_APK.duration, EXTERNAL_MANAGEMENT_PLAN_DEVELOPMENT_APK.duration);
+  assert.equal(EXTERNAL_MANAGEMENT_PLAN_MEETING_APK.restoration_norm, undefined);
+});
+
+// 3) П. 4 ст. 107 — представление утверждённого плана в арбитражный суд.
+// duration.unit: 'working_day' (не 'day' — литерал 'day' в определениях
+// узлов проекта не встречается нигде, решение архитектора по этому узлу).
+
+test('представление плана внешнего управления в суд: пять рабочих дней с даты собрания, без праздничных кластеров рядом', () => {
+  const term = computeExternalManagementPlanSubmissionApk({
+    external_management_plan_meeting_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-03-18');
+  assert.equal(term.deadline, '2025-03-18');
+  assert.equal(term.shifted, false); // weekend_shift к working_day не применяется
+  assert.deepEqual(term.duration, { value: 5, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'п. 4 ст. 107 ФЗ № 127-ФЗ');
+});
+
+test('представление плана внешнего управления в суд: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeExternalManagementPlanSubmissionApk({
+    external_management_plan_meeting_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-14');
+});
+
+test('представление плана внешнего управления в суд: без external_management_plan_meeting_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeExternalManagementPlanSubmissionApk({}),
+    /external_management_plan_meeting_date_apk/,
+  );
+});
+
+test('представление плана внешнего управления в суд: calculation — тот же массив, что у working_day-узлов домена (ст. 47 п. 1), не массив месячных узлов, без restoration', () => {
+  assert.deepEqual(
+    EXTERNAL_MANAGEMENT_PLAN_SUBMISSION_APK.norm_versions[0].norm.calculation,
+    DEBTOR_RESPONSE_BANKRUPTCY_APK.norm_versions[0].norm.calculation,
+  );
+  assert.notDeepEqual(
+    EXTERNAL_MANAGEMENT_PLAN_SUBMISSION_APK.norm_versions[0].norm.calculation,
+    EXTERNAL_MANAGEMENT_PLAN_DEVELOPMENT_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(EXTERNAL_MANAGEMENT_PLAN_SUBMISSION_APK.restoration_norm, undefined);
+});
+
+// 4) П. 2 ст. 119 — направление отчёта и протокола собрания в суд.
+
+test('направление отчёта и протокола собрания в суд: пять рабочих дней с даты собрания, без праздничных кластеров рядом', () => {
+  const term = computeExternalManagementReportSubmissionApk({
+    external_management_report_meeting_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-03-18');
+  assert.equal(term.deadline, '2025-03-18');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 5, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'п. 2 ст. 119 ФЗ № 127-ФЗ');
+});
+
+test('направление отчёта и протокола собрания в суд: без external_management_report_meeting_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeExternalManagementReportSubmissionApk({}),
+    /external_management_report_meeting_date_apk/,
+  );
+});
+
+test('направление отчёта и протокола собрания в суд: разные узлы с узлом 3 (разные id, разные поля ввода — разные собрания)', () => {
+  assert.notEqual(EXTERNAL_MANAGEMENT_REPORT_SUBMISSION_APK.id, EXTERNAL_MANAGEMENT_PLAN_SUBMISSION_APK.id);
+  assert.deepEqual(
+    EXTERNAL_MANAGEMENT_REPORT_SUBMISSION_APK.norm_versions[0].norm.calculation,
+    EXTERNAL_MANAGEMENT_PLAN_SUBMISSION_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(EXTERNAL_MANAGEMENT_REPORT_SUBMISSION_APK.restoration_norm, undefined);
+});
+
+// 5) П. 2 ст. 117 ФЗ № 127-ФЗ — отчёт при полном удовлетворении требований.
+// НЕ путать со ст. 117 АПК РФ (восстановление пропущенного срока).
+
+test('отчёт при полном удовлетворении требований: один месяц с даты удовлетворения всех требований, будний день без переноса', () => {
+  const term = computeExternalManagementReportOnFullSatisfactionApk({
+    external_management_full_satisfaction_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'п. 2 ст. 117 ФЗ № 127-ФЗ');
+});
+
+test('отчёт при полном удовлетворении требований: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeExternalManagementReportOnFullSatisfactionApk({
+    external_management_full_satisfaction_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('отчёт при полном удовлетворении требований: без external_management_full_satisfaction_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeExternalManagementReportOnFullSatisfactionApk({}),
+    /external_management_full_satisfaction_date_apk/,
+  );
+});
+
+test('отчёт при полном удовлетворении требований: primary ссылается на ФЗ № 127-ФЗ, не на ст. 117 АПК РФ (совпадение номера статьи — разные кодексы), без restoration', () => {
+  assert.equal(
+    EXTERNAL_MANAGEMENT_REPORT_ON_FULL_SATISFACTION_APK.norm_versions[0].norm.primary,
+    'п. 2 ст. 117 ФЗ № 127-ФЗ',
+  );
+  assert.doesNotMatch(
+    EXTERNAL_MANAGEMENT_REPORT_ON_FULL_SATISFACTION_APK.norm_versions[0].norm.primary,
+    /АПК/,
+  );
+  assert.equal(EXTERNAL_MANAGEMENT_REPORT_ON_FULL_SATISFACTION_APK.restoration_norm, undefined);
+});
+
+// 6) П. 3 ст. 123 — передача дел конкурсному управляющему.
+// duration.unit: 'working_day' прямо назван в норме буквально.
+
+test('передача дел конкурсному управляющему: три рабочих дня с даты утверждения конкурсного управляющего, без праздничных кластеров рядом', () => {
+  const term = computeExternalManagementHandoverApk({
+    receiver_approved_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-03-14');
+  assert.equal(term.deadline, '2025-03-14');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 3, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'п. 3 ст. 123 ФЗ № 127-ФЗ');
+});
+
+test('передача дел конкурсному управляющему: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeExternalManagementHandoverApk({
+    receiver_approved_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-12');
+});
+
+test('передача дел конкурсному управляющему: без receiver_approved_date_apk — понятная ошибка', () => {
+  assert.throws(() => computeExternalManagementHandoverApk({}), /receiver_approved_date_apk/);
+});
+
+test('передача дел конкурсному управляющему: calculation — тот же массив, что у остальных working_day-узлов группы, без restoration', () => {
+  assert.deepEqual(
+    EXTERNAL_MANAGEMENT_HANDOVER_APK.norm_versions[0].norm.calculation,
+    EXTERNAL_MANAGEMENT_PLAN_SUBMISSION_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(EXTERNAL_MANAGEMENT_HANDOVER_APK.restoration_norm, undefined);
+});
+
+test('шесть узлов обязанностей внешнего управляющего: разные id, у каждого — primary на своей статье-основании (не ч. 1 ст. 61)', () => {
+  const nodes = [
+    EXTERNAL_MANAGEMENT_PLAN_DEVELOPMENT_APK,
+    EXTERNAL_MANAGEMENT_PLAN_MEETING_APK,
+    EXTERNAL_MANAGEMENT_PLAN_SUBMISSION_APK,
+    EXTERNAL_MANAGEMENT_REPORT_SUBMISSION_APK,
+    EXTERNAL_MANAGEMENT_REPORT_ON_FULL_SATISFACTION_APK,
+    EXTERNAL_MANAGEMENT_HANDOVER_APK,
+  ];
+  const ids = nodes.map((n) => n.id);
+  assert.equal(new Set(ids).size, 6);
+  for (const node of nodes) {
+    assert.notEqual(node.norm_versions[0].norm.primary, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
     assert.equal(node.restoration_norm, undefined);
   }
 });
