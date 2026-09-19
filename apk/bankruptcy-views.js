@@ -45,6 +45,12 @@ import {
   computeExternalManagementReductionAppealApk,
   computeExternalManagementPlanInvalidationAppealApk,
   computeExternalManagementTermExpiryRefusalAppealApk,
+  computeExternalManagementPlanDevelopmentApk,
+  computeExternalManagementPlanMeetingApk,
+  computeExternalManagementPlanSubmissionApk,
+  computeExternalManagementReportSubmissionApk,
+  computeExternalManagementReportOnFullSatisfactionApk,
+  computeExternalManagementHandoverApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -69,6 +75,12 @@ import {
   EXTERNAL_MANAGEMENT_REDUCTION_APPEAL_APK,
   EXTERNAL_MANAGEMENT_PLAN_INVALIDATION_APPEAL_APK,
   EXTERNAL_MANAGEMENT_TERM_EXPIRY_REFUSAL_APPEAL_APK,
+  EXTERNAL_MANAGEMENT_PLAN_DEVELOPMENT_APK,
+  EXTERNAL_MANAGEMENT_PLAN_MEETING_APK,
+  EXTERNAL_MANAGEMENT_PLAN_SUBMISSION_APK,
+  EXTERNAL_MANAGEMENT_REPORT_SUBMISSION_APK,
+  EXTERNAL_MANAGEMENT_REPORT_ON_FULL_SATISFACTION_APK,
+  EXTERNAL_MANAGEMENT_HANDOVER_APK,
 } from './bankruptcy.js';
 
 import {
@@ -517,6 +529,42 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     node: EXTERNAL_MANAGEMENT_TERM_EXPIRY_REFUSAL_APPEAL_APK,
     deps: () => ['external_management_term_expiry_refusal_ruling_date_apk'],
     compute: (i) => computeExternalManagementTermExpiryRefusalAppealApk(i),
+  },
+  // Шесть узлов обязанностей внешнего управляющего по срокам — обычные
+  // месячные (без kind) и working_day (kind: 'working_day') узлы, тот же
+  // паттерн регистрации, что и у всех предыдущих узлов домена.
+  external_management_plan_development_apk: {
+    node: EXTERNAL_MANAGEMENT_PLAN_DEVELOPMENT_APK,
+    deps: () => ['external_management_manager_approved_date_apk'],
+    compute: (i) => computeExternalManagementPlanDevelopmentApk(i),
+  },
+  external_management_plan_meeting_apk: {
+    node: EXTERNAL_MANAGEMENT_PLAN_MEETING_APK,
+    deps: () => ['external_management_manager_approved_date_apk'],
+    compute: (i) => computeExternalManagementPlanMeetingApk(i),
+  },
+  external_management_plan_submission_apk: {
+    node: EXTERNAL_MANAGEMENT_PLAN_SUBMISSION_APK,
+    kind: 'working_day',
+    deps: () => ['external_management_plan_meeting_date_apk'],
+    compute: (i) => computeExternalManagementPlanSubmissionApk(i),
+  },
+  external_management_report_submission_apk: {
+    node: EXTERNAL_MANAGEMENT_REPORT_SUBMISSION_APK,
+    kind: 'working_day',
+    deps: () => ['external_management_report_meeting_date_apk'],
+    compute: (i) => computeExternalManagementReportSubmissionApk(i),
+  },
+  external_management_report_on_full_satisfaction_apk: {
+    node: EXTERNAL_MANAGEMENT_REPORT_ON_FULL_SATISFACTION_APK,
+    deps: () => ['external_management_full_satisfaction_date_apk'],
+    compute: (i) => computeExternalManagementReportOnFullSatisfactionApk(i),
+  },
+  external_management_handover_apk: {
+    node: EXTERNAL_MANAGEMENT_HANDOVER_APK,
+    kind: 'working_day',
+    deps: () => ['receiver_approved_date_apk'],
+    compute: (i) => computeExternalManagementHandoverApk(i),
   },
 };
 

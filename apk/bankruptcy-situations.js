@@ -273,6 +273,55 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['external_management_term_expiry_refusal_appeal_apk'],
   },
+  {
+    id: 'external_management_plan',
+    label: 'Внешний управляющий: разработка плана и созыв собрания кредиторов',
+    // ДВА узла в одной ветви, не два узла в двух ветвях: оба используют
+    // ОДИН И ТОТ ЖЕ якорь (дата утверждения внешнего управляющего) — тот же
+    // прецедент группировки, что у subsidiary_in_case выше (базовый узел и
+    // его restoration делят одни и те же поля ветви). Разная длительность
+    // (месяц на разработку плана, два месяца на созыв и рассмотрение) — это
+    // два независимых обязательства из одного факта, а не одна обязанность
+    // под двумя именами.
+    primary_field: 'external_management_manager_approved_date_apk',
+    fields: [],
+    nodes: ['external_management_plan_development_apk', 'external_management_plan_meeting_apk'],
+  },
+  {
+    id: 'external_management_plan_submission',
+    label: 'Внешний управляющий: представление плана в арбитражный суд',
+    // Якорь — дата проведения собрания кредиторов, утвердившего план (не
+    // дата утверждения внешнего управляющего из предыдущей ветви) —
+    // отдельный факт, наступающий позже.
+    primary_field: 'external_management_plan_meeting_date_apk',
+    fields: [],
+    nodes: ['external_management_plan_submission_apk'],
+  },
+  {
+    id: 'external_management_report_submission',
+    label: 'Внешний управляющий: направление отчёта и протокола собрания в арбитражный суд',
+    // Якорь — дата проведения собрания кредиторов, рассмотревшего ОТЧЁТ —
+    // другое собрание, чем в ветви external_management_plan_submission (там
+    // рассматривается ПЛАН в начале процедуры, здесь — отчёт ближе к её
+    // завершению), отдельное поле.
+    primary_field: 'external_management_report_meeting_date_apk',
+    fields: [],
+    nodes: ['external_management_report_submission_apk'],
+  },
+  {
+    id: 'external_management_report_on_full_satisfaction',
+    label: 'Внешний управляющий: отчёт при полном удовлетворении требований кредиторов',
+    primary_field: 'external_management_full_satisfaction_date_apk',
+    fields: [],
+    nodes: ['external_management_report_on_full_satisfaction_apk'],
+  },
+  {
+    id: 'external_management_handover',
+    label: 'Внешний управляющий: передача дел конкурсному управляющему',
+    primary_field: 'receiver_approved_date_apk',
+    fields: [],
+    nodes: ['external_management_handover_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';
