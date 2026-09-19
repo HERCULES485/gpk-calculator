@@ -55,6 +55,14 @@ import {
   ENTERPRISE_SALE_PAYMENT_APK,
   computeSettlementAgreementRejectionAppealApk,
   SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK,
+  computeExternalManagementIntroductionExtensionAppealApk,
+  EXTERNAL_MANAGEMENT_INTRODUCTION_EXTENSION_APPEAL_APK,
+  computeExternalManagementReductionAppealApk,
+  EXTERNAL_MANAGEMENT_REDUCTION_APPEAL_APK,
+  computeExternalManagementPlanInvalidationAppealApk,
+  EXTERNAL_MANAGEMENT_PLAN_INVALIDATION_APPEAL_APK,
+  computeExternalManagementTermExpiryRefusalAppealApk,
+  EXTERNAL_MANAGEMENT_TERM_EXPIRY_REFUSAL_APPEAL_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -1257,4 +1265,260 @@ test('обжалование отказа в утверждении мирово
   assert.match(SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK.midnight_rule, /ст\. 114 АПК РФ/);
   assert.equal(SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK.restoration_norm, undefined);
   assert.equal(term.caps, undefined);
+});
+
+// Задача — четыре узла обжалования определений внешнего управления по
+// общему правилу ч. 1 ст. 61 ФЗ № 127-ФЗ (ст. 93 ч. 2, ч. 3; ст. 106 п. 6;
+// ст. 122.1 п. 2). Двадцать первый — двадцать четвёртый узлы домена, тот же
+// паттерн, что у ст. 160 выше: обычный месячный term, primary на ч. 1
+// ст. 61, calculation буквально скопирован, без потолков и restoration.
+
+// 1) Ст. 93 ч. 2 — введение или продление внешнего управления.
+
+test('обжалование определения о введении/продлении внешнего управления: один месяц с даты изготовления определения, будний день без переноса', () => {
+  const term = computeExternalManagementIntroductionExtensionAppealApk({
+    external_management_introduction_extension_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11'); // пятница, рабочий день
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
+});
+
+test('обжалование определения о введении/продлении внешнего управления: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeExternalManagementIntroductionExtensionAppealApk({
+    external_management_introduction_extension_ruling_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('обжалование определения о введении/продлении внешнего управления: без external_management_introduction_extension_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeExternalManagementIntroductionExtensionAppealApk({}),
+    /external_management_introduction_extension_ruling_date_apk/,
+  );
+});
+
+test('обжалование определения о введении/продлении внешнего управления: primary — ч. 1 ст. 61, не ст. 93', () => {
+  assert.equal(
+    EXTERNAL_MANAGEMENT_INTRODUCTION_EXTENSION_APPEAL_APK.norm_versions[0].norm.primary,
+    'ч. 1 ст. 61 ФЗ № 127-ФЗ',
+  );
+  assert.doesNotMatch(
+    EXTERNAL_MANAGEMENT_INTRODUCTION_EXTENSION_APPEAL_APK.norm_versions[0].norm.primary,
+    /93/,
+  );
+});
+
+test('обжалование определения о введении/продлении внешнего управления: calculation буквально тот же набор, что у ст. 160', () => {
+  assert.deepEqual(
+    EXTERNAL_MANAGEMENT_INTRODUCTION_EXTENSION_APPEAL_APK.norm_versions[0].norm.calculation,
+    SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK.norm_versions[0].norm.calculation,
+  );
+});
+
+test('обжалование определения о введении/продлении внешнего управления: без потолков и restoration', () => {
+  const term = computeExternalManagementIntroductionExtensionAppealApk({
+    external_management_introduction_extension_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.id, 'external_management_introduction_extension_appeal_apk');
+  assert.equal(EXTERNAL_MANAGEMENT_INTRODUCTION_EXTENSION_APPEAL_APK.restoration_norm, undefined);
+  assert.equal(term.caps, undefined);
+});
+
+// 2) Ст. 93 ч. 3 — сокращение срока внешнего управления.
+
+test('обжалование определения о сокращении срока внешнего управления: один месяц с даты изготовления определения, будний день без переноса', () => {
+  const term = computeExternalManagementReductionAppealApk({
+    external_management_reduction_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
+});
+
+test('обжалование определения о сокращении срока внешнего управления: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeExternalManagementReductionAppealApk({
+    external_management_reduction_ruling_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('обжалование определения о сокращении срока внешнего управления: без external_management_reduction_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeExternalManagementReductionAppealApk({}),
+    /external_management_reduction_ruling_date_apk/,
+  );
+});
+
+test('обжалование определения о сокращении срока внешнего управления: primary — ч. 1 ст. 61, не ст. 93', () => {
+  assert.equal(
+    EXTERNAL_MANAGEMENT_REDUCTION_APPEAL_APK.norm_versions[0].norm.primary,
+    'ч. 1 ст. 61 ФЗ № 127-ФЗ',
+  );
+  assert.doesNotMatch(EXTERNAL_MANAGEMENT_REDUCTION_APPEAL_APK.norm_versions[0].norm.primary, /93/);
+});
+
+test('обжалование определения о сокращении срока внешнего управления: calculation буквально тот же набор, что у ст. 160', () => {
+  assert.deepEqual(
+    EXTERNAL_MANAGEMENT_REDUCTION_APPEAL_APK.norm_versions[0].norm.calculation,
+    SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK.norm_versions[0].norm.calculation,
+  );
+});
+
+test('обжалование определения о сокращении срока внешнего управления: без потолков и restoration, разные узлы с ч. 2 ст. 93', () => {
+  const term = computeExternalManagementReductionAppealApk({
+    external_management_reduction_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.id, 'external_management_reduction_appeal_apk');
+  assert.equal(EXTERNAL_MANAGEMENT_REDUCTION_APPEAL_APK.restoration_norm, undefined);
+  assert.equal(term.caps, undefined);
+  // Два разных узла ст. 93 (ч. 2 и ч. 3) — не один узел под двумя именами.
+  assert.notEqual(
+    EXTERNAL_MANAGEMENT_REDUCTION_APPEAL_APK.id,
+    EXTERNAL_MANAGEMENT_INTRODUCTION_EXTENSION_APPEAL_APK.id,
+  );
+});
+
+// 3) Ст. 106 п. 6 — признание плана внешнего управления недействительным.
+
+test('обжалование определения о признании плана внешнего управления недействительным: один месяц с даты изготовления определения, будний день без переноса', () => {
+  const term = computeExternalManagementPlanInvalidationAppealApk({
+    external_management_plan_invalidation_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
+});
+
+test('обжалование определения о признании плана внешнего управления недействительным: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeExternalManagementPlanInvalidationAppealApk({
+    external_management_plan_invalidation_ruling_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('обжалование определения о признании плана внешнего управления недействительным: без external_management_plan_invalidation_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeExternalManagementPlanInvalidationAppealApk({}),
+    /external_management_plan_invalidation_ruling_date_apk/,
+  );
+});
+
+test('обжалование определения о признании плана внешнего управления недействительным: primary — ч. 1 ст. 61, не ст. 106', () => {
+  assert.equal(
+    EXTERNAL_MANAGEMENT_PLAN_INVALIDATION_APPEAL_APK.norm_versions[0].norm.primary,
+    'ч. 1 ст. 61 ФЗ № 127-ФЗ',
+  );
+  assert.doesNotMatch(
+    EXTERNAL_MANAGEMENT_PLAN_INVALIDATION_APPEAL_APK.norm_versions[0].norm.primary,
+    /106/,
+  );
+});
+
+test('обжалование определения о признании плана внешнего управления недействительным: calculation буквально тот же набор, что у ст. 160', () => {
+  assert.deepEqual(
+    EXTERNAL_MANAGEMENT_PLAN_INVALIDATION_APPEAL_APK.norm_versions[0].norm.calculation,
+    SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK.norm_versions[0].norm.calculation,
+  );
+});
+
+test('обжалование определения о признании плана внешнего управления недействительным: без потолков и restoration', () => {
+  const term = computeExternalManagementPlanInvalidationAppealApk({
+    external_management_plan_invalidation_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.id, 'external_management_plan_invalidation_appeal_apk');
+  assert.equal(EXTERNAL_MANAGEMENT_PLAN_INVALIDATION_APPEAL_APK.restoration_norm, undefined);
+  assert.equal(term.caps, undefined);
+});
+
+// 4) Ст. 122.1 п. 2 — отказ в удовлетворении ходатайства п. 1 той же статьи.
+
+test('обжалование отказа в удовлетворении ходатайства (истечение сроков внешнего управления): один месяц с даты изготовления определения, будний день без переноса', () => {
+  const term = computeExternalManagementTermExpiryRefusalAppealApk({
+    external_management_term_expiry_refusal_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
+});
+
+test('обжалование отказа в удовлетворении ходатайства (истечение сроков внешнего управления): перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeExternalManagementTermExpiryRefusalAppealApk({
+    external_management_term_expiry_refusal_ruling_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('обжалование отказа в удовлетворении ходатайства (истечение сроков внешнего управления): без external_management_term_expiry_refusal_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeExternalManagementTermExpiryRefusalAppealApk({}),
+    /external_management_term_expiry_refusal_ruling_date_apk/,
+  );
+});
+
+test('обжалование отказа в удовлетворении ходатайства (истечение сроков внешнего управления): primary — ч. 1 ст. 61, не ст. 122.1', () => {
+  assert.equal(
+    EXTERNAL_MANAGEMENT_TERM_EXPIRY_REFUSAL_APPEAL_APK.norm_versions[0].norm.primary,
+    'ч. 1 ст. 61 ФЗ № 127-ФЗ',
+  );
+  assert.doesNotMatch(
+    EXTERNAL_MANAGEMENT_TERM_EXPIRY_REFUSAL_APPEAL_APK.norm_versions[0].norm.primary,
+    /122/,
+  );
+});
+
+test('обжалование отказа в удовлетворении ходатайства (истечение сроков внешнего управления): calculation буквально тот же набор, что у ст. 160', () => {
+  assert.deepEqual(
+    EXTERNAL_MANAGEMENT_TERM_EXPIRY_REFUSAL_APPEAL_APK.norm_versions[0].norm.calculation,
+    SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK.norm_versions[0].norm.calculation,
+  );
+});
+
+test('обжалование отказа в удовлетворении ходатайства (истечение сроков внешнего управления): без потолков и restoration', () => {
+  const term = computeExternalManagementTermExpiryRefusalAppealApk({
+    external_management_term_expiry_refusal_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.id, 'external_management_term_expiry_refusal_appeal_apk');
+  assert.equal(EXTERNAL_MANAGEMENT_TERM_EXPIRY_REFUSAL_APPEAL_APK.restoration_norm, undefined);
+  assert.equal(term.caps, undefined);
+});
+
+test('четыре узла обжалования внешнего управления: разные id, у каждого своё поле ввода — не один узел под четырьмя именами', () => {
+  const nodes = [
+    EXTERNAL_MANAGEMENT_INTRODUCTION_EXTENSION_APPEAL_APK,
+    EXTERNAL_MANAGEMENT_REDUCTION_APPEAL_APK,
+    EXTERNAL_MANAGEMENT_PLAN_INVALIDATION_APPEAL_APK,
+    EXTERNAL_MANAGEMENT_TERM_EXPIRY_REFUSAL_APPEAL_APK,
+  ];
+  const ids = nodes.map((n) => n.id);
+  assert.equal(new Set(ids).size, 4);
+  // Все четыре — единая архитектурная логика ст. 61 ч. 1.
+  for (const node of nodes) {
+    assert.equal(node.norm_versions[0].norm.primary, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
+    assert.deepEqual(
+      node.norm_versions[0].norm.calculation,
+      SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK.norm_versions[0].norm.calculation,
+    );
+    assert.equal(node.restoration_norm, undefined);
+  }
 });

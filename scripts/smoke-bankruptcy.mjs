@@ -91,8 +91,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 15,
-  'переключатель ситуаций отрисован не на пятнадцать ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 19,
+  'переключатель ситуаций отрисован не на девятнадцать ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -900,6 +900,110 @@ check(
 check(
   (await rejectionAppealCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
   'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке обжалования отказа',
+);
+
+// --- Ветви 16-19: четыре узла обжалования определений внешнего управления -----
+//
+// Перенос по образцу: тот же паттерн, что у ветви 15 (ст. 160) — обычные
+// месячные term-узлы, norm.primary на каждой карточке должен быть ч. 1
+// ст. 61, а не статья-основание (93/106/122.1).
+
+await chooseSituation('external_management_introduction_extension_appeal');
+check(
+  (await page.locator('#in-external_management_introduction_extension_ruling_date_apk').count()) === 1,
+  'ветвь "external_management_introduction_extension_appeal": основное поле не найдено в DOM',
+);
+await page.fill('#in-external_management_introduction_extension_ruling_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви обжалования определения о введении/продлении внешнего управления ожидалась одна карточка',
+);
+const introExtCard = cardByTitle('Обжалование определения о введении или продлении внешнего управления');
+check((await introExtCard.count()) === 1, 'карточка обжалования определения о введении/продлении не появилась');
+check(
+  (await deadlineOf(introExtCard)) === '11.04.2025',
+  `срок обжалования посчитан неверно: ${await deadlineOf(introExtCard)}`,
+);
+check(
+  (await introExtCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
+  'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке введения/продления',
+);
+
+await chooseSituation('external_management_reduction_appeal');
+check(
+  (await page.locator('#in-external_management_reduction_ruling_date_apk').count()) === 1,
+  'ветвь "external_management_reduction_appeal": основное поле не найдено в DOM',
+);
+await page.fill('#in-external_management_reduction_ruling_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви обжалования определения о сокращении срока внешнего управления ожидалась одна карточка',
+);
+const reductionCard = cardByTitle('Обжалование определения о сокращении срока внешнего управления');
+check((await reductionCard.count()) === 1, 'карточка обжалования определения о сокращении не появилась');
+check(
+  (await deadlineOf(reductionCard)) === '11.04.2025',
+  `срок обжалования посчитан неверно: ${await deadlineOf(reductionCard)}`,
+);
+check(
+  (await reductionCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
+  'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке сокращения срока',
+);
+
+await chooseSituation('external_management_plan_invalidation_appeal');
+check(
+  (await page.locator('#in-external_management_plan_invalidation_ruling_date_apk').count()) === 1,
+  'ветвь "external_management_plan_invalidation_appeal": основное поле не найдено в DOM',
+);
+await page.fill('#in-external_management_plan_invalidation_ruling_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви обжалования определения о признании плана недействительным ожидалась одна карточка',
+);
+const planInvalidationCard = cardByTitle(
+  'Обжалование определения о признании недействительным плана внешнего управления',
+);
+check(
+  (await planInvalidationCard.count()) === 1,
+  'карточка обжалования определения о признании плана недействительным не появилась',
+);
+check(
+  (await deadlineOf(planInvalidationCard)) === '11.04.2025',
+  `срок обжалования посчитан неверно: ${await deadlineOf(planInvalidationCard)}`,
+);
+check(
+  (await planInvalidationCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
+  'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке признания плана недействительным',
+);
+
+await chooseSituation('external_management_term_expiry_refusal_appeal');
+check(
+  (await page.locator('#in-external_management_term_expiry_refusal_ruling_date_apk').count()) === 1,
+  'ветвь "external_management_term_expiry_refusal_appeal": основное поле не найдено в DOM',
+);
+await page.fill('#in-external_management_term_expiry_refusal_ruling_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви обжалования отказа в удовлетворении ходатайства ожидалась одна карточка',
+);
+const termExpiryRefusalCard = cardByTitle(
+  'Обжалование отказа в удовлетворении ходатайства об отказе в признании должника банкротом при истечении сроков внешнего управления',
+);
+check(
+  (await termExpiryRefusalCard.count()) === 1,
+  'карточка обжалования отказа в удовлетворении ходатайства не появилась',
+);
+check(
+  (await deadlineOf(termExpiryRefusalCard)) === '11.04.2025',
+  `срок обжалования посчитан неверно: ${await deadlineOf(termExpiryRefusalCard)}`,
+);
+check(
+  (await termExpiryRefusalCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
+  'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке отказа в удовлетворении ходатайства',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------

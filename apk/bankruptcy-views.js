@@ -41,6 +41,10 @@ import {
   computeClaimsRulingReasonedAppealApk,
   computeEnterpriseSalePaymentApk,
   computeSettlementAgreementRejectionAppealApk,
+  computeExternalManagementIntroductionExtensionAppealApk,
+  computeExternalManagementReductionAppealApk,
+  computeExternalManagementPlanInvalidationAppealApk,
+  computeExternalManagementTermExpiryRefusalAppealApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -61,6 +65,10 @@ import {
   CLAIMS_RULING_REASONED_APPEAL_APK,
   ENTERPRISE_SALE_PAYMENT_APK,
   SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK,
+  EXTERNAL_MANAGEMENT_INTRODUCTION_EXTENSION_APPEAL_APK,
+  EXTERNAL_MANAGEMENT_REDUCTION_APPEAL_APK,
+  EXTERNAL_MANAGEMENT_PLAN_INVALIDATION_APPEAL_APK,
+  EXTERNAL_MANAGEMENT_TERM_EXPIRY_REFUSAL_APPEAL_APK,
 } from './bankruptcy.js';
 
 import {
@@ -486,6 +494,29 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     node: SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK,
     deps: () => ['settlement_agreement_rejection_ruling_date_apk'],
     compute: (i) => computeSettlementAgreementRejectionAppealApk(i),
+  },
+  // Три следующих узла — тот же паттерн регистрации, что у
+  // settlement_agreement_rejection_appeal_apk выше (без kind: обычная
+  // месячная term-карточка через monthTermCard).
+  external_management_introduction_extension_appeal_apk: {
+    node: EXTERNAL_MANAGEMENT_INTRODUCTION_EXTENSION_APPEAL_APK,
+    deps: () => ['external_management_introduction_extension_ruling_date_apk'],
+    compute: (i) => computeExternalManagementIntroductionExtensionAppealApk(i),
+  },
+  external_management_reduction_appeal_apk: {
+    node: EXTERNAL_MANAGEMENT_REDUCTION_APPEAL_APK,
+    deps: () => ['external_management_reduction_ruling_date_apk'],
+    compute: (i) => computeExternalManagementReductionAppealApk(i),
+  },
+  external_management_plan_invalidation_appeal_apk: {
+    node: EXTERNAL_MANAGEMENT_PLAN_INVALIDATION_APPEAL_APK,
+    deps: () => ['external_management_plan_invalidation_ruling_date_apk'],
+    compute: (i) => computeExternalManagementPlanInvalidationAppealApk(i),
+  },
+  external_management_term_expiry_refusal_appeal_apk: {
+    node: EXTERNAL_MANAGEMENT_TERM_EXPIRY_REFUSAL_APPEAL_APK,
+    deps: () => ['external_management_term_expiry_refusal_ruling_date_apk'],
+    compute: (i) => computeExternalManagementTermExpiryRefusalAppealApk(i),
   },
 };
 

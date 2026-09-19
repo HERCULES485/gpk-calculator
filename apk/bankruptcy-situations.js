@@ -239,6 +239,40 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['settlement_agreement_rejection_appeal_apk'],
   },
+  {
+    id: 'external_management_introduction_extension_appeal',
+    label: 'Обжалование определения о введении или продлении внешнего управления',
+    // Единственное поле ветви — дата изготовления определения в полном
+    // объёме, тот же образец, что у settlement_agreement_rejection_appeal.
+    primary_field: 'external_management_introduction_extension_ruling_date_apk',
+    fields: [],
+    nodes: ['external_management_introduction_extension_appeal_apk'],
+  },
+  {
+    id: 'external_management_reduction_appeal',
+    label: 'Обжалование определения о сокращении срока внешнего управления',
+    // Отдельная от предыдущей ветвь: разные определения (введение/продление
+    // против сокращения срока), разные факты дела, взаимоисключающие
+    // ситуации пользователя — тот же принцип, что у группы «шесть узлов
+    // сокращённой апелляции» (PR #50).
+    primary_field: 'external_management_reduction_ruling_date_apk',
+    fields: [],
+    nodes: ['external_management_reduction_appeal_apk'],
+  },
+  {
+    id: 'external_management_plan_invalidation_appeal',
+    label: 'Обжалование определения о признании недействительным плана внешнего управления',
+    primary_field: 'external_management_plan_invalidation_ruling_date_apk',
+    fields: [],
+    nodes: ['external_management_plan_invalidation_appeal_apk'],
+  },
+  {
+    id: 'external_management_term_expiry_refusal_appeal',
+    label: 'Обжалование отказа в удовлетворении ходатайства при истечении сроков внешнего управления',
+    primary_field: 'external_management_term_expiry_refusal_ruling_date_apk',
+    fields: [],
+    nodes: ['external_management_term_expiry_refusal_appeal_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';
