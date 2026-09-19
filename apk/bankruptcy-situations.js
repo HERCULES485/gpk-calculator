@@ -322,6 +322,19 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['external_management_handover_apk'],
   },
+  {
+    id: 'external_management_third_party_satisfaction',
+    label: 'Внешний управляющий: требования погашены третьим лицом, учредителями или собственником имущества',
+    // ДВА узла в одной ветви, не два узла в двух ветвях — тот же прецедент,
+    // что у external_management_plan выше: оба узла считаются от ОДНОЙ и
+    // той же даты (окончание исполнения обязательств третьим лицом/
+    // учредителями/собственником имущества по ст. 113), это два независимых
+    // обязательства (уведомить кредиторов; направить отчёт в суд), а не
+    // одна обязанность под двумя именами.
+    primary_field: 'external_management_third_party_satisfaction_date_apk',
+    fields: [],
+    nodes: ['external_management_creditor_notification_apk', 'external_management_report_special_completion_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';
