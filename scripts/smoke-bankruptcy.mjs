@@ -91,8 +91,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 32,
-  'переключатель ситуаций отрисован не на тридцать две ветви',
+  (await page.locator('#situation input[type=radio]').count()) === 35,
+  'переключатель ситуаций отрисован не на тридцать пять ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -1392,6 +1392,94 @@ check(
 check(
   (await deadlineOf(introductionNotificationCard)) === '25.03.2026',
   `срок уведомления о введении наблюдения посчитан неверно: ${await deadlineOf(introductionNotificationCard)}`,
+);
+
+// --- Ветвь: обжалование определения об утверждении конкурсного управляющего
+// (п. 1 ст. 127) --------------------------------------------------------------
+
+await chooseSituation('bankruptcy_manager_appointment_appeal');
+check(
+  (await page.locator('#in-bankruptcy_manager_appointment_ruling_date_apk').count()) === 1,
+  'ветвь "bankruptcy_manager_appointment_appeal": основное поле не найдено в DOM',
+);
+await page.fill('#in-bankruptcy_manager_appointment_ruling_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви обжалования определения об утверждении конкурсного управляющего ожидалась одна карточка',
+);
+const managerAppointmentAppealCard = cardByTitle(
+  'Обжалование определения об утверждении конкурсного управляющего при признании должника банкротом',
+);
+check(
+  (await managerAppointmentAppealCard.count()) === 1,
+  'карточка обжалования определения об утверждении конкурсного управляющего не появилась',
+);
+check(
+  (await deadlineOf(managerAppointmentAppealCard)) === '11.04.2025',
+  `срок обжалования посчитан неверно: ${await deadlineOf(managerAppointmentAppealCard)}`,
+);
+check(
+  (await managerAppointmentAppealCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
+  'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке обжалования утверждения конкурсного управляющего',
+);
+
+// --- Ветвь: обязанности конкурсного управляющего сразу после признания
+// должника банкротом (ст. 127-129, три узла из одного якоря) -------------------
+
+await chooseSituation('bankruptcy_declaration');
+check(
+  (await page.locator('#in-bankruptcy_declaration_ruling_date_apk').count()) === 1,
+  'ветвь "bankruptcy_declaration": основное поле не найдено в DOM',
+);
+await page.fill('#in-bankruptcy_declaration_ruling_date_apk', '26.12.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 3,
+  'в ветви обязанностей конкурсного управляющего ожидались три карточки',
+);
+const publicationCard = cardByTitle('сведений о признании должника банкротом для опубликования');
+check((await publicationCard.count()) === 1, 'карточка направления сведений для опубликования не появилась');
+const publicationText = await publicationCard.innerText();
+check(
+  publicationText.includes('Отсчёт рабочих дней с 29.12.2025'),
+  `первый рабочий день не показан на карточке опубликования: «${publicationText}»`,
+);
+check(
+  publicationText.includes('п. 1 ст. 128 ФЗ № 127-ФЗ'),
+  'норма п. 1 ст. 128 ФЗ № 127-ФЗ не показана на карточке опубликования',
+);
+const inventoryCard = cardByTitle('Принятие в ведение имущества должника и проведение его инвентаризации');
+check((await inventoryCard.count()) === 1, 'карточка принятия имущества и инвентаризации не появилась');
+check(
+  (await deadlineOf(inventoryCard)) === '26.03.2026',
+  `срок принятия имущества и инвентаризации посчитан неверно: ${await deadlineOf(inventoryCard)}`,
+);
+const dismissalCard = cardByTitle('Уведомление работников должника о предстоящем увольнении');
+check((await dismissalCard.count()) === 1, 'карточка уведомления работников не появилась');
+check(
+  (await deadlineOf(dismissalCard)) === '26.01.2026',
+  `срок уведомления работников посчитан неверно: ${await deadlineOf(dismissalCard)}`,
+);
+
+// --- Ветвь: включение результатов инвентаризации в ЕФРСБ (п. 2 ст. 129) -------
+
+await chooseSituation('bankruptcy_inventory_results_registry');
+check(
+  (await page.locator('#in-property_inventory_completion_date_apk').count()) === 1,
+  'ветвь "bankruptcy_inventory_results_registry": основное поле не найдено в DOM',
+);
+await page.fill('#in-property_inventory_completion_date_apk', '11.03.2026');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви включения результатов инвентаризации в ЕФРСБ ожидалась одна карточка',
+);
+const inventoryRegistryCard = cardByTitle('результатах инвентаризации имущества должника');
+check((await inventoryRegistryCard.count()) === 1, 'карточка включения результатов инвентаризации в ЕФРСБ не появилась');
+check(
+  (await deadlineOf(inventoryRegistryCard)) === '16.03.2026',
+  `срок включения результатов инвентаризации в ЕФРСБ посчитан неверно: ${await deadlineOf(inventoryRegistryCard)}`,
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------

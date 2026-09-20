@@ -421,6 +421,49 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['observation_introduction_notification_apk'],
   },
+  {
+    id: 'bankruptcy_manager_appointment_appeal',
+    label: 'Обжалование определения об утверждении конкурсного управляющего при признании должника банкротом',
+    // Отдельная ветвь от bankruptcy_declaration ниже, хоть якоря по существу
+    // совпадают (п. 1 ст. 127 ФЗ № 127-ФЗ — конкурсный управляющий
+    // утверждается одновременно с решением о признании банкротом): тот же
+    // приём, что у external_management_manager_approved_date_apk vs
+    // receiver_approved_date_apk — обжалование определения и обязанности
+    // управляющего по существу разведены по разным полям разных ветвей, см.
+    // комментарий к узлам в apk/bankruptcy.js.
+    primary_field: 'bankruptcy_manager_appointment_ruling_date_apk',
+    fields: [],
+    nodes: ['bankruptcy_manager_appointment_appeal_apk'],
+  },
+  {
+    id: 'bankruptcy_declaration',
+    label: 'Конкурсный управляющий: обязанности сразу после признания должника банкротом',
+    // ТРИ узла в одной ветви, не три узла в трёх ветвях: все используют ОДИН
+    // И ТОТ ЖЕ якорь (дата принятия решения о признании должника банкротом и
+    // об открытии конкурсного производства, она же дата утверждения
+    // конкурсного управляющего, п. 1 ст. 127 ФЗ № 127-ФЗ) — тот же прецедент
+    // группировки, что у external_management_plan (PR #56). Три независимых
+    // обязанности (опубликование сведений; принятие имущества и
+    // инвентаризация; уведомление работников), а не одна обязанность под
+    // тремя именами.
+    primary_field: 'bankruptcy_declaration_ruling_date_apk',
+    fields: [],
+    nodes: [
+      'bankruptcy_information_publication_apk',
+      'bankruptcy_property_inventory_apk',
+      'bankruptcy_employee_dismissal_notice_apk',
+    ],
+  },
+  {
+    id: 'bankruptcy_inventory_results_registry',
+    label: 'Конкурсное производство: включение сведений о результатах инвентаризации в ЕФРСБ',
+    // Отдельная от bankruptcy_declaration ветвь: другой якорь — дата
+    // ОКОНЧАНИЯ инвентаризации, а не дата введения конкурсного производства
+    // (та её только начинает) — см. комментарий к узлу в apk/bankruptcy.js.
+    primary_field: 'property_inventory_completion_date_apk',
+    fields: [],
+    nodes: ['bankruptcy_inventory_results_registry_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';

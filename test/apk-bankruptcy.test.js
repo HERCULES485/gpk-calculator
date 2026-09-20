@@ -95,6 +95,16 @@ import {
   OBSERVATION_INFORMATION_REQUEST_RESPONSE_APK,
   computeObservationIntroductionNotificationApk,
   OBSERVATION_INTRODUCTION_NOTIFICATION_APK,
+  computeBankruptcyManagerAppointmentAppealApk,
+  BANKRUPTCY_MANAGER_APPOINTMENT_APPEAL_APK,
+  computeBankruptcyInformationPublicationApk,
+  BANKRUPTCY_INFORMATION_PUBLICATION_APK,
+  computeBankruptcyPropertyInventoryApk,
+  BANKRUPTCY_PROPERTY_INVENTORY_APK,
+  computeBankruptcyEmployeeDismissalNoticeApk,
+  BANKRUPTCY_EMPLOYEE_DISMISSAL_NOTICE_APK,
+  computeBankruptcyInventoryResultsRegistryApk,
+  BANKRUPTCY_INVENTORY_RESULTS_REGISTRY_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -2300,4 +2310,215 @@ test('стадия наблюдения: два новых узла — разн
     OBSERVATION_INFORMATION_REQUEST_RESPONSE_APK.norm_versions[0].norm.primary,
     OBSERVATION_INTRODUCTION_NOTIFICATION_APK.norm_versions[0].norm.primary,
   );
+});
+
+// --- Последствия открытия конкурсного производства (ст. 127-129 ФЗ № 127-ФЗ) --
+// Пять новых узлов. Первый — восьмой appeal-узел домена (тот же образец, что
+// у семи предыдущих). Остальные четыре — duty-узлы конкурсного управляющего,
+// тот же тип, что у шести узлов внешнего управляющего (ст. 106/107/117/119/
+// 123): primary — сама статья-основание, без расхождения с ч. 1 ст. 61.
+
+// 1) П. 1 ст. 127 — обжалование определения об утверждении конкурсного
+// управляющего.
+
+test('обжалование определения об утверждении конкурсного управляющего: один месяц с даты изготовления определения, будний день без переноса', () => {
+  const term = computeBankruptcyManagerAppointmentAppealApk({
+    bankruptcy_manager_appointment_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
+});
+
+test('обжалование определения об утверждении конкурсного управляющего: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeBankruptcyManagerAppointmentAppealApk({
+    bankruptcy_manager_appointment_ruling_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('обжалование определения об утверждении конкурсного управляющего: без bankruptcy_manager_appointment_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeBankruptcyManagerAppointmentAppealApk({}),
+    /bankruptcy_manager_appointment_ruling_date_apk/,
+  );
+});
+
+test('обжалование определения об утверждении конкурсного управляющего: primary — ч. 1 ст. 61, не ст. 127; calculation тот же набор, что у остальных appeal-узлов, без restoration', () => {
+  assert.equal(
+    BANKRUPTCY_MANAGER_APPOINTMENT_APPEAL_APK.norm_versions[0].norm.primary,
+    'ч. 1 ст. 61 ФЗ № 127-ФЗ',
+  );
+  assert.doesNotMatch(
+    BANKRUPTCY_MANAGER_APPOINTMENT_APPEAL_APK.norm_versions[0].norm.primary,
+    /ст\. 127/,
+  );
+  assert.deepEqual(
+    BANKRUPTCY_MANAGER_APPOINTMENT_APPEAL_APK.norm_versions[0].norm.calculation,
+    BANKRUPTCY_COMPLETION_REQUEST_RULING_APPEAL_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(BANKRUPTCY_MANAGER_APPOINTMENT_APPEAL_APK.restoration_norm, undefined);
+});
+
+// 2) П. 1 ст. 128 — направление сведений о признании должника банкротом для
+// опубликования. Якорь — дата принятия решения о признании должника
+// банкротом (она же дата утверждения конкурсного управляющего, п. 1 ст. 127).
+
+test('направление сведений для опубликования: десять рабочих дней с даты принятия решения, без праздничных кластеров рядом', () => {
+  const term = computeBankruptcyInformationPublicationApk({
+    bankruptcy_declaration_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-03-25');
+  assert.equal(term.deadline, '2025-03-25');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'п. 1 ст. 128 ФЗ № 127-ФЗ');
+});
+
+test('направление сведений для опубликования: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeBankruptcyInformationPublicationApk({
+    bankruptcy_declaration_ruling_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-21');
+});
+
+test('направление сведений для опубликования: без bankruptcy_declaration_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeBankruptcyInformationPublicationApk({}),
+    /bankruptcy_declaration_ruling_date_apk/,
+  );
+});
+
+test('направление сведений для опубликования: calculation — тот же массив, что у остальных working_day duty-узлов домена, без restoration', () => {
+  assert.deepEqual(
+    BANKRUPTCY_INFORMATION_PUBLICATION_APK.norm_versions[0].norm.calculation,
+    DEBTOR_RESPONSE_BANKRUPTCY_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(BANKRUPTCY_INFORMATION_PUBLICATION_APK.restoration_norm, undefined);
+});
+
+// 3) Абз. 2 п. 2 ст. 129 — принятие в ведение имущества должника и его
+// инвентаризация. Тот же якорь, что у узла 2.
+
+test('принятие в ведение имущества и инвентаризация: три месяца с даты принятия решения, будний день без переноса', () => {
+  const term = computeBankruptcyPropertyInventoryApk({
+    bankruptcy_declaration_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-06-11');
+  assert.equal(term.deadline, '2025-06-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 3, unit: 'month' });
+  assert.equal(term.norm.primary, 'абз. 2 п. 2 ст. 129 ФЗ № 127-ФЗ');
+});
+
+test('принятие в ведение имущества и инвентаризация: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeBankruptcyPropertyInventoryApk({
+    bankruptcy_declaration_ruling_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-05-01');
+  assert.equal(term.deadline, '2025-05-05');
+  assert.equal(term.shifted, true);
+});
+
+test('принятие в ведение имущества и инвентаризация: без bankruptcy_declaration_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeBankruptcyPropertyInventoryApk({}),
+    /bankruptcy_declaration_ruling_date_apk/,
+  );
+});
+
+test('принятие в ведение имущества и инвентаризация: calculation — тот же массив, что у месячных duty-узлов домена (ст. 142 п. 1), без restoration', () => {
+  assert.deepEqual(
+    BANKRUPTCY_PROPERTY_INVENTORY_APK.norm_versions[0].norm.calculation,
+    CREDITORS_REGISTER_CLOSURE_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(BANKRUPTCY_PROPERTY_INVENTORY_APK.restoration_norm, undefined);
+});
+
+// 4) П. 2 ст. 129 (абзац про уведомление работников) — уведомление работников
+// должника о предстоящем увольнении. Тот же якорь, что у узлов 2-3.
+
+test('уведомление работников о предстоящем увольнении: один месяц с даты принятия решения, будний день без переноса', () => {
+  const term = computeBankruptcyEmployeeDismissalNoticeApk({
+    bankruptcy_declaration_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'п. 2 ст. 129 ФЗ № 127-ФЗ');
+});
+
+test('уведомление работников о предстоящем увольнении: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeBankruptcyEmployeeDismissalNoticeApk({
+    bankruptcy_declaration_ruling_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('уведомление работников о предстоящем увольнении: без bankruptcy_declaration_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeBankruptcyEmployeeDismissalNoticeApk({}),
+    /bankruptcy_declaration_ruling_date_apk/,
+  );
+});
+
+test('три узла обязанностей конкурсного управляющего: разные id, общий якорь, разные длительности, без restoration ни у одного', () => {
+  assert.notEqual(BANKRUPTCY_INFORMATION_PUBLICATION_APK.id, BANKRUPTCY_PROPERTY_INVENTORY_APK.id);
+  assert.notEqual(BANKRUPTCY_PROPERTY_INVENTORY_APK.id, BANKRUPTCY_EMPLOYEE_DISMISSAL_NOTICE_APK.id);
+  assert.notDeepEqual(BANKRUPTCY_PROPERTY_INVENTORY_APK.duration, BANKRUPTCY_EMPLOYEE_DISMISSAL_NOTICE_APK.duration);
+  assert.equal(BANKRUPTCY_PROPERTY_INVENTORY_APK.restoration_norm, undefined);
+  assert.equal(BANKRUPTCY_EMPLOYEE_DISMISSAL_NOTICE_APK.restoration_norm, undefined);
+});
+
+// 5) П. 2 ст. 129 (абзац про ЕФРСБ) — включение сведений о результатах
+// инвентаризации в ЕФРСБ. ОТДЕЛЬНЫЙ якорь — дата окончания инвентаризации, не
+// дата введения конкурсного производства.
+
+test('включение результатов инвентаризации в ЕФРСБ: три рабочих дня с даты окончания инвентаризации, без праздничных кластеров рядом', () => {
+  const term = computeBankruptcyInventoryResultsRegistryApk({
+    property_inventory_completion_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-03-14');
+  assert.equal(term.deadline, '2025-03-14');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 3, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'п. 2 ст. 129 ФЗ № 127-ФЗ');
+});
+
+test('включение результатов инвентаризации в ЕФРСБ: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeBankruptcyInventoryResultsRegistryApk({
+    property_inventory_completion_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-12');
+});
+
+test('включение результатов инвентаризации в ЕФРСБ: без property_inventory_completion_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeBankruptcyInventoryResultsRegistryApk({}),
+    /property_inventory_completion_date_apk/,
+  );
+});
+
+test('включение результатов инвентаризации в ЕФРСБ: якорь — отдельное поле, не bankruptcy_declaration_ruling_date_apk узлов 2-4, calculation — тот же массив, что у остальных working_day duty-узлов домена, без restoration', () => {
+  assert.deepEqual(
+    BANKRUPTCY_INVENTORY_RESULTS_REGISTRY_APK.norm_versions[0].norm.calculation,
+    DEBTOR_RESPONSE_BANKRUPTCY_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(BANKRUPTCY_INVENTORY_RESULTS_REGISTRY_APK.restoration_norm, undefined);
 });
