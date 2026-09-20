@@ -91,8 +91,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 29,
-  'переключатель ситуаций отрисован не на двадцать девять ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 30,
+  'переключатель ситуаций отрисован не на тридцать ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -1310,6 +1310,35 @@ check(
 check(
   (await propertyProcedureCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
   'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке обжалования порядка продажи имущества',
+);
+
+// --- Ветвь 30: обжалование определения по заявлениям конкурсного управляющего о завершении конкурсного производства (п. 14-15 ст. 149) ---
+
+await chooseSituation('bankruptcy_completion_request_ruling_appeal');
+check(
+  (await page.locator('#in-bankruptcy_completion_request_ruling_date_apk').count()) === 1,
+  'ветвь "bankruptcy_completion_request_ruling_appeal": основное поле не найдено в DOM',
+);
+await page.fill('#in-bankruptcy_completion_request_ruling_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви обжалования определения по заявлениям конкурсного управляющего ожидалась одна карточка',
+);
+const completionRequestRulingCard = cardByTitle(
+  'Обжалование определения по результатам рассмотрения заявлений конкурсного управляющего о завершении конкурсного производства',
+);
+check(
+  (await completionRequestRulingCard.count()) === 1,
+  'карточка обжалования определения по заявлениям конкурсного управляющего не появилась',
+);
+check(
+  (await deadlineOf(completionRequestRulingCard)) === '11.04.2025',
+  `срок обжалования посчитан неверно: ${await deadlineOf(completionRequestRulingCard)}`,
+);
+check(
+  (await completionRequestRulingCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
+  'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке обжалования определения по заявлениям конкурсного управляющего',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------

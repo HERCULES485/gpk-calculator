@@ -57,6 +57,7 @@ import {
   computeAppraisalReportRegistryInclusionApk,
   computeEnterpriseSaleProcedureApprovalAppealApk,
   computePropertySaleProcedureApprovalAppealApk,
+  computeBankruptcyCompletionRequestRulingAppealApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -93,6 +94,7 @@ import {
   APPRAISAL_REPORT_REGISTRY_INCLUSION_APK,
   ENTERPRISE_SALE_PROCEDURE_APPROVAL_APPEAL_APK,
   PROPERTY_SALE_PROCEDURE_APPROVAL_APPEAL_APK,
+  BANKRUPTCY_COMPLETION_REQUEST_RULING_APPEAL_APK,
 } from './bankruptcy.js';
 
 import {
@@ -614,6 +616,11 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     node: PROPERTY_SALE_PROCEDURE_APPROVAL_APPEAL_APK,
     deps: () => ['property_sale_procedure_approval_ruling_date_apk'],
     compute: (i) => computePropertySaleProcedureApprovalAppealApk(i),
+  },
+  bankruptcy_completion_request_ruling_appeal_apk: {
+    node: BANKRUPTCY_COMPLETION_REQUEST_RULING_APPEAL_APK,
+    deps: () => ['bankruptcy_completion_request_ruling_date_apk'],
+    compute: (i) => computeBankruptcyCompletionRequestRulingAppealApk(i),
   },
 };
 

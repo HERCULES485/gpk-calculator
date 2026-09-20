@@ -383,6 +383,15 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['property_sale_procedure_approval_appeal_apk'],
   },
+  {
+    id: 'bankruptcy_completion_request_ruling_appeal',
+    label:
+      'Обжалование определения по результатам рассмотрения заявлений ' +
+      'конкурсного управляющего о завершении конкурсного производства',
+    primary_field: 'bankruptcy_completion_request_ruling_date_apk',
+    fields: [],
+    nodes: ['bankruptcy_completion_request_ruling_appeal_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';
