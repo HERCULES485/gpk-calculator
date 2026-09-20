@@ -59,6 +59,8 @@ import {
   computeEnterpriseSaleProcedureApprovalAppealApk,
   computePropertySaleProcedureApprovalAppealApk,
   computeBankruptcyCompletionRequestRulingAppealApk,
+  computeObservationInformationRequestResponseApk,
+  computeObservationIntroductionNotificationApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -97,6 +99,8 @@ import {
   ENTERPRISE_SALE_PROCEDURE_APPROVAL_APPEAL_APK,
   PROPERTY_SALE_PROCEDURE_APPROVAL_APPEAL_APK,
   BANKRUPTCY_COMPLETION_REQUEST_RULING_APPEAL_APK,
+  OBSERVATION_INFORMATION_REQUEST_RESPONSE_APK,
+  OBSERVATION_INTRODUCTION_NOTIFICATION_APK,
 } from './bankruptcy.js';
 
 import {
@@ -632,6 +636,20 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     node: BANKRUPTCY_COMPLETION_REQUEST_RULING_APPEAL_APK,
     deps: () => ['bankruptcy_completion_request_ruling_date_apk'],
     compute: (i) => computeBankruptcyCompletionRequestRulingAppealApk(i),
+  },
+  // Стадия наблюдения (глава III) — два новых working_day-узла, тот же
+  // паттерн регистрации, что у остальных working_day duty-узлов домена.
+  observation_information_request_response_apk: {
+    node: OBSERVATION_INFORMATION_REQUEST_RESPONSE_APK,
+    kind: 'working_day',
+    deps: () => ['observation_information_request_received_date_apk'],
+    compute: (i) => computeObservationInformationRequestResponseApk(i),
+  },
+  observation_introduction_notification_apk: {
+    node: OBSERVATION_INTRODUCTION_NOTIFICATION_APK,
+    kind: 'working_day',
+    deps: () => ['observation_introduction_ruling_date_apk'],
+    compute: (i) => computeObservationIntroductionNotificationApk(i),
   },
 };
 

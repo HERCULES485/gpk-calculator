@@ -91,6 +91,10 @@ import {
   BANKRUPTCY_COMPLETION_REQUEST_RULING_APPEAL_APK,
   computeCitizenInformationDisclosureApk,
   CITIZEN_INFORMATION_DISCLOSURE_APK,
+  computeObservationInformationRequestResponseApk,
+  OBSERVATION_INFORMATION_REQUEST_RESPONSE_APK,
+  computeObservationIntroductionNotificationApk,
+  OBSERVATION_INTRODUCTION_NOTIFICATION_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -2207,4 +2211,93 @@ test('предоставление сведений финансовому уп�
 
 test('предоставление сведений финансовому управляющему: норма не упоминает восстановление вообще — не только без потолка, но и без самого института', () => {
   assert.doesNotMatch(CITIZEN_INFORMATION_DISCLOSURE_APK.logic, /восстанов/i);
+});
+
+// Задача — два узла стадии наблюдения (глава III ФЗ № 127-ФЗ): ответ на
+// запрос временного управляющего (ст. 66 п. 2 абз. 2) и уведомление о
+// введении наблюдения (ст. 68 п. 3). Разные субъекты обязанности и разные
+// якоря — отдельные узлы, отдельные ветви (подтверждено архитектором:
+// формальной группировки веток по стадиям в файле нет).
+
+test('ответ на запрос временного управляющего: семь рабочих дней от даты получения запроса, без праздничных кластеров рядом', () => {
+  const term = computeObservationInformationRequestResponseApk({
+    observation_information_request_received_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-03-20');
+  assert.equal(term.deadline, '2025-03-20');
+  assert.equal(term.shifted, false); // weekend_shift к working_day не применяется
+  assert.deepEqual(term.duration, { value: 7, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ст. 66 п. 2 абз. 2 ФЗ № 127-ФЗ');
+});
+
+test('ответ на запрос временного управляющего: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeObservationInformationRequestResponseApk({
+    observation_information_request_received_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-16');
+});
+
+test('ответ на запрос временного управляющего: без observation_information_request_received_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeObservationInformationRequestResponseApk({}),
+    /observation_information_request_received_date_apk/,
+  );
+});
+
+test('ответ на запрос временного управляющего: calculation — тот же массив, что у остальных working_day duty-узлов домена, без restoration', () => {
+  assert.deepEqual(
+    OBSERVATION_INFORMATION_REQUEST_RESPONSE_APK.norm_versions[0].norm.calculation,
+    DEBTOR_RESPONSE_BANKRUPTCY_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(OBSERVATION_INFORMATION_REQUEST_RESPONSE_APK.restoration_norm, undefined);
+});
+
+test('уведомление о введении наблюдения: десять рабочих дней от даты вынесения определения, без праздничных кластеров рядом', () => {
+  const term = computeObservationIntroductionNotificationApk({
+    observation_introduction_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-03-25');
+  assert.equal(term.deadline, '2025-03-25');
+  assert.equal(term.shifted, false); // weekend_shift к working_day не применяется
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ст. 68 п. 3 ФЗ № 127-ФЗ');
+});
+
+test('уведомление о введении наблюдения: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeObservationIntroductionNotificationApk({
+    observation_introduction_ruling_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-21');
+});
+
+test('уведомление о введении наблюдения: без observation_introduction_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeObservationIntroductionNotificationApk({}),
+    /observation_introduction_ruling_date_apk/,
+  );
+});
+
+test('уведомление о введении наблюдения: calculation — тот же массив, что у остальных working_day duty-узлов домена, без restoration', () => {
+  assert.deepEqual(
+    OBSERVATION_INTRODUCTION_NOTIFICATION_APK.norm_versions[0].norm.calculation,
+    DEBTOR_RESPONSE_BANKRUPTCY_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(OBSERVATION_INTRODUCTION_NOTIFICATION_APK.restoration_norm, undefined);
+});
+
+test('стадия наблюдения: два новых узла — разные субъекты обязанности и разные якоря, разные id', () => {
+  assert.notEqual(
+    OBSERVATION_INFORMATION_REQUEST_RESPONSE_APK.id,
+    OBSERVATION_INTRODUCTION_NOTIFICATION_APK.id,
+  );
+  assert.notEqual(
+    OBSERVATION_INFORMATION_REQUEST_RESPONSE_APK.norm_versions[0].norm.primary,
+    OBSERVATION_INTRODUCTION_NOTIFICATION_APK.norm_versions[0].norm.primary,
+  );
 });
