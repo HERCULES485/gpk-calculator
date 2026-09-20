@@ -27,6 +27,7 @@ import {
   computeCreditorsRegisterClosureApk,
   computeCitizenBankruptcyCreditorClaimsApk,
   computeBankruptcyCompletionReviewApk,
+  computeCitizenInformationDisclosureApk,
   computeSubsidiaryLiabilityInCaseApk,
   computeSubsidiaryLiabilityInCaseApkRestoration,
   computeSubsidiaryLiabilityPostConclusionApk,
@@ -58,12 +59,15 @@ import {
   computeEnterpriseSaleProcedureApprovalAppealApk,
   computePropertySaleProcedureApprovalAppealApk,
   computeBankruptcyCompletionRequestRulingAppealApk,
+  computeObservationInformationRequestResponseApk,
+  computeObservationIntroductionNotificationApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
   CREDITORS_REGISTER_CLOSURE_APK,
   CITIZEN_BANKRUPTCY_CREDITOR_CLAIMS_APK,
   BANKRUPTCY_COMPLETION_REVIEW_APK,
+  CITIZEN_INFORMATION_DISCLOSURE_APK,
   SUBSIDIARY_LIABILITY_IN_CASE_APK,
   SUBSIDIARY_LIABILITY_IN_CASE_APK_RESTORATION,
   SUBSIDIARY_LIABILITY_POST_CONCLUSION_APK,
@@ -95,6 +99,8 @@ import {
   ENTERPRISE_SALE_PROCEDURE_APPROVAL_APPEAL_APK,
   PROPERTY_SALE_PROCEDURE_APPROVAL_APPEAL_APK,
   BANKRUPTCY_COMPLETION_REQUEST_RULING_APPEAL_APK,
+  OBSERVATION_INFORMATION_REQUEST_RESPONSE_APK,
+  OBSERVATION_INTRODUCTION_NOTIFICATION_APK,
 } from './bankruptcy.js';
 
 import {
@@ -422,6 +428,15 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     deps: () => ['bankruptcy_completion_review_circumstances_discovered_date_apk'],
     compute: (i) => computeBankruptcyCompletionReviewApk(i),
   },
+  // Ещё один working_day-узел домена — тот же паттерн регистрации, что у
+  // appraiser_involvement_request_apk выше (kind: 'working_day', строит
+  // workingDayCard).
+  citizen_information_disclosure_apk: {
+    node: CITIZEN_INFORMATION_DISCLOSURE_APK,
+    kind: 'working_day',
+    deps: () => ['citizen_information_disclosure_request_received_date_apk'],
+    compute: (i) => computeCitizenInformationDisclosureApk(i),
+  },
   subsidiary_liability_in_case_apk: {
     node: SUBSIDIARY_LIABILITY_IN_CASE_APK,
     kind: 'capped_term',
@@ -621,6 +636,20 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     node: BANKRUPTCY_COMPLETION_REQUEST_RULING_APPEAL_APK,
     deps: () => ['bankruptcy_completion_request_ruling_date_apk'],
     compute: (i) => computeBankruptcyCompletionRequestRulingAppealApk(i),
+  },
+  // Стадия наблюдения (глава III) — два новых working_day-узла, тот же
+  // паттерн регистрации, что у остальных working_day duty-узлов домена.
+  observation_information_request_response_apk: {
+    node: OBSERVATION_INFORMATION_REQUEST_RESPONSE_APK,
+    kind: 'working_day',
+    deps: () => ['observation_information_request_received_date_apk'],
+    compute: (i) => computeObservationInformationRequestResponseApk(i),
+  },
+  observation_introduction_notification_apk: {
+    node: OBSERVATION_INTRODUCTION_NOTIFICATION_APK,
+    kind: 'working_day',
+    deps: () => ['observation_introduction_ruling_date_apk'],
+    compute: (i) => computeObservationIntroductionNotificationApk(i),
   },
 };
 

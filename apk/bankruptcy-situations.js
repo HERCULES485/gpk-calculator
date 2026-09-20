@@ -72,8 +72,13 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [
       'citizen_bankruptcy_petition_justified_notice_published_date_apk',
       'bankruptcy_completion_review_circumstances_discovered_date_apk',
+      'citizen_information_disclosure_request_received_date_apk',
     ],
-    nodes: ['citizen_bankruptcy_creditor_claims_apk', 'bankruptcy_completion_review_apk'],
+    nodes: [
+      'citizen_bankruptcy_creditor_claims_apk',
+      'bankruptcy_completion_review_apk',
+      'citizen_information_disclosure_apk',
+    ],
   },
   {
     id: 'subsidiary_in_case',
@@ -391,6 +396,30 @@ export const SITUATIONS_BANKRUPTCY = [
     primary_field: 'bankruptcy_completion_request_ruling_date_apk',
     fields: [],
     nodes: ['bankruptcy_completion_request_ruling_appeal_apk'],
+  },
+  {
+    id: 'observation_information_request_response',
+    label: 'Наблюдение: запросили сведения о должнике — срок на ответ временному управляющему',
+    // Единственное поле ветви — дата получения запроса лицом/органом, к
+    // которому он обращён (не дата направления запроса управляющим), тот же
+    // образец, что у остальных одноузловых ветвей. Субъект обязанности —
+    // третье лицо (физическое лицо, юридическое лицо, государственный орган,
+    // орган местного самоуправления), не сторона дела о банкротстве — см.
+    // комментарий к узлу в apk/bankruptcy.js.
+    primary_field: 'observation_information_request_received_date_apk',
+    fields: [],
+    nodes: ['observation_information_request_response_apk'],
+  },
+  {
+    id: 'observation_introduction_notification',
+    label: 'Наблюдение: уведомление работников, учредителей и собственника имущества о введении наблюдения',
+    // Отдельная от observation_information_request_response ветвь: другой
+    // субъект обязанности (руководитель должника, а не третье лицо) и другой
+    // якорь (дата вынесения определения о введении наблюдения, а не дата
+    // получения запроса) — см. комментарий к узлу в apk/bankruptcy.js.
+    primary_field: 'observation_introduction_ruling_date_apk',
+    fields: [],
+    nodes: ['observation_introduction_notification_apk'],
   },
 ];
 

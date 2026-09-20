@@ -91,8 +91,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 30,
-  'переключатель ситуаций отрисован не на тридцать ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 32,
+  'переключатель ситуаций отрисован не на тридцать две ветви',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -147,20 +147,26 @@ check(
   `срок предъявления требований посчитан неверно: ${await deadlineOf(claimsCard)}`,
 );
 
-// --- Ветвь 3: банкротство гражданина (два узла) --------------------------------
+// --- Ветвь 3: банкротство гражданина (три узла) --------------------------------
 
 await chooseSituation('citizen_bankruptcy');
 await page.fill('#in-citizen_bankruptcy_petition_justified_notice_published_date_apk', '11.03.2026');
 await page.fill('#in-bankruptcy_completion_review_circumstances_discovered_date_apk', '20.05.2026');
+await page.fill('#in-citizen_information_disclosure_request_received_date_apk', '11.03.2026');
 await settle();
 check(
-  (await page.locator('#results .card').count()) === 2,
-  'в ветви банкротства гражданина ожидались две карточки',
+  (await page.locator('#results .card').count()) === 3,
+  'в ветви банкротства гражданина ожидались три карточки',
 );
 const citizenCard = cardByTitle('банкротстве гражданина');
 check(
   (await deadlineOf(citizenCard)) === '12.05.2026',
   `срок требований кредиторов гражданина посчитан неверно: ${await deadlineOf(citizenCard)}`,
+);
+const disclosureCard = cardByTitle('сведений финансовому управляющему');
+check(
+  (await deadlineOf(disclosureCard)) === '01.04.2026',
+  `срок предоставления сведений финансовому управляющему посчитан неверно: ${await deadlineOf(disclosureCard)}`,
 );
 
 // --- Ветвь 4: субсидиарная ответственность в деле о банкротстве ----------------
@@ -1339,6 +1345,53 @@ check(
 check(
   (await completionRequestRulingCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
   'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке обжалования определения по заявлениям конкурсного управляющего',
+);
+
+// --- Ветвь: наблюдение — ответ на запрос временного управляющего (ст. 66 п. 2
+// абз. 2) ------------------------------------------------------------------------
+
+await chooseSituation('observation_information_request_response');
+check(
+  (await page.locator('#in-observation_information_request_received_date_apk').count()) === 1,
+  'ветвь "observation_information_request_response": основное поле не найдено в DOM',
+);
+await page.fill('#in-observation_information_request_received_date_apk', '11.03.2026');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви ответа на запрос временного управляющего ожидалась одна карточка',
+);
+const informationRequestCard = cardByTitle('Ответ на запрос временного управляющего');
+check(
+  (await informationRequestCard.count()) === 1,
+  'карточка ответа на запрос временного управляющего не появилась',
+);
+check(
+  (await deadlineOf(informationRequestCard)) === '20.03.2026',
+  `срок ответа на запрос временного управляющего посчитан неверно: ${await deadlineOf(informationRequestCard)}`,
+);
+
+// --- Ветвь: наблюдение — уведомление о введении наблюдения (ст. 68 п. 3) --------
+
+await chooseSituation('observation_introduction_notification');
+check(
+  (await page.locator('#in-observation_introduction_ruling_date_apk').count()) === 1,
+  'ветвь "observation_introduction_notification": основное поле не найдено в DOM',
+);
+await page.fill('#in-observation_introduction_ruling_date_apk', '11.03.2026');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви уведомления о введении наблюдения ожидалась одна карточка',
+);
+const introductionNotificationCard = cardByTitle('Уведомление работников');
+check(
+  (await introductionNotificationCard.count()) === 1,
+  'карточка уведомления о введении наблюдения не появилась',
+);
+check(
+  (await deadlineOf(introductionNotificationCard)) === '25.03.2026',
+  `срок уведомления о введении наблюдения посчитан неверно: ${await deadlineOf(introductionNotificationCard)}`,
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------
