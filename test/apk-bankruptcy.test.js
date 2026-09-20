@@ -87,6 +87,8 @@ import {
   ENTERPRISE_SALE_PROCEDURE_APPROVAL_APPEAL_APK,
   computePropertySaleProcedureApprovalAppealApk,
   PROPERTY_SALE_PROCEDURE_APPROVAL_APPEAL_APK,
+  computeBankruptcyCompletionRequestRulingAppealApk,
+  BANKRUPTCY_COMPLETION_REQUEST_RULING_APPEAL_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -2106,4 +2108,55 @@ test('два узла обжалования порядка продажи: ра
     assert.equal(node.norm_versions[0].norm.primary, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
     assert.equal(node.restoration_norm, undefined);
   }
+});
+
+// 3) П. 14-15 ст. 149 — обжалование определения по заявлениям конкурсного
+// управляющего о завершении конкурсного производства. Седьмой appeal-узел
+// домена, тот же образец.
+
+test('обжалование определения по заявлениям конкурсного управляющего о завершении: один месяц с даты изготовления определения, будний день без переноса', () => {
+  const term = computeBankruptcyCompletionRequestRulingAppealApk({
+    bankruptcy_completion_request_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
+});
+
+test('обжалование определения по заявлениям конкурсного управляющего о завершении: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeBankruptcyCompletionRequestRulingAppealApk({
+    bankruptcy_completion_request_ruling_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('обжалование определения по заявлениям конкурсного управляющего о завершении: без bankruptcy_completion_request_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeBankruptcyCompletionRequestRulingAppealApk({}),
+    /bankruptcy_completion_request_ruling_date_apk/,
+  );
+});
+
+test('обжалование определения по заявлениям конкурсного управляющего о завершении: primary — ч. 1 ст. 61, не ст. 149', () => {
+  assert.equal(
+    BANKRUPTCY_COMPLETION_REQUEST_RULING_APPEAL_APK.norm_versions[0].norm.primary,
+    'ч. 1 ст. 61 ФЗ № 127-ФЗ',
+  );
+  assert.doesNotMatch(
+    BANKRUPTCY_COMPLETION_REQUEST_RULING_APPEAL_APK.norm_versions[0].norm.primary,
+    /149/,
+  );
+});
+
+test('обжалование определения по заявлениям конкурсного управляющего о завершении: calculation буквально тот же набор, что у ст. 160, без restoration', () => {
+  assert.deepEqual(
+    BANKRUPTCY_COMPLETION_REQUEST_RULING_APPEAL_APK.norm_versions[0].norm.calculation,
+    SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(BANKRUPTCY_COMPLETION_REQUEST_RULING_APPEAL_APK.restoration_norm, undefined);
 });
