@@ -61,6 +61,11 @@ import {
   computeBankruptcyCompletionRequestRulingAppealApk,
   computeObservationInformationRequestResponseApk,
   computeObservationIntroductionNotificationApk,
+  computeBankruptcyManagerAppointmentAppealApk,
+  computeBankruptcyInformationPublicationApk,
+  computeBankruptcyPropertyInventoryApk,
+  computeBankruptcyEmployeeDismissalNoticeApk,
+  computeBankruptcyInventoryResultsRegistryApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -101,6 +106,11 @@ import {
   BANKRUPTCY_COMPLETION_REQUEST_RULING_APPEAL_APK,
   OBSERVATION_INFORMATION_REQUEST_RESPONSE_APK,
   OBSERVATION_INTRODUCTION_NOTIFICATION_APK,
+  BANKRUPTCY_MANAGER_APPOINTMENT_APPEAL_APK,
+  BANKRUPTCY_INFORMATION_PUBLICATION_APK,
+  BANKRUPTCY_PROPERTY_INVENTORY_APK,
+  BANKRUPTCY_EMPLOYEE_DISMISSAL_NOTICE_APK,
+  BANKRUPTCY_INVENTORY_RESULTS_REGISTRY_APK,
 } from './bankruptcy.js';
 
 import {
@@ -650,6 +660,36 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     kind: 'working_day',
     deps: () => ['observation_introduction_ruling_date_apk'],
     compute: (i) => computeObservationIntroductionNotificationApk(i),
+  },
+  // Пять узлов последствий открытия конкурсного производства (ст. 127-129) —
+  // тот же паттерн регистрации, что и у всех предыдущих узлов домена: обычный
+  // месячный узел без kind (monthTermCard) или working_day.
+  bankruptcy_manager_appointment_appeal_apk: {
+    node: BANKRUPTCY_MANAGER_APPOINTMENT_APPEAL_APK,
+    deps: () => ['bankruptcy_manager_appointment_ruling_date_apk'],
+    compute: (i) => computeBankruptcyManagerAppointmentAppealApk(i),
+  },
+  bankruptcy_information_publication_apk: {
+    node: BANKRUPTCY_INFORMATION_PUBLICATION_APK,
+    kind: 'working_day',
+    deps: () => ['bankruptcy_declaration_ruling_date_apk'],
+    compute: (i) => computeBankruptcyInformationPublicationApk(i),
+  },
+  bankruptcy_property_inventory_apk: {
+    node: BANKRUPTCY_PROPERTY_INVENTORY_APK,
+    deps: () => ['bankruptcy_declaration_ruling_date_apk'],
+    compute: (i) => computeBankruptcyPropertyInventoryApk(i),
+  },
+  bankruptcy_employee_dismissal_notice_apk: {
+    node: BANKRUPTCY_EMPLOYEE_DISMISSAL_NOTICE_APK,
+    deps: () => ['bankruptcy_declaration_ruling_date_apk'],
+    compute: (i) => computeBankruptcyEmployeeDismissalNoticeApk(i),
+  },
+  bankruptcy_inventory_results_registry_apk: {
+    node: BANKRUPTCY_INVENTORY_RESULTS_REGISTRY_APK,
+    kind: 'working_day',
+    deps: () => ['property_inventory_completion_date_apk'],
+    compute: (i) => computeBankruptcyInventoryResultsRegistryApk(i),
   },
 };
 
