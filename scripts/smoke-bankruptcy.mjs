@@ -147,20 +147,26 @@ check(
   `срок предъявления требований посчитан неверно: ${await deadlineOf(claimsCard)}`,
 );
 
-// --- Ветвь 3: банкротство гражданина (два узла) --------------------------------
+// --- Ветвь 3: банкротство гражданина (три узла) --------------------------------
 
 await chooseSituation('citizen_bankruptcy');
 await page.fill('#in-citizen_bankruptcy_petition_justified_notice_published_date_apk', '11.03.2026');
 await page.fill('#in-bankruptcy_completion_review_circumstances_discovered_date_apk', '20.05.2026');
+await page.fill('#in-citizen_information_disclosure_request_received_date_apk', '11.03.2026');
 await settle();
 check(
-  (await page.locator('#results .card').count()) === 2,
-  'в ветви банкротства гражданина ожидались две карточки',
+  (await page.locator('#results .card').count()) === 3,
+  'в ветви банкротства гражданина ожидались три карточки',
 );
 const citizenCard = cardByTitle('банкротстве гражданина');
 check(
   (await deadlineOf(citizenCard)) === '12.05.2026',
   `срок требований кредиторов гражданина посчитан неверно: ${await deadlineOf(citizenCard)}`,
+);
+const disclosureCard = cardByTitle('сведений финансовому управляющему');
+check(
+  (await deadlineOf(disclosureCard)) === '01.04.2026',
+  `срок предоставления сведений финансовому управляющему посчитан неверно: ${await deadlineOf(disclosureCard)}`,
 );
 
 // --- Ветвь 4: субсидиарная ответственность в деле о банкротстве ----------------

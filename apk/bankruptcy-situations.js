@@ -72,8 +72,13 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [
       'citizen_bankruptcy_petition_justified_notice_published_date_apk',
       'bankruptcy_completion_review_circumstances_discovered_date_apk',
+      'citizen_information_disclosure_request_received_date_apk',
     ],
-    nodes: ['citizen_bankruptcy_creditor_claims_apk', 'bankruptcy_completion_review_apk'],
+    nodes: [
+      'citizen_bankruptcy_creditor_claims_apk',
+      'bankruptcy_completion_review_apk',
+      'citizen_information_disclosure_apk',
+    ],
   },
   {
     id: 'subsidiary_in_case',

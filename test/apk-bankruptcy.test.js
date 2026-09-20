@@ -89,6 +89,8 @@ import {
   PROPERTY_SALE_PROCEDURE_APPROVAL_APPEAL_APK,
   computeBankruptcyCompletionRequestRulingAppealApk,
   BANKRUPTCY_COMPLETION_REQUEST_RULING_APPEAL_APK,
+  computeCitizenInformationDisclosureApk,
+  CITIZEN_INFORMATION_DISCLOSURE_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -2159,4 +2161,50 @@ test('обжалование определения по заявлениям к
     SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK.norm_versions[0].norm.calculation,
   );
   assert.equal(BANKRUPTCY_COMPLETION_REQUEST_RULING_APPEAL_APK.restoration_norm, undefined);
+});
+
+// Задача — обязанность гражданина предоставлять финансовому управляющему
+// сведения о составе имущества, обязательствах, кредиторах и иные сведения,
+// имеющие отношение к делу о банкротстве (ст. 213.8 п. 9 ФЗ № 127-ФЗ). Новый
+// узел ветви "Банкротство гражданина" (глава X), рядом с
+// citizen_bankruptcy_creditor_claims_apk и bankruptcy_completion_review_apk.
+
+test('предоставление сведений финансовому управляющему: пятнадцать рабочих дней от даты получения требования, без праздничных кластеров рядом', () => {
+  const term = computeCitizenInformationDisclosureApk({
+    citizen_information_disclosure_request_received_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-04-01');
+  assert.equal(term.deadline, '2025-04-01');
+  assert.equal(term.shifted, false); // weekend_shift к working_day не применяется
+  assert.deepEqual(term.duration, { value: 15, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ст. 213.8 п. 9 ФЗ № 127-ФЗ');
+});
+
+test('предоставление сведений финансовому управляющему: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeCitizenInformationDisclosureApk({
+    citizen_information_disclosure_request_received_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-28');
+});
+
+test('предоставление сведений финансовому управляющему: без citizen_information_disclosure_request_received_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeCitizenInformationDisclosureApk({}),
+    /citizen_information_disclosure_request_received_date_apk/,
+  );
+});
+
+test('предоставление сведений финансовому управляющему: calculation — тот же массив, что у остальных working_day duty-узлов домена, без restoration', () => {
+  assert.deepEqual(
+    CITIZEN_INFORMATION_DISCLOSURE_APK.norm_versions[0].norm.calculation,
+    DEBTOR_RESPONSE_BANKRUPTCY_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(CITIZEN_INFORMATION_DISCLOSURE_APK.restoration_norm, undefined);
+});
+
+test('предоставление сведений финансовому управляющему: норма не упоминает восстановление вообще — не только без потолка, но и без самого института', () => {
+  assert.doesNotMatch(CITIZEN_INFORMATION_DISCLOSURE_APK.logic, /восстанов/i);
 });

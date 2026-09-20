@@ -2984,3 +2984,69 @@ export function computeBankruptcyCompletionRequestRulingAppealApk(inputs) {
   }
   return computeSimpleTerm(BANKRUPTCY_COMPLETION_REQUEST_RULING_APPEAL_APK, anchor);
 }
+
+// --- Обязанность гражданина предоставлять сведения финансовому управляющему
+// (ст. 213.8 п. 9 ФЗ № 127-ФЗ) ---------------------------------------------
+//
+// Новая ветвь банкротства гражданина (глава X), рядом с citizen_bankruptcy /
+// citizen_bankruptcy_creditor_claims_apk. Восьмой working_day-узел домена —
+// тот же образец, что и остальные duty-узлы, исчисляемые рабочими днями
+// (ближайший — APPRAISAL_REPORT_REGISTRY_INCLUSION_APK, п. 5.1 ст. 110):
+// duration.unit: 'working_day', то же обоснование через ч. 3 ст. 113 АПК РФ
+// (нерабочие дни исключаются) и ст. 223 АПК РФ (применимость к делам о
+// банкротстве), тот же calculation-массив.
+//
+// БЕЗ restoration: норма не упоминает институт восстановления вообще — не
+// просто без числового потолка (как у части duty-узлов домена), а полное
+// отсутствие самого упоминания. Restoration-узел не создаётся.
+
+export const CITIZEN_INFORMATION_DISCLOSURE_APK = {
+  id: 'citizen_information_disclosure_apk',
+  title: 'Предоставление гражданином сведений финансовому управляющему',
+  duration: { value: 15, unit: 'working_day' },
+  anchor: { offset_start: 1 },
+  logic:
+    'Гражданин обязан предоставлять финансовому управляющему по его ' +
+    'требованию любые сведения о составе своего имущества, месте ' +
+    'нахождения этого имущества, составе своих обязательств, кредиторах и ' +
+    'иные имеющие отношение к делу о банкротстве гражданина сведения в ' +
+    'течение пятнадцати дней с даты получения требования об этом (ст. 213.8 ' +
+    'п. 9 ФЗ № 127-ФЗ). Срок исчисляется днями — нерабочие дни не ' +
+    'включаются (ч. 3 ст. 113 АПК РФ, применяется через ст. 223 АПК РФ); ' +
+    'течение начинается со дня, следующего за днём получения требования.',
+  midnight_rule:
+    'ч. 5, 6 ст. 114 АПК РФ — процессуальное действие может быть совершено до ' +
+    '24:00 последнего дня срока.',
+  norm_versions: [
+    {
+      id: 'current',
+      from: null,
+      to: null,
+      anchor: { offset_start: 1 },
+      norm: {
+        primary: 'ст. 213.8 п. 9 ФЗ № 127-ФЗ',
+        calculation: ['ч. 3 ст. 113 АПК РФ', 'ст. 223 АПК РФ'],
+      },
+    },
+  ],
+};
+
+/**
+ * Срок предоставления гражданином финансовому управляющему сведений о
+ * составе имущества, обязательствах, кредиторах и иных сведений, имеющих
+ * отношение к делу о банкротстве (ст. 213.8 п. 9 ФЗ № 127-ФЗ). Пятнадцать
+ * рабочих дней с даты получения гражданином требования финансового
+ * управляющего.
+ * @param {{ citizen_information_disclosure_request_received_date_apk: string }} inputs
+ */
+export function computeCitizenInformationDisclosureApk(inputs) {
+  const anchor = inputs?.citizen_information_disclosure_request_received_date_apk;
+  if (anchor == null) {
+    throw new Error(
+      'Обязательна дата получения гражданином требования финансового ' +
+        'управляющего о предоставлении сведений ' +
+        '(citizen_information_disclosure_request_received_date_apk)',
+    );
+  }
+  return computeSimpleTerm(CITIZEN_INFORMATION_DISCLOSURE_APK, anchor);
+}

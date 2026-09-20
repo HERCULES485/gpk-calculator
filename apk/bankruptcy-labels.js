@@ -40,6 +40,8 @@ export const INPUT_LABELS_BANKRUPTCY = {
     'Дата опубликования сведений о признании обоснованным заявления о признании гражданина банкротом',
   bankruptcy_completion_review_circumstances_discovered_date_apk:
     'Дата открытия обстоятельств, являющихся основанием для пересмотра определения о завершении процедуры',
+  citizen_information_disclosure_request_received_date_apk:
+    'Дата получения гражданином требования финансового управляющего о предоставлении сведений',
 
   // --- Субсидиарная ответственность: заявление в деле о банкротстве (п. 5 ст. 61.14) ---
   subsidiary_liability_grounds_known_date_apk:

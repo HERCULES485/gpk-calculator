@@ -27,6 +27,7 @@ import {
   computeCreditorsRegisterClosureApk,
   computeCitizenBankruptcyCreditorClaimsApk,
   computeBankruptcyCompletionReviewApk,
+  computeCitizenInformationDisclosureApk,
   computeSubsidiaryLiabilityInCaseApk,
   computeSubsidiaryLiabilityInCaseApkRestoration,
   computeSubsidiaryLiabilityPostConclusionApk,
@@ -64,6 +65,7 @@ import {
   CREDITORS_REGISTER_CLOSURE_APK,
   CITIZEN_BANKRUPTCY_CREDITOR_CLAIMS_APK,
   BANKRUPTCY_COMPLETION_REVIEW_APK,
+  CITIZEN_INFORMATION_DISCLOSURE_APK,
   SUBSIDIARY_LIABILITY_IN_CASE_APK,
   SUBSIDIARY_LIABILITY_IN_CASE_APK_RESTORATION,
   SUBSIDIARY_LIABILITY_POST_CONCLUSION_APK,
@@ -421,6 +423,15 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     node: BANKRUPTCY_COMPLETION_REVIEW_APK,
     deps: () => ['bankruptcy_completion_review_circumstances_discovered_date_apk'],
     compute: (i) => computeBankruptcyCompletionReviewApk(i),
+  },
+  // Ещё один working_day-узел домена — тот же паттерн регистрации, что у
+  // appraiser_involvement_request_apk выше (kind: 'working_day', строит
+  // workingDayCard).
+  citizen_information_disclosure_apk: {
+    node: CITIZEN_INFORMATION_DISCLOSURE_APK,
+    kind: 'working_day',
+    deps: () => ['citizen_information_disclosure_request_received_date_apk'],
+    compute: (i) => computeCitizenInformationDisclosureApk(i),
   },
   subsidiary_liability_in_case_apk: {
     node: SUBSIDIARY_LIABILITY_IN_CASE_APK,
