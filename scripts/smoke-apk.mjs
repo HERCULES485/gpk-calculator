@@ -69,7 +69,14 @@ const check = (ok, message) => {
 };
 
 async function chooseSituation(id) {
-  await page.check(`#situation input[value="${id}"]`);
+  // Категория «обжалование отдельных процессуальных определений» свёрнута по
+  // умолчанию (<details> без open) — радиокнопки внутри невидимы для
+  // Playwright, пока секцию не раскрыть (тот же фикс, что у
+  // scripts/smoke-bankruptcy.mjs, PR #65).
+  const input = page.locator(`#situation input[value="${id}"]`);
+  const details = input.locator('xpath=ancestor::details[1]');
+  if (await details.count()) await details.evaluate((node) => { node.open = true; });
+  await input.check();
   await settle();
 }
 

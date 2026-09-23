@@ -119,11 +119,25 @@
       }
 
       .situation-switch { margin-bottom: 16px; }
+      /* Несколько <fieldset> подряд — одна категория на каждый, плюс одна
+         свёрнутая внутри <details> (та же механика, что у bankruptcy.html,
+         PR #65). */
+      .situation-switch > fieldset.situations,
+      .situation-switch > details.situations-group { margin-top: 16px; }
+      .situation-switch > fieldset.situations:first-child,
+      .situation-switch > details.situations-group:first-child { margin-top: 0; }
       .situations { border: none; margin: 0; padding: 0; }
       .situations legend {
         padding: 0; margin-bottom: 8px;
         font-size: 12px; letter-spacing: .02em; text-transform: uppercase; color: var(--muted);
       }
+      /* Свёрнутая категория: <summary> занимает место <legend>, тот же вид. */
+      .situations-group > summary {
+        cursor: pointer; padding: 0; margin-bottom: 8px;
+        font-size: 12px; letter-spacing: .02em; text-transform: uppercase; color: var(--muted);
+        list-style-position: outside;
+      }
+      .situations-group > summary::marker { color: var(--muted); }
       .situation-row { display: flex; flex-wrap: wrap; gap: 8px; }
       label.situation {
         display: inline-flex; align-items: center; gap: 8px;

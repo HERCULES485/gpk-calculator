@@ -19,6 +19,7 @@
 
 import { buildView, RESTORATION_SUBJECT_CATEGORIES_APK } from './views.js';
 import { SITUATIONS_APK, DEFAULT_SITUATION_APK } from './situations.js';
+import { SITUATION_CATEGORIES_APK } from './categories.js';
 import { INPUT_LABELS_APK } from './labels.js';
 import { ENFORCEMENT_INTERRUPTION_TYPES_APK, ENFORCEMENT_EXCLUSION_TYPES_APK } from './chain.js';
 import { reminderOffsets } from './term-registry.js';
@@ -1074,29 +1075,45 @@ function renderSituationSwitch(current) {
     return;
   }
   root.textContent = '';
-  const fs = el('fieldset', 'situations');
-  fs.appendChild(el('legend', null, 'Какая у вас ситуация'));
-  const row = el('div', 'situation-row');
-  for (const s of SITUATIONS_APK) {
-    const label = el('label', s.id === current.id ? 'situation active' : 'situation');
-    const input = el('input');
-    input.type = 'radio';
-    input.name = 'situation';
-    input.value = s.id;
-    input.checked = s.id === current.id;
-    input.addEventListener('change', () => {
-      if (!input.checked) return;
-      // Введённые данные живут в state.inputs и rawDates — переключение их не
-      // трогает: скрытая ветвь при возврате показывает те же значения.
-      state.situation = input.value;
-      render();
-    });
-    label.appendChild(input);
-    label.appendChild(el('span', null, s.label));
-    row.appendChild(label);
+  const byId = new Map(SITUATIONS_APK.map((s) => [s.id, s]));
+  for (const category of SITUATION_CATEGORIES_APK) {
+    const row = el('div', 'situation-row');
+    for (const id of category.ids) {
+      const s = byId.get(id);
+      const label = el('label', s.id === current.id ? 'situation active' : 'situation');
+      const input = el('input');
+      input.type = 'radio';
+      input.name = 'situation';
+      input.value = s.id;
+      input.checked = s.id === current.id;
+      input.addEventListener('change', () => {
+        if (!input.checked) return;
+        // Введённые данные живут в state.inputs и rawDates — переключение их не
+        // трогает: скрытая ветвь при возврате показывает те же значения.
+        state.situation = input.value;
+        render();
+      });
+      label.appendChild(input);
+      label.appendChild(el('span', null, s.label));
+      row.appendChild(label);
+    }
+    const fs = el('fieldset', 'situations');
+    fs.appendChild(el('legend', null, category.title));
+    fs.appendChild(row);
+    // Свёрнутая по умолчанию категория: <summary> заменяет текст <legend>
+    // (дублировать название в обоих было бы шумом), сам fieldset со своим
+    // row переходит внутрь <details> целиком — тот же приём, что и в
+    // apk/bankruptcy-app.js (PR #65).
+    if (category.collapsed) {
+      fs.firstChild.remove();
+      const details = el('details', 'situations-group');
+      details.appendChild(el('summary', null, category.title));
+      details.appendChild(fs);
+      root.appendChild(details);
+    } else {
+      root.appendChild(fs);
+    }
   }
-  fs.appendChild(row);
-  root.appendChild(fs);
   root.dataset.rendered = 'yes';
 }
 
