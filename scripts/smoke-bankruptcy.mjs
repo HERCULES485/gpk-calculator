@@ -96,8 +96,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 37,
-  'переключатель ситуаций отрисован не на тридцать семь ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 38,
+  'переключатель ситуаций отрисован не на тридцать восемь ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -1536,6 +1536,36 @@ check(
 check(
   (await terminationAppealCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
   'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке обжалования расторжения мирового соглашения',
+);
+
+// --- Ветвь: обязанность гражданина обратиться с заявлением о своём
+// банкротстве (working_day-узел, п. 1 ст. 213.4) -------------------------------
+
+await chooseSituation('citizen_bankruptcy_filing_duty');
+check(
+  (await page.locator('#in-citizen_bankruptcy_filing_duty_known_date_apk').count()) === 1,
+  'ветвь "citizen_bankruptcy_filing_duty": основное поле не найдено в DOM',
+);
+await page.fill('#in-citizen_bankruptcy_filing_duty_known_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви обязанности гражданина подать заявление о своём банкротстве ожидалась одна карточка',
+);
+const filingDutyCard = cardByTitle('Обязанность гражданина обратиться с заявлением о признании его банкротом');
+check((await filingDutyCard.count()) === 1, 'карточка обязанности гражданина подать заявление не появилась');
+check(
+  (await deadlineOf(filingDutyCard)) === '22.04.2025',
+  `срок обязанности гражданина подать заявление посчитан неверно: ${await deadlineOf(filingDutyCard)}`,
+);
+const filingDutyText = await filingDutyCard.innerText();
+check(
+  filingDutyText.includes('Отсчёт рабочих дней с 12.03.2025'),
+  `первый рабочий день не показан на карточке обязанности гражданина: «${filingDutyText}»`,
+);
+check(
+  filingDutyText.includes('п. 1 ст. 213.4 ФЗ № 127-ФЗ'),
+  'норма п. 1 ст. 213.4 ФЗ № 127-ФЗ не показана на карточке обязанности гражданина',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------

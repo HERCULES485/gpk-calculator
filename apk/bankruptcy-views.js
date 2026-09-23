@@ -68,6 +68,7 @@ import {
   computeBankruptcyInventoryResultsRegistryApk,
   computeSettlementCancellationResumptionAppealApk,
   computeSettlementTerminationRulingAppealApk,
+  computeCitizenBankruptcyFilingDutyApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -115,6 +116,7 @@ import {
   BANKRUPTCY_INVENTORY_RESULTS_REGISTRY_APK,
   SETTLEMENT_CANCELLATION_RESUMPTION_APPEAL_APK,
   SETTLEMENT_TERMINATION_RULING_APPEAL_APK,
+  CITIZEN_BANKRUPTCY_FILING_DUTY_APK,
 } from './bankruptcy.js';
 
 import {
@@ -708,6 +710,15 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     node: SETTLEMENT_TERMINATION_RULING_APPEAL_APK,
     deps: () => ['settlement_termination_ruling_date_apk'],
     compute: (i) => computeSettlementTerminationRulingAppealApk(i),
+  },
+  // Собственная обязанность гражданина подать заявление о своём банкротстве
+  // (п. 1 ст. 213.4) — тот же паттерн регистрации, что и у остальных
+  // working_day-узлов домена.
+  citizen_bankruptcy_filing_duty_apk: {
+    node: CITIZEN_BANKRUPTCY_FILING_DUTY_APK,
+    kind: 'working_day',
+    deps: () => ['citizen_bankruptcy_filing_duty_known_date_apk'],
+    compute: (i) => computeCitizenBankruptcyFilingDutyApk(i),
   },
 };
 
