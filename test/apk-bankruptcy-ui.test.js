@@ -44,7 +44,7 @@ const BANKRUPTCY_NODE_IDS = Object.values(bankruptcyModule)
   )
   .map((v) => v.id);
 
-// Полный набор входных данных на все пятьдесят два узла сразу. Даты — из
+// Полный набор входных данных на все пятьдесят три узла сразу. Даты — из
 // тестов расчёта (test/apk-bankruptcy.test.js), кроме тех, что там задавались
 // в отдельных сценариях: здесь важно, что расчёт проходит, а не какие именно
 // получаются числа (их проверяют тесты расчёта).
@@ -97,6 +97,7 @@ const FULL_INPUTS = {
   citizen_property_inventory_valuation_completion_date_apk: '2025-03-11',
   bank_citizen_bankruptcy_known_date_apk: '2025-03-11',
   property_exclusion_ruling_date_apk: '2025-03-11',
+  property_exclusion_amount_notice_published_date_apk: '2025-03-11',
 };
 
 const cardById = (view, id) => view.cards.find((c) => c.id === id);
@@ -105,7 +106,7 @@ const incompleteById = (view, id) => view.incomplete.find((n) => n.id === id);
 // --- 1. Покрытие ситуаций ------------------------------------------------------
 
 test('банкротство UI: каждый из пятидесяти двух узлов закреплён ровно за одной ситуацией', () => {
-  assert.equal(BANKRUPTCY_NODE_IDS.length, 52);
+  assert.equal(BANKRUPTCY_NODE_IDS.length, 53);
   assert.doesNotThrow(() => checkSituationCoverage(BANKRUPTCY_NODE_IDS, SITUATIONS_BANKRUPTCY));
   // Обратная сторона того же инварианта: в ситуациях нет узлов-призраков,
   // которых в apk/bankruptcy.js уже (или ещё) нет.
@@ -115,7 +116,7 @@ test('банкротство UI: каждый из пятидесяти двух
   );
 });
 
-test('банкротство UI: сорок одна ветвь ожидаемого состава, ситуация по умолчанию существует', () => {
+test('банкротство UI: сорок две ветви ожидаемого состава, ситуация по умолчанию существует', () => {
   assert.deepEqual(
     SITUATIONS_BANKRUPTCY.map((s) => s.id),
     [
@@ -160,6 +161,7 @@ test('банкротство UI: сорок одна ветвь ожидаемо
       'citizen_property_sale',
       'bank_notification_duty',
       'property_exclusion_ruling_appeal',
+      'property_exclusion_amount_dispute',
     ],
   );
   assert.ok(SITUATIONS_BANKRUPTCY.some((s) => s.id === DEFAULT_SITUATION_BANKRUPTCY));
@@ -180,9 +182,9 @@ test('банкротство UI: у каждого поля всех ветве�
 
 // --- 2. Полный набор данных ----------------------------------------------------
 
-test('банкротство UI: полный набор данных — пятьдесят две карточки, incomplete пуст', () => {
+test('банкротство UI: полный набор данных — пятьдесят три карточки, incomplete пуст', () => {
   const view = buildViewBankruptcy(FULL_INPUTS);
-  assert.equal(view.cards.length, 52);
+  assert.equal(view.cards.length, 53);
   assert.deepEqual(view.incomplete, []);
   assert.deepEqual(view.stubs, []);
   assert.deepEqual([...view.cards.map((c) => c.id)].sort(), [...BANKRUPTCY_NODE_IDS].sort());
@@ -193,10 +195,10 @@ test('банкротство UI: полный набор данных — пят
   );
 });
 
-test('банкротство UI: пустой ввод — ни одной карточки, все пятьдесят два узла в incomplete', () => {
+test('банкротство UI: пустой ввод — ни одной карточки, все пятьдесят три узла в incomplete', () => {
   const view = buildViewBankruptcy({});
   assert.deepEqual(view.cards, []);
-  assert.equal(view.incomplete.length, 52);
+  assert.equal(view.incomplete.length, 53);
   for (const node of view.incomplete) {
     assert.equal(node.status, 'not_computed');
     assert.ok(node.missing_inputs.length > 0);
@@ -982,7 +984,7 @@ test('банкротство UI: ни одна карточка не несёт 
   // Негативный тест: признак экспортируемости не должен появиться на карточке
   // по недосмотру — ни как поле ics, ни как метаданные реестра сроков.
   const view = buildViewBankruptcy(FULL_INPUTS);
-  assert.equal(view.cards.length, 52);
+  assert.equal(view.cards.length, 53);
   for (const card of view.cards) {
     assert.equal(card.ics, undefined, `у карточки "${card.id}" появилось поле ics`);
     assert.equal(card.ics_meta, undefined);
@@ -1412,4 +1414,43 @@ test('банкротство UI: все три новых узла реализ�
   for (const id of ['citizen_property_sale', 'bank_notification_duty', 'property_exclusion_ruling_appeal']) {
     assert.ok(category.ids.includes(id), `категория «Банкротство гражданина» не содержит ветвь "${id}"`);
   }
+});
+
+// --- 15. Ходатайство об уменьшении размера денежных средств, исключаемых из
+// конкурсной массы (п. 2 ст. 213.27) — отдельная одноузловая ветвь.
+
+test('банкротство UI: ходатайство об уменьшении размера денежных средств — закреплено за собственной одноузловой ветвью, отдельной от обжалования перечня имущества', () => {
+  const situation = SITUATIONS_BANKRUPTCY.find((s) => s.id === 'property_exclusion_amount_dispute');
+  assert.ok(situation);
+  assert.deepEqual(situation.nodes, ['property_exclusion_amount_dispute_apk']);
+  assert.equal(situation.primary_field, 'property_exclusion_amount_notice_published_date_apk');
+  assert.notEqual(situation.id, 'property_exclusion_ruling_appeal');
+});
+
+test('банкротство UI: ходатайство об уменьшении размера денежных средств — working_day-карточка с первым рабочим днём', () => {
+  const view = buildViewBankruptcy({
+    property_exclusion_amount_notice_published_date_apk: '2025-12-26',
+  });
+  const card = cardById(view, 'property_exclusion_amount_dispute_apk');
+  assert.equal(card.kind, 'term');
+  assert.equal(card.unit, 'working_day');
+  assert.ok(card.first_working_day, 'first_working_day должен быть на карточке');
+  assert.equal(card.norm, 'п. 2 ст. 213.27 ФЗ № 127-ФЗ');
+});
+
+test('банкротство UI: ходатайство об уменьшении размера денежных средств — без данных узел в incomplete с подписью поля', () => {
+  const view = buildViewBankruptcy({});
+  const node = incompleteById(view, 'property_exclusion_amount_dispute_apk');
+  assert.ok(node);
+  assert.deepEqual(
+    node.missing_inputs.map((f) => f.id),
+    ['property_exclusion_amount_notice_published_date_apk'],
+  );
+  assert.ok(node.missing_inputs[0].label);
+});
+
+test('банкротство UI: новый узел ходатайства об уменьшении размера денежных средств отнесён к категории «Банкротство гражданина»', () => {
+  const category = BANKRUPTCY_SITUATION_CATEGORIES.find((c) => c.title === 'Банкротство гражданина');
+  assert.ok(category);
+  assert.ok(category.ids.includes('property_exclusion_amount_dispute'));
 });

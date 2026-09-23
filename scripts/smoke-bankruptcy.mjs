@@ -96,8 +96,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 41,
-  'переключатель ситуаций отрисован не на сорок одну ветвь',
+  (await page.locator('#situation input[type=radio]').count()) === 42,
+  'переключатель ситуаций отрисован не на сорок две ветви',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -1658,6 +1658,36 @@ check(
 check(
   (await propertyExclusionCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
   'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке обжалования определения об исключении имущества',
+);
+
+// --- Ветвь: ходатайство об уменьшении размера денежных средств, исключаемых
+// из конкурсной массы (working_day-узел, п. 2 ст. 213.27) ---------------------
+
+await chooseSituation('property_exclusion_amount_dispute');
+check(
+  (await page.locator('#in-property_exclusion_amount_notice_published_date_apk').count()) === 1,
+  'ветвь "property_exclusion_amount_dispute": основное поле не найдено в DOM',
+);
+await page.fill('#in-property_exclusion_amount_notice_published_date_apk', '26.12.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви ходатайства об уменьшении размера денежных средств ожидалась одна карточка',
+);
+const amountDisputeCard = cardByTitle('Ходатайство об уменьшении размера денежных средств, исключаемых из конкурсной массы');
+check((await amountDisputeCard.count()) === 1, 'карточка ходатайства об уменьшении размера денежных средств не появилась');
+check(
+  (await deadlineOf(amountDisputeCard)) === '21.01.2026',
+  `срок ходатайства об уменьшении размера денежных средств посчитан неверно: ${await deadlineOf(amountDisputeCard)}`,
+);
+const amountDisputeText = await amountDisputeCard.innerText();
+check(
+  amountDisputeText.includes('Отсчёт рабочих дней с 29.12.2025'),
+  `первый рабочий день не показан на карточке ходатайства об уменьшении размера денежных средств: «${amountDisputeText}»`,
+);
+check(
+  amountDisputeText.includes('п. 2 ст. 213.27 ФЗ № 127-ФЗ'),
+  'норма п. 2 ст. 213.27 ФЗ № 127-ФЗ не показана на карточке ходатайства об уменьшении размера денежных средств',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------
