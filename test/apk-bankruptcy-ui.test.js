@@ -21,6 +21,7 @@ import {
   SITUATIONS_BANKRUPTCY,
   DEFAULT_SITUATION_BANKRUPTCY,
 } from '../apk/bankruptcy-situations.js';
+import { BANKRUPTCY_SITUATION_CATEGORIES } from '../apk/bankruptcy-categories.js';
 import { INPUT_LABELS_BANKRUPTCY } from '../apk/bankruptcy-labels.js';
 import { buildViewBankruptcy } from '../apk/bankruptcy-views.js';
 import * as bankruptcyModule from '../apk/bankruptcy.js';
@@ -43,7 +44,7 @@ const BANKRUPTCY_NODE_IDS = Object.values(bankruptcyModule)
   )
   .map((v) => v.id);
 
-// Полный набор входных данных на все сорок пять узлов сразу. Даты — из
+// Полный набор входных данных на все сорок семь узлов сразу. Даты — из
 // тестов расчёта (test/apk-bankruptcy.test.js), кроме тех, что там задавались
 // в отдельных сценариях: здесь важно, что расчёт проходит, а не какие именно
 // получаются числа (их проверяют тесты расчёта).
@@ -90,6 +91,8 @@ const FULL_INPUTS = {
   bankruptcy_manager_appointment_ruling_date_apk: '2025-03-11',
   bankruptcy_declaration_ruling_date_apk: '2025-03-11',
   property_inventory_completion_date_apk: '2025-03-11',
+  settlement_cancellation_resumption_ruling_date_apk: '2025-03-11',
+  settlement_termination_ruling_date_apk: '2025-03-11',
 };
 
 const cardById = (view, id) => view.cards.find((c) => c.id === id);
@@ -97,8 +100,8 @@ const incompleteById = (view, id) => view.incomplete.find((n) => n.id === id);
 
 // --- 1. Покрытие ситуаций ------------------------------------------------------
 
-test('банкротство UI: каждый из сорока пяти узлов закреплён ровно за одной ситуацией', () => {
-  assert.equal(BANKRUPTCY_NODE_IDS.length, 45);
+test('банкротство UI: каждый из сорока семи узлов закреплён ровно за одной ситуацией', () => {
+  assert.equal(BANKRUPTCY_NODE_IDS.length, 47);
   assert.doesNotThrow(() => checkSituationCoverage(BANKRUPTCY_NODE_IDS, SITUATIONS_BANKRUPTCY));
   // Обратная сторона того же инварианта: в ситуациях нет узлов-призраков,
   // которых в apk/bankruptcy.js уже (или ещё) нет.
@@ -108,7 +111,7 @@ test('банкротство UI: каждый из сорока пяти узл�
   );
 });
 
-test('банкротство UI: тридцать пять ветвей ожидаемого состава, ситуация по умолчанию существует', () => {
+test('банкротство UI: тридцать семь ветвей ожидаемого состава, ситуация по умолчанию существует', () => {
   assert.deepEqual(
     SITUATIONS_BANKRUPTCY.map((s) => s.id),
     [
@@ -147,6 +150,8 @@ test('банкротство UI: тридцать пять ветвей ожид
       'bankruptcy_manager_appointment_appeal',
       'bankruptcy_declaration',
       'bankruptcy_inventory_results_registry',
+      'settlement_cancellation_resumption_appeal',
+      'settlement_termination_ruling_appeal',
     ],
   );
   assert.ok(SITUATIONS_BANKRUPTCY.some((s) => s.id === DEFAULT_SITUATION_BANKRUPTCY));
@@ -167,9 +172,9 @@ test('банкротство UI: у каждого поля всех ветве�
 
 // --- 2. Полный набор данных ----------------------------------------------------
 
-test('банкротство UI: полный набор данных — сорок пять карточек, incomplete пуст', () => {
+test('банкротство UI: полный набор данных — сорок семь карточек, incomplete пуст', () => {
   const view = buildViewBankruptcy(FULL_INPUTS);
-  assert.equal(view.cards.length, 45);
+  assert.equal(view.cards.length, 47);
   assert.deepEqual(view.incomplete, []);
   assert.deepEqual(view.stubs, []);
   assert.deepEqual([...view.cards.map((c) => c.id)].sort(), [...BANKRUPTCY_NODE_IDS].sort());
@@ -180,10 +185,10 @@ test('банкротство UI: полный набор данных — сор
   );
 });
 
-test('банкротство UI: пустой ввод — ни одной карточки, все сорок пять узлов в incomplete', () => {
+test('банкротство UI: пустой ввод — ни одной карточки, все сорок семь узлов в incomplete', () => {
   const view = buildViewBankruptcy({});
   assert.deepEqual(view.cards, []);
-  assert.equal(view.incomplete.length, 45);
+  assert.equal(view.incomplete.length, 47);
   for (const node of view.incomplete) {
     assert.equal(node.status, 'not_computed');
     assert.ok(node.missing_inputs.length > 0);
@@ -969,7 +974,7 @@ test('банкротство UI: ни одна карточка не несёт 
   // Негативный тест: признак экспортируемости не должен появиться на карточке
   // по недосмотру — ни как поле ics, ни как метаданные реестра сроков.
   const view = buildViewBankruptcy(FULL_INPUTS);
-  assert.equal(view.cards.length, 45);
+  assert.equal(view.cards.length, 47);
   for (const card of view.cards) {
     assert.equal(card.ics, undefined, `у карточки "${card.id}" появилось поле ics`);
     assert.equal(card.ics_meta, undefined);
@@ -1180,4 +1185,72 @@ test('банкротство UI: включение результатов ин�
   assert.equal(card.unit, 'working_day');
   assert.ok(card.first_working_day, 'first_working_day должен быть на карточке');
   assert.equal(card.norm, 'п. 2 ст. 129 ФЗ № 127-ФЗ');
+});
+
+// --- 10. Обжалование по институту мирового соглашения (ст. 163 п. 1; ст. 165
+// п. 4) — девятая и десятая appeal-ветви домена по ч. 1 ст. 61, отнесены к
+// категории «Мировое соглашение».
+
+test('банкротство UI: обжалование определения о возобновлении производства по делу — закреплено за собственной одноузловой ветвью', () => {
+  const situation = SITUATIONS_BANKRUPTCY.find(
+    (s) => s.id === 'settlement_cancellation_resumption_appeal',
+  );
+  assert.ok(situation);
+  assert.deepEqual(situation.nodes, ['settlement_cancellation_resumption_appeal_apk']);
+  assert.equal(situation.primary_field, 'settlement_cancellation_resumption_ruling_date_apk');
+});
+
+test('банкротство UI: обжалование определения о возобновлении производства по делу — обычная term-карточка, norm.primary на ч. 1 ст. 61', () => {
+  const view = buildViewBankruptcy({
+    settlement_cancellation_resumption_ruling_date_apk: '2025-03-11',
+  });
+  const card = cardById(view, 'settlement_cancellation_resumption_appeal_apk');
+  assert.equal(card.kind, 'term');
+  assert.equal(card.norm, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
+});
+
+test('банкротство UI: обжалование определения о возобновлении производства по делу — без данных узел в incomplete с подписью поля', () => {
+  const view = buildViewBankruptcy({});
+  const node = incompleteById(view, 'settlement_cancellation_resumption_appeal_apk');
+  assert.ok(node);
+  assert.deepEqual(
+    node.missing_inputs.map((f) => f.id),
+    ['settlement_cancellation_resumption_ruling_date_apk'],
+  );
+  assert.ok(node.missing_inputs[0].label);
+});
+
+test('банкротство UI: обжалование определения о расторжении мирового соглашения — закреплено за собственной одноузловой ветвью, отдельной от возобновления', () => {
+  const situation = SITUATIONS_BANKRUPTCY.find((s) => s.id === 'settlement_termination_ruling_appeal');
+  assert.ok(situation);
+  assert.deepEqual(situation.nodes, ['settlement_termination_ruling_appeal_apk']);
+  assert.equal(situation.primary_field, 'settlement_termination_ruling_date_apk');
+  assert.notEqual(situation.id, 'settlement_cancellation_resumption_appeal');
+});
+
+test('банкротство UI: обжалование определения о расторжении мирового соглашения — обычная term-карточка, norm.primary на ч. 1 ст. 61', () => {
+  const view = buildViewBankruptcy({
+    settlement_termination_ruling_date_apk: '2025-03-11',
+  });
+  const card = cardById(view, 'settlement_termination_ruling_appeal_apk');
+  assert.equal(card.kind, 'term');
+  assert.equal(card.norm, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
+});
+
+test('банкротство UI: обжалование определения о расторжении мирового соглашения — без данных узел в incomplete с подписью поля', () => {
+  const view = buildViewBankruptcy({});
+  const node = incompleteById(view, 'settlement_termination_ruling_appeal_apk');
+  assert.ok(node);
+  assert.deepEqual(
+    node.missing_inputs.map((f) => f.id),
+    ['settlement_termination_ruling_date_apk'],
+  );
+  assert.ok(node.missing_inputs[0].label);
+});
+
+test('банкротство UI: оба новых узла мирового соглашения отнесены к категории «Мировое соглашение»', () => {
+  const category = BANKRUPTCY_SITUATION_CATEGORIES.find((c) => c.title === 'Мировое соглашение');
+  assert.ok(category);
+  assert.ok(category.ids.includes('settlement_cancellation_resumption_appeal'));
+  assert.ok(category.ids.includes('settlement_termination_ruling_appeal'));
 });

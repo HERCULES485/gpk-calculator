@@ -105,6 +105,10 @@ import {
   BANKRUPTCY_EMPLOYEE_DISMISSAL_NOTICE_APK,
   computeBankruptcyInventoryResultsRegistryApk,
   BANKRUPTCY_INVENTORY_RESULTS_REGISTRY_APK,
+  computeSettlementCancellationResumptionAppealApk,
+  SETTLEMENT_CANCELLATION_RESUMPTION_APPEAL_APK,
+  computeSettlementTerminationRulingAppealApk,
+  SETTLEMENT_TERMINATION_RULING_APPEAL_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -2521,4 +2525,116 @@ test('включение результатов инвентаризации в 
     DEBTOR_RESPONSE_BANKRUPTCY_APK.norm_versions[0].norm.calculation,
   );
   assert.equal(BANKRUPTCY_INVENTORY_RESULTS_REGISTRY_APK.restoration_norm, undefined);
+});
+
+// --- Два узла обжалования по институту мирового соглашения (ст. 163 п. 1;
+// ст. 165 п. 4) — девятый и десятый appeal-узлы домена по ч. 1 ст. 61,
+// последние из главы VIII. Не пересекаются с SETTLEMENT_AGREEMENT_REJECTION_
+// APPEAL_APK (отказ в утверждении, ст. 160 ч. 3) и SETTLEMENT_AGREEMENT_
+// REVIEW_APK (пересмотр по новым обстоятельствам, ст. 162 п. 2) — три разных
+// института.
+
+// 1) Ст. 163 п. 1 — возобновление производства по делу о банкротстве при
+// отмене утверждения мирового соглашения.
+
+test('обжалование определения о возобновлении производства по делу: один месяц с даты изготовления определения, будний день без переноса', () => {
+  const term = computeSettlementCancellationResumptionAppealApk({
+    settlement_cancellation_resumption_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11'); // пятница, рабочий день
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
+});
+
+test('обжалование определения о возобновлении производства по делу: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeSettlementCancellationResumptionAppealApk({
+    settlement_cancellation_resumption_ruling_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('обжалование определения о возобновлении производства по делу: без settlement_cancellation_resumption_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeSettlementCancellationResumptionAppealApk({}),
+    /settlement_cancellation_resumption_ruling_date_apk/,
+  );
+});
+
+test('обжалование определения о возобновлении производства по делу: primary — ч. 1 ст. 61 (источник числа), а не ст. 163; calculation тот же набор, что у остальных appeal-узлов, без restoration', () => {
+  assert.equal(
+    SETTLEMENT_CANCELLATION_RESUMPTION_APPEAL_APK.norm_versions[0].norm.primary,
+    'ч. 1 ст. 61 ФЗ № 127-ФЗ',
+  );
+  assert.doesNotMatch(
+    SETTLEMENT_CANCELLATION_RESUMPTION_APPEAL_APK.norm_versions[0].norm.primary,
+    /163/,
+  );
+  assert.deepEqual(
+    SETTLEMENT_CANCELLATION_RESUMPTION_APPEAL_APK.norm_versions[0].norm.calculation,
+    SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(SETTLEMENT_CANCELLATION_RESUMPTION_APPEAL_APK.restoration_norm, undefined);
+});
+
+// 2) Ст. 165 п. 4 — расторжение мирового соглашения, утверждённого судом, по
+// заявлению кредиторов. Отдельный институт от узла 1 выше.
+
+test('обжалование определения о расторжении мирового соглашения: один месяц с даты изготовления определения, будний день без переноса', () => {
+  const term = computeSettlementTerminationRulingAppealApk({
+    settlement_termination_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11'); // пятница, рабочий день
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
+});
+
+test('обжалование определения о расторжении мирового соглашения: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeSettlementTerminationRulingAppealApk({
+    settlement_termination_ruling_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('обжалование определения о расторжении мирового соглашения: без settlement_termination_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeSettlementTerminationRulingAppealApk({}),
+    /settlement_termination_ruling_date_apk/,
+  );
+});
+
+test('обжалование определения о расторжении мирового соглашения: primary — ч. 1 ст. 61 (источник числа), а не ст. 165; calculation тот же набор, что у остальных appeal-узлов, без restoration', () => {
+  assert.equal(
+    SETTLEMENT_TERMINATION_RULING_APPEAL_APK.norm_versions[0].norm.primary,
+    'ч. 1 ст. 61 ФЗ № 127-ФЗ',
+  );
+  assert.doesNotMatch(SETTLEMENT_TERMINATION_RULING_APPEAL_APK.norm_versions[0].norm.primary, /165/);
+  assert.deepEqual(
+    SETTLEMENT_TERMINATION_RULING_APPEAL_APK.norm_versions[0].norm.calculation,
+    SETTLEMENT_AGREEMENT_REJECTION_APPEAL_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(SETTLEMENT_TERMINATION_RULING_APPEAL_APK.restoration_norm, undefined);
+});
+
+test('два новых узла мирового соглашения: разные институты — разные id, разные поля-якоря', () => {
+  assert.notEqual(
+    SETTLEMENT_CANCELLATION_RESUMPTION_APPEAL_APK.id,
+    SETTLEMENT_TERMINATION_RULING_APPEAL_APK.id,
+  );
+  const term1 = computeSettlementCancellationResumptionAppealApk({
+    settlement_cancellation_resumption_ruling_date_apk: '2025-03-11',
+  });
+  const term2 = computeSettlementTerminationRulingAppealApk({
+    settlement_termination_ruling_date_apk: '2025-03-11',
+  });
+  assert.notEqual(term1.id, term2.id);
 });

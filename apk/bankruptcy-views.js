@@ -66,6 +66,8 @@ import {
   computeBankruptcyPropertyInventoryApk,
   computeBankruptcyEmployeeDismissalNoticeApk,
   computeBankruptcyInventoryResultsRegistryApk,
+  computeSettlementCancellationResumptionAppealApk,
+  computeSettlementTerminationRulingAppealApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -111,6 +113,8 @@ import {
   BANKRUPTCY_PROPERTY_INVENTORY_APK,
   BANKRUPTCY_EMPLOYEE_DISMISSAL_NOTICE_APK,
   BANKRUPTCY_INVENTORY_RESULTS_REGISTRY_APK,
+  SETTLEMENT_CANCELLATION_RESUMPTION_APPEAL_APK,
+  SETTLEMENT_TERMINATION_RULING_APPEAL_APK,
 } from './bankruptcy.js';
 
 import {
@@ -690,6 +694,20 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     kind: 'working_day',
     deps: () => ['property_inventory_completion_date_apk'],
     compute: (i) => computeBankruptcyInventoryResultsRegistryApk(i),
+  },
+  // Два узла обжалования по институту мирового соглашения (ст. 163 п. 1;
+  // ст. 165 п. 4) — тот же паттерн регистрации, что и у всех предыдущих
+  // appeal-узлов домена: обычная месячная term-карточка без kind
+  // (monthTermCard).
+  settlement_cancellation_resumption_appeal_apk: {
+    node: SETTLEMENT_CANCELLATION_RESUMPTION_APPEAL_APK,
+    deps: () => ['settlement_cancellation_resumption_ruling_date_apk'],
+    compute: (i) => computeSettlementCancellationResumptionAppealApk(i),
+  },
+  settlement_termination_ruling_appeal_apk: {
+    node: SETTLEMENT_TERMINATION_RULING_APPEAL_APK,
+    deps: () => ['settlement_termination_ruling_date_apk'],
+    compute: (i) => computeSettlementTerminationRulingAppealApk(i),
   },
 };
 

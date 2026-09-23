@@ -96,8 +96,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 35,
-  'переключатель ситуаций отрисован не на тридцать пять ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 37,
+  'переключатель ситуаций отрисован не на тридцать семь ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -1485,6 +1485,57 @@ check((await inventoryRegistryCard.count()) === 1, 'карточка включ�
 check(
   (await deadlineOf(inventoryRegistryCard)) === '16.03.2026',
   `срок включения результатов инвентаризации в ЕФРСБ посчитан неверно: ${await deadlineOf(inventoryRegistryCard)}`,
+);
+
+// --- Ветви: обжалование по институту мирового соглашения (ст. 163 п. 1;
+// ст. 165 п. 4) — девятая и десятая appeal-ветви домена по ч. 1 ст. 61 ------
+
+await chooseSituation('settlement_cancellation_resumption_appeal');
+check(
+  (await page.locator('#in-settlement_cancellation_resumption_ruling_date_apk').count()) === 1,
+  'ветвь "settlement_cancellation_resumption_appeal": основное поле не найдено в DOM',
+);
+await page.fill('#in-settlement_cancellation_resumption_ruling_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви обжалования определения о возобновлении производства по делу ожидалась одна карточка',
+);
+const resumptionAppealCard = cardByTitle(
+  'Обжалование определения о возобновлении производства по делу о банкротстве',
+);
+check((await resumptionAppealCard.count()) === 1, 'карточка обжалования возобновления производства не появилась');
+check(
+  (await deadlineOf(resumptionAppealCard)) === '11.04.2025',
+  `срок обжалования возобновления производства посчитан неверно: ${await deadlineOf(resumptionAppealCard)}`,
+);
+check(
+  (await resumptionAppealCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
+  'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке обжалования возобновления производства',
+);
+
+await chooseSituation('settlement_termination_ruling_appeal');
+check(
+  (await page.locator('#in-settlement_termination_ruling_date_apk').count()) === 1,
+  'ветвь "settlement_termination_ruling_appeal": основное поле не найдено в DOM',
+);
+await page.fill('#in-settlement_termination_ruling_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви обжалования определения о расторжении мирового соглашения ожидалась одна карточка',
+);
+const terminationAppealCard = cardByTitle(
+  'Обжалование определения по результатам рассмотрения заявления о расторжении мирового соглашения',
+);
+check((await terminationAppealCard.count()) === 1, 'карточка обжалования расторжения мирового соглашения не появилась');
+check(
+  (await deadlineOf(terminationAppealCard)) === '11.04.2025',
+  `срок обжалования расторжения мирового соглашения посчитан неверно: ${await deadlineOf(terminationAppealCard)}`,
+);
+check(
+  (await terminationAppealCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
+  'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке обжалования расторжения мирового соглашения',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------
