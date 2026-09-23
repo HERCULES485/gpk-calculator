@@ -56,7 +56,12 @@ export const BANKRUPTCY_SITUATION_CATEGORIES = [
   },
   {
     title: 'Мировое соглашение',
-    ids: ['settlement_agreement', 'settlement_agreement_review'],
+    ids: [
+      'settlement_agreement',
+      'settlement_agreement_review',
+      'settlement_cancellation_resumption_appeal',
+      'settlement_termination_ruling_appeal',
+    ],
   },
   {
     title: 'Субсидиарная ответственность',

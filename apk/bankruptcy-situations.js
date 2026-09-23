@@ -464,6 +464,33 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['bankruptcy_inventory_results_registry_apk'],
   },
+  {
+    id: 'settlement_cancellation_resumption_appeal',
+    label: 'Обжалование определения о возобновлении производства по делу о банкротстве при отмене утверждения мирового соглашения',
+    // Отдельная от settlement_agreement_rejection_appeal и
+    // settlement_agreement_review ветвь: другой институт — отмена
+    // УТВЕРЖДЕНИЯ мирового соглашения и возобновление производства по делу
+    // (ст. 163 п. 1), а не отказ в утверждении и не пересмотр по новым
+    // обстоятельствам. Единственное поле ветви — дата изготовления
+    // определения в полном объёме, тот же образец, что у остальных
+    // одноузловых appeal-ветвей.
+    primary_field: 'settlement_cancellation_resumption_ruling_date_apk',
+    fields: [],
+    nodes: ['settlement_cancellation_resumption_appeal_apk'],
+  },
+  {
+    id: 'settlement_termination_ruling_appeal',
+    label: 'Обжалование определения по результатам рассмотрения заявления о расторжении мирового соглашения',
+    // Отдельная ветвь: РАСТОРЖЕНИЕ уже утверждённого мирового соглашения по
+    // заявлению кредиторов (ст. 165 п. 4) — иной институт, чем у
+    // settlement_cancellation_resumption_appeal выше и у ранее реализованных
+    // ветвей. Единственное поле ветви — дата изготовления определения в
+    // полном объёме, тот же образец, что у остальных одноузловых
+    // appeal-ветвей.
+    primary_field: 'settlement_termination_ruling_date_apk',
+    fields: [],
+    nodes: ['settlement_termination_ruling_appeal_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';
