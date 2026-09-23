@@ -72,6 +72,9 @@ export const BANKRUPTCY_SITUATION_CATEGORIES = [
     ids: [
       'citizen_bankruptcy',
       'citizen_bankruptcy_filing_duty',
+      'citizen_property_sale',
+      'bank_notification_duty',
+      'property_exclusion_ruling_appeal',
       'out_of_court_bankruptcy',
       'out_of_court_bankruptcy_returned',
       'out_of_court_bankruptcy_prior_completed',

@@ -111,6 +111,14 @@ import {
   SETTLEMENT_TERMINATION_RULING_APPEAL_APK,
   computeCitizenBankruptcyFilingDutyApk,
   CITIZEN_BANKRUPTCY_FILING_DUTY_APK,
+  computeCitizenPropertySaleProposalApk,
+  CITIZEN_PROPERTY_SALE_PROPOSAL_APK,
+  computeCitizenPropertySaleApprovalApk,
+  CITIZEN_PROPERTY_SALE_APPROVAL_APK,
+  computeBankNotificationDutyApk,
+  BANK_NOTIFICATION_DUTY_APK,
+  computePropertyExclusionRulingAppealApk,
+  PROPERTY_EXCLUSION_RULING_APPEAL_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -2685,4 +2693,152 @@ test('обязанность гражданина подать заявлени�
     DEBTOR_RESPONSE_BANKRUPTCY_APK.norm_versions[0].norm.calculation,
   );
   assert.equal(CITIZEN_BANKRUPTCY_FILING_DUTY_APK.restoration_norm, undefined);
+});
+
+// --- Проект и утверждение положения о порядке реализации имущества
+// гражданина (п. 1 ст. 213.26 ФЗ № 127-ФЗ, глава X) — два узла из одного
+// якоря, тот же прецедент группировки, что у EXTERNAL_MANAGEMENT_PLAN_
+// DEVELOPMENT_APK/EXTERNAL_MANAGEMENT_PLAN_MEETING_APK (PR #56).
+
+test('проект положения о реализации имущества гражданина: один месяц с даты окончания описи и оценки', () => {
+  const term = computeCitizenPropertySaleProposalApk({
+    citizen_property_inventory_valuation_completion_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'п. 1 ст. 213.26 ФЗ № 127-ФЗ');
+});
+
+test('проект положения о реализации имущества гражданина: без citizen_property_inventory_valuation_completion_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeCitizenPropertySaleProposalApk({}),
+    /citizen_property_inventory_valuation_completion_date_apk/,
+  );
+});
+
+test('утверждение положения о реализации имущества гражданина: два месяца с той же даты окончания описи и оценки, с переносом через выходной', () => {
+  const term = computeCitizenPropertySaleApprovalApk({
+    citizen_property_inventory_valuation_completion_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-05-11'); // воскресенье
+  assert.equal(term.deadline, '2025-05-12');
+  assert.equal(term.shifted, true);
+  assert.deepEqual(term.duration, { value: 2, unit: 'month' });
+  assert.equal(term.norm.primary, 'п. 1 ст. 213.26 ФЗ № 127-ФЗ');
+});
+
+test('утверждение положения о реализации имущества гражданина: без citizen_property_inventory_valuation_completion_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeCitizenPropertySaleApprovalApk({}),
+    /citizen_property_inventory_valuation_completion_date_apk/,
+  );
+});
+
+test('два узла ст. 213.26 п. 1: общий якорь, разные id и разная длительность — не одна обязанность под двумя именами', () => {
+  assert.notEqual(CITIZEN_PROPERTY_SALE_PROPOSAL_APK.id, CITIZEN_PROPERTY_SALE_APPROVAL_APK.id);
+  const anchor = '2025-03-11';
+  const proposal = computeCitizenPropertySaleProposalApk({
+    citizen_property_inventory_valuation_completion_date_apk: anchor,
+  });
+  const approval = computeCitizenPropertySaleApprovalApk({
+    citizen_property_inventory_valuation_completion_date_apk: anchor,
+  });
+  assert.equal(proposal.anchor, approval.anchor);
+  assert.notEqual(proposal.deadline, approval.deadline);
+  assert.equal(CITIZEN_PROPERTY_SALE_PROPOSAL_APK.restoration_norm, undefined);
+  assert.equal(CITIZEN_PROPERTY_SALE_APPROVAL_APK.restoration_norm, undefined);
+});
+
+// --- Обязанность кредитной организации уведомить финансового управляющего
+// (п. 5 ст. 213.24 ФЗ № 127-ФЗ, глава X) — working_day-узел, тот же паттерн,
+// что у DEBTOR_RESPONSE_BANKRUPTCY_APK и CITIZEN_BANKRUPTCY_FILING_DUTY_APK.
+
+test('уведомление кредитной организацией: пять рабочих дней с даты, когда стало известно о признании гражданина банкротом', () => {
+  const term = computeBankNotificationDutyApk({
+    bank_citizen_bankruptcy_known_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-03-18');
+  assert.equal(term.deadline, '2025-03-18');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 5, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'п. 5 ст. 213.24 ФЗ № 127-ФЗ');
+});
+
+test('уведомление кредитной организацией: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeBankNotificationDutyApk({
+    bank_citizen_bankruptcy_known_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-14');
+});
+
+test('уведомление кредитной организацией: без bank_citizen_bankruptcy_known_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeBankNotificationDutyApk({}),
+    /bank_citizen_bankruptcy_known_date_apk/,
+  );
+});
+
+test('уведомление кредитной организацией: primary — сама статья-основание, calculation тот же набор working_day-узлов домена, без restoration', () => {
+  assert.equal(BANK_NOTIFICATION_DUTY_APK.norm_versions[0].norm.primary, 'п. 5 ст. 213.24 ФЗ № 127-ФЗ');
+  assert.deepEqual(
+    BANK_NOTIFICATION_DUTY_APK.norm_versions[0].norm.calculation,
+    DEBTOR_RESPONSE_BANKRUPTCY_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(BANK_NOTIFICATION_DUTY_APK.restoration_norm, undefined);
+});
+
+// --- Обжалование определения об утверждении перечня имущества гражданина,
+// исключаемого из конкурсной массы (п. 2 ст. 213.25, ч. 1 ст. 61 ФЗ
+// № 127-ФЗ) — тот же образец appeal-узла, что у SETTLEMENT_CANCELLATION_
+// RESUMPTION_APPEAL_APK/SETTLEMENT_TERMINATION_RULING_APPEAL_APK выше.
+
+test('обжалование определения об исключении имущества из конкурсной массы: один месяц с даты изготовления определения, будний день без переноса', () => {
+  const term = computePropertyExclusionRulingAppealApk({
+    property_exclusion_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
+});
+
+test('обжалование определения об исключении имущества из конкурсной массы: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computePropertyExclusionRulingAppealApk({
+    property_exclusion_ruling_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('обжалование определения об исключении имущества из конкурсной массы: без property_exclusion_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computePropertyExclusionRulingAppealApk({}),
+    /property_exclusion_ruling_date_apk/,
+  );
+});
+
+test('обжалование определения об исключении имущества из конкурсной массы: primary — ч. 1 ст. 61 (источник числа), а не ст. 213.25; calculation тот же набор, что у остальных appeal-узлов, без restoration', () => {
+  assert.equal(
+    PROPERTY_EXCLUSION_RULING_APPEAL_APK.norm_versions[0].norm.primary,
+    'ч. 1 ст. 61 ФЗ № 127-ФЗ',
+  );
+  assert.doesNotMatch(
+    PROPERTY_EXCLUSION_RULING_APPEAL_APK.norm_versions[0].norm.primary,
+    /213\.25/,
+  );
+  assert.deepEqual(
+    PROPERTY_EXCLUSION_RULING_APPEAL_APK.norm_versions[0].norm.calculation,
+    SETTLEMENT_TERMINATION_RULING_APPEAL_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(PROPERTY_EXCLUSION_RULING_APPEAL_APK.restoration_norm, undefined);
 });

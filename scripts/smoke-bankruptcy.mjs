@@ -96,8 +96,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 38,
-  'переключатель ситуаций отрисован не на тридцать восемь ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 41,
+  'переключатель ситуаций отрисован не на сорок одну ветвь',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -1566,6 +1566,98 @@ check(
 check(
   filingDutyText.includes('п. 1 ст. 213.4 ФЗ № 127-ФЗ'),
   'норма п. 1 ст. 213.4 ФЗ № 127-ФЗ не показана на карточке обязанности гражданина',
+);
+
+// --- Ветвь: проект и утверждение положения о реализации имущества гражданина
+// (два узла из одного якоря, п. 1 ст. 213.26) ----------------------------------
+
+await chooseSituation('citizen_property_sale');
+check(
+  (await page.locator('#in-citizen_property_inventory_valuation_completion_date_apk').count()) === 1,
+  'ветвь "citizen_property_sale": основное поле не найдено в DOM',
+);
+await page.fill('#in-citizen_property_inventory_valuation_completion_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 2,
+  'в ветви проекта и утверждения положения ожидались две карточки',
+);
+const citizenSaleProposalCard = cardByTitle('Представление проекта положения о порядке реализации имущества гражданина');
+check((await citizenSaleProposalCard.count()) === 1, 'карточка представления проекта положения не появилась');
+check(
+  (await deadlineOf(citizenSaleProposalCard)) === '11.04.2025',
+  `срок представления проекта положения посчитан неверно: ${await deadlineOf(citizenSaleProposalCard)}`,
+);
+check(
+  (await citizenSaleProposalCard.innerText()).includes('п. 1 ст. 213.26 ФЗ № 127-ФЗ'),
+  'норма п. 1 ст. 213.26 ФЗ № 127-ФЗ не показана на карточке представления проекта положения',
+);
+const citizenSaleApprovalCard = cardByTitle('Утверждение положения о порядке реализации имущества гражданина');
+check((await citizenSaleApprovalCard.count()) === 1, 'карточка утверждения положения не появилась');
+check(
+  (await deadlineOf(citizenSaleApprovalCard)) === '12.05.2025',
+  `срок утверждения положения посчитан неверно: ${await deadlineOf(citizenSaleApprovalCard)}`,
+);
+check(
+  (await citizenSaleApprovalCard.innerText()).includes('п. 1 ст. 213.26 ФЗ № 127-ФЗ'),
+  'норма п. 1 ст. 213.26 ФЗ № 127-ФЗ не показана на карточке утверждения положения',
+);
+
+// --- Ветвь: уведомление кредитной организацией финансового управляющего
+// (working_day-узел, п. 5 ст. 213.24) ------------------------------------------
+
+await chooseSituation('bank_notification_duty');
+check(
+  (await page.locator('#in-bank_citizen_bankruptcy_known_date_apk').count()) === 1,
+  'ветвь "bank_notification_duty": основное поле не найдено в DOM',
+);
+await page.fill('#in-bank_citizen_bankruptcy_known_date_apk', '26.12.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви уведомления кредитной организацией ожидалась одна карточка',
+);
+const bankNotificationCard = cardByTitle('Уведомление кредитной организацией финансового управляющего об имуществе гражданина');
+check((await bankNotificationCard.count()) === 1, 'карточка уведомления кредитной организацией не появилась');
+check(
+  (await deadlineOf(bankNotificationCard)) === '14.01.2026',
+  `срок уведомления кредитной организацией посчитан неверно: ${await deadlineOf(bankNotificationCard)}`,
+);
+const bankNotificationText = await bankNotificationCard.innerText();
+check(
+  bankNotificationText.includes('Отсчёт рабочих дней с 29.12.2025'),
+  `первый рабочий день не показан на карточке уведомления кредитной организацией: «${bankNotificationText}»`,
+);
+check(
+  bankNotificationText.includes('п. 5 ст. 213.24 ФЗ № 127-ФЗ'),
+  'норма п. 5 ст. 213.24 ФЗ № 127-ФЗ не показана на карточке уведомления кредитной организацией',
+);
+
+// --- Ветвь: обжалование определения об исключении имущества из конкурсной
+// массы (appeal-узел, п. 2 ст. 213.25, ч. 1 ст. 61) ----------------------------
+
+await chooseSituation('property_exclusion_ruling_appeal');
+check(
+  (await page.locator('#in-property_exclusion_ruling_date_apk').count()) === 1,
+  'ветвь "property_exclusion_ruling_appeal": основное поле не найдено в DOM',
+);
+await page.fill('#in-property_exclusion_ruling_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви обжалования определения об исключении имущества ожидалась одна карточка',
+);
+const propertyExclusionCard = cardByTitle(
+  'Обжалование определения об утверждении перечня имущества гражданина, исключаемого из конкурсной массы',
+);
+check((await propertyExclusionCard.count()) === 1, 'карточка обжалования определения об исключении имущества не появилась');
+check(
+  (await deadlineOf(propertyExclusionCard)) === '11.04.2025',
+  `срок обжалования определения об исключении имущества посчитан неверно: ${await deadlineOf(propertyExclusionCard)}`,
+);
+check(
+  (await propertyExclusionCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
+  'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке обжалования определения об исключении имущества',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------
