@@ -507,6 +507,39 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['citizen_bankruptcy_filing_duty_apk'],
   },
+  {
+    id: 'citizen_property_sale',
+    label: 'Реализация имущества гражданина: проект и утверждение положения о порядке продажи',
+    // ДВА узла в одной ветви, не два узла в двух ветвях: оба используют
+    // ОДИН И ТОТ ЖЕ якорь (дата окончания описи и оценки имущества
+    // гражданина) — тот же прецедент группировки, что у external_management_plan
+    // выше (PR #56). Два независимых обязательства (представить проект
+    // положения; утвердить его), а не одна обязанность под двумя именами.
+    primary_field: 'citizen_property_inventory_valuation_completion_date_apk',
+    fields: [],
+    nodes: ['citizen_property_sale_proposal_apk', 'citizen_property_sale_approval_apk'],
+  },
+  {
+    id: 'bank_notification_duty',
+    label: 'Уведомление кредитной организацией финансового управляющего об имуществе гражданина',
+    // Отдельная от citizen_property_sale ветвь: другой субъект обязанности —
+    // кредитная организация (банк), а не финансовый управляющий и не
+    // собрание/комитет кредиторов.
+    primary_field: 'bank_citizen_bankruptcy_known_date_apk',
+    fields: [],
+    nodes: ['bank_notification_duty_apk'],
+  },
+  {
+    id: 'property_exclusion_ruling_appeal',
+    label: 'Обжалование определения об утверждении перечня имущества, исключаемого из конкурсной массы',
+    // Отдельная одноузловая appeal-ветвь — тот же образец, что у
+    // settlement_cancellation_resumption_appeal/settlement_termination_ruling_appeal
+    // выше: единственное поле ветви — дата изготовления определения в полном
+    // объёме.
+    primary_field: 'property_exclusion_ruling_date_apk',
+    fields: [],
+    nodes: ['property_exclusion_ruling_appeal_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';

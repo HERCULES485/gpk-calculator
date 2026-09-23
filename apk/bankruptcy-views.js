@@ -69,6 +69,10 @@ import {
   computeSettlementCancellationResumptionAppealApk,
   computeSettlementTerminationRulingAppealApk,
   computeCitizenBankruptcyFilingDutyApk,
+  computeCitizenPropertySaleProposalApk,
+  computeCitizenPropertySaleApprovalApk,
+  computeBankNotificationDutyApk,
+  computePropertyExclusionRulingAppealApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -117,6 +121,10 @@ import {
   SETTLEMENT_CANCELLATION_RESUMPTION_APPEAL_APK,
   SETTLEMENT_TERMINATION_RULING_APPEAL_APK,
   CITIZEN_BANKRUPTCY_FILING_DUTY_APK,
+  CITIZEN_PROPERTY_SALE_PROPOSAL_APK,
+  CITIZEN_PROPERTY_SALE_APPROVAL_APK,
+  BANK_NOTIFICATION_DUTY_APK,
+  PROPERTY_EXCLUSION_RULING_APPEAL_APK,
 } from './bankruptcy.js';
 
 import {
@@ -719,6 +727,37 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     kind: 'working_day',
     deps: () => ['citizen_bankruptcy_filing_duty_known_date_apk'],
     compute: (i) => computeCitizenBankruptcyFilingDutyApk(i),
+  },
+  // Проект и утверждение положения о порядке реализации имущества гражданина
+  // (п. 1 ст. 213.26) — два узла из одного якоря, тот же приём регистрации,
+  // что у external_management_plan_development_apk/
+  // external_management_plan_meeting_apk выше.
+  citizen_property_sale_proposal_apk: {
+    node: CITIZEN_PROPERTY_SALE_PROPOSAL_APK,
+    deps: () => ['citizen_property_inventory_valuation_completion_date_apk'],
+    compute: (i) => computeCitizenPropertySaleProposalApk(i),
+  },
+  citizen_property_sale_approval_apk: {
+    node: CITIZEN_PROPERTY_SALE_APPROVAL_APK,
+    deps: () => ['citizen_property_inventory_valuation_completion_date_apk'],
+    compute: (i) => computeCitizenPropertySaleApprovalApk(i),
+  },
+  // Обязанность кредитной организации уведомить финансового управляющего
+  // (п. 5 ст. 213.24) — working_day-узел, тот же паттерн регистрации, что и у
+  // остальных working_day-узлов домена.
+  bank_notification_duty_apk: {
+    node: BANK_NOTIFICATION_DUTY_APK,
+    kind: 'working_day',
+    deps: () => ['bank_citizen_bankruptcy_known_date_apk'],
+    compute: (i) => computeBankNotificationDutyApk(i),
+  },
+  // Обжалование определения об утверждении перечня имущества, исключаемого из
+  // конкурсной массы (п. 2 ст. 213.25, ч. 1 ст. 61) — тот же паттерн
+  // регистрации, что и у остальных appeal-узлов домена.
+  property_exclusion_ruling_appeal_apk: {
+    node: PROPERTY_EXCLUSION_RULING_APPEAL_APK,
+    deps: () => ['property_exclusion_ruling_date_apk'],
+    compute: (i) => computePropertyExclusionRulingAppealApk(i),
   },
 };
 
