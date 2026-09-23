@@ -73,6 +73,7 @@ import {
   computeCitizenPropertySaleApprovalApk,
   computeBankNotificationDutyApk,
   computePropertyExclusionRulingAppealApk,
+  computePropertyExclusionAmountDisputeApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -125,6 +126,7 @@ import {
   CITIZEN_PROPERTY_SALE_APPROVAL_APK,
   BANK_NOTIFICATION_DUTY_APK,
   PROPERTY_EXCLUSION_RULING_APPEAL_APK,
+  PROPERTY_EXCLUSION_AMOUNT_DISPUTE_APK,
 } from './bankruptcy.js';
 
 import {
@@ -758,6 +760,16 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     node: PROPERTY_EXCLUSION_RULING_APPEAL_APK,
     deps: () => ['property_exclusion_ruling_date_apk'],
     compute: (i) => computePropertyExclusionRulingAppealApk(i),
+  },
+  // Ходатайство об уменьшении размера денежных средств, исключаемых из
+  // конкурсной массы (п. 2 ст. 213.27) — working_day-узел, тот же паттерн
+  // регистрации, что и у остальных working_day-узлов домена. Отдельная
+  // ветвь от property_exclusion_ruling_appeal_apk выше — другой якорь.
+  property_exclusion_amount_dispute_apk: {
+    node: PROPERTY_EXCLUSION_AMOUNT_DISPUTE_APK,
+    kind: 'working_day',
+    deps: () => ['property_exclusion_amount_notice_published_date_apk'],
+    compute: (i) => computePropertyExclusionAmountDisputeApk(i),
   },
 };
 

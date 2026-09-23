@@ -540,6 +540,17 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['property_exclusion_ruling_appeal_apk'],
   },
+  {
+    id: 'property_exclusion_amount_dispute',
+    label: 'Ходатайство об уменьшении размера денежных средств, исключаемых из конкурсной массы',
+    // Отдельная от property_exclusion_ruling_appeal ветвь: другой институт,
+    // другой якорь (дата размещения в ЕФРСБ информации о размере денежных
+    // средств, а не дата определения об утверждении перечня имущества) —
+    // см. комментарий к узлу в apk/bankruptcy.js.
+    primary_field: 'property_exclusion_amount_notice_published_date_apk',
+    fields: [],
+    nodes: ['property_exclusion_amount_dispute_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';

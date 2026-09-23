@@ -119,6 +119,8 @@ import {
   BANK_NOTIFICATION_DUTY_APK,
   computePropertyExclusionRulingAppealApk,
   PROPERTY_EXCLUSION_RULING_APPEAL_APK,
+  computePropertyExclusionAmountDisputeApk,
+  PROPERTY_EXCLUSION_AMOUNT_DISPUTE_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -2841,4 +2843,61 @@ test('обжалование определения об исключении и
     SETTLEMENT_TERMINATION_RULING_APPEAL_APK.norm_versions[0].norm.calculation,
   );
   assert.equal(PROPERTY_EXCLUSION_RULING_APPEAL_APK.restoration_norm, undefined);
+});
+
+// --- Ходатайство об уменьшении размера денежных средств, исключаемых из
+// конкурсной массы (п. 2 ст. 213.27 ФЗ № 127-ФЗ, глава X) — working_day-узел,
+// отдельный институт и отдельный якорь от PROPERTY_EXCLUSION_RULING_
+// APPEAL_APK (ст. 213.25) выше.
+
+test('ходатайство об уменьшении размера денежных средств: десять рабочих дней с даты размещения информации в ЕФРСБ', () => {
+  const term = computePropertyExclusionAmountDisputeApk({
+    property_exclusion_amount_notice_published_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-03-25');
+  assert.equal(term.deadline, '2025-03-25');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'п. 2 ст. 213.27 ФЗ № 127-ФЗ');
+});
+
+test('ходатайство об уменьшении размера денежных средств: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computePropertyExclusionAmountDisputeApk({
+    property_exclusion_amount_notice_published_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-21');
+});
+
+test('ходатайство об уменьшении размера денежных средств: без property_exclusion_amount_notice_published_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computePropertyExclusionAmountDisputeApk({}),
+    /property_exclusion_amount_notice_published_date_apk/,
+  );
+});
+
+test('ходатайство об уменьшении размера денежных средств: primary — сама статья-основание (не appeal-узел), calculation тот же набор working_day-узлов домена, без restoration', () => {
+  assert.equal(
+    PROPERTY_EXCLUSION_AMOUNT_DISPUTE_APK.norm_versions[0].norm.primary,
+    'п. 2 ст. 213.27 ФЗ № 127-ФЗ',
+  );
+  assert.deepEqual(
+    PROPERTY_EXCLUSION_AMOUNT_DISPUTE_APK.norm_versions[0].norm.calculation,
+    ['ч. 3 ст. 113 АПК РФ', 'ст. 223 АПК РФ'],
+  );
+  assert.equal(PROPERTY_EXCLUSION_AMOUNT_DISPUTE_APK.restoration_norm, undefined);
+});
+
+test('ходатайство об уменьшении размера денежных средств: не путается с обжалованием определения об исключении имущества — разные id, разные поля-якоря', () => {
+  assert.notEqual(PROPERTY_EXCLUSION_AMOUNT_DISPUTE_APK.id, PROPERTY_EXCLUSION_RULING_APPEAL_APK.id);
+  const dispute = computePropertyExclusionAmountDisputeApk({
+    property_exclusion_amount_notice_published_date_apk: '2025-03-11',
+  });
+  const appeal = computePropertyExclusionRulingAppealApk({
+    property_exclusion_ruling_date_apk: '2025-03-11',
+  });
+  assert.notEqual(dispute.id, appeal.id);
+  assert.notEqual(dispute.norm.primary, appeal.norm.primary);
 });
