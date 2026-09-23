@@ -491,6 +491,22 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['settlement_termination_ruling_appeal_apk'],
   },
+  {
+    id: 'citizen_bankruptcy_filing_duty',
+    label: 'Обязанность гражданина обратиться с заявлением о своём банкротстве',
+    // Отдельная от citizen_bankruptcy ветвь: та ветвь — о требованиях
+    // кредиторов и обязанностях финансового управляющего в уже возбуждённом
+    // деле о банкротстве гражданина (глава X), эта — о собственной обязанности
+    // гражданина ИНИЦИИРОВАТЬ дело (п. 1 ст. 213.4), которая наступает раньше
+    // и не связана с уже упомянутыми в citizen_bankruptcy фактами. Условия
+    // применимости (совокупный долг ≥500 000 руб., объективная невозможность
+    // исполнения) не кодируются отдельными полями — см. комментарий к узлу в
+    // apk/bankruptcy.js. Единственное поле ветви — дата, когда гражданин узнал
+    // или должен был узнать о наступлении этих условий.
+    primary_field: 'citizen_bankruptcy_filing_duty_known_date_apk',
+    fields: [],
+    nodes: ['citizen_bankruptcy_filing_duty_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';

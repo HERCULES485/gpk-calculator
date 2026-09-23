@@ -109,6 +109,8 @@ import {
   SETTLEMENT_CANCELLATION_RESUMPTION_APPEAL_APK,
   computeSettlementTerminationRulingAppealApk,
   SETTLEMENT_TERMINATION_RULING_APPEAL_APK,
+  computeCitizenBankruptcyFilingDutyApk,
+  CITIZEN_BANKRUPTCY_FILING_DUTY_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -2637,4 +2639,50 @@ test('два новых узла мирового соглашения: разн
     settlement_termination_ruling_date_apk: '2025-03-11',
   });
   assert.notEqual(term1.id, term2.id);
+});
+
+// --- Собственная обязанность гражданина подать заявление о своём банкротстве
+// (п. 1 ст. 213.4 ФЗ № 127-ФЗ, глава X) — одна из наиболее значимых
+// непокрытых глав до этой задачи. Тот же паттерн, что у
+// DEBTOR_RESPONSE_BANKRUPTCY_APK (ст. 47 п. 1): working_day, primary —
+// сама статья-основание (не ч. 1 ст. 61 — это не appeal-узел), без
+// restoration. Условия применимости (совокупный долг ≥500 000 руб.,
+// объективная невозможность исполнения) не проверяются отдельными полями —
+// см. комментарий к узлу в apk/bankruptcy.js.
+
+test('обязанность гражданина подать заявление о своём банкротстве: тридцать рабочих дней с даты, когда узнал или должен был узнать', () => {
+  const term = computeCitizenBankruptcyFilingDutyApk({
+    citizen_bankruptcy_filing_duty_known_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-04-22');
+  assert.equal(term.deadline, '2025-04-22');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 30, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'п. 1 ст. 213.4 ФЗ № 127-ФЗ');
+});
+
+test('обязанность гражданина подать заявление о своём банкротстве: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeCitizenBankruptcyFilingDutyApk({
+    citizen_bankruptcy_filing_duty_known_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-02-18');
+});
+
+test('обязанность гражданина подать заявление о своём банкротстве: без citizen_bankruptcy_filing_duty_known_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeCitizenBankruptcyFilingDutyApk({}),
+    /citizen_bankruptcy_filing_duty_known_date_apk/,
+  );
+});
+
+test('обязанность гражданина подать заявление о своём банкротстве: primary — сама статья-основание (не appeal-узел), calculation тот же набор working_day-узлов домена, без restoration', () => {
+  assert.equal(CITIZEN_BANKRUPTCY_FILING_DUTY_APK.norm_versions[0].norm.primary, 'п. 1 ст. 213.4 ФЗ № 127-ФЗ');
+  assert.deepEqual(
+    CITIZEN_BANKRUPTCY_FILING_DUTY_APK.norm_versions[0].norm.calculation,
+    DEBTOR_RESPONSE_BANKRUPTCY_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(CITIZEN_BANKRUPTCY_FILING_DUTY_APK.restoration_norm, undefined);
 });

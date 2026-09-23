@@ -71,6 +71,7 @@ export const BANKRUPTCY_SITUATION_CATEGORIES = [
     title: 'Банкротство гражданина',
     ids: [
       'citizen_bankruptcy',
+      'citizen_bankruptcy_filing_duty',
       'out_of_court_bankruptcy',
       'out_of_court_bankruptcy_returned',
       'out_of_court_bankruptcy_prior_completed',
