@@ -75,7 +75,12 @@ const check = (ok, message) => {
 };
 
 async function chooseSituation(id) {
-  await page.check(`#situation input[value="${id}"]`);
+  // Категория «редкие процедуры» свёрнута по умолчанию (<details> без open) —
+  // радиокнопки внутри невидимы для Playwright, пока секцию не раскрыть.
+  const input = page.locator(`#situation input[value="${id}"]`);
+  const details = input.locator('xpath=ancestor::details[1]');
+  if (await details.count()) await details.evaluate((node) => { node.open = true; });
+  await input.check();
   await settle();
 }
 
