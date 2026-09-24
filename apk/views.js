@@ -39,6 +39,7 @@ import {
   computeReasonableTermCompensationApk,
   computeReasonableTermExecutionCompensationApk,
   computeSimplifiedProceedingsAppealApk,
+  computeSimplifiedProceedingsEntryIntoForceApk,
   computeCourtOrderObjectionApk,
   computeNonnormativeActChallengeApk,
   computeAdministrativeLiabilityChallengeApk,
@@ -76,6 +77,7 @@ import {
   REASONABLE_TERM_COMPENSATION_APK,
   REASONABLE_TERM_EXECUTION_COMPENSATION_APK,
   SIMPLIFIED_PROCEEDINGS_APPEAL_APK,
+  SIMPLIFIED_PROCEEDINGS_ENTRY_INTO_FORCE_APK,
   COURT_ORDER_OBJECTION_APK,
   NONNORMATIVE_ACT_CHALLENGE_APK,
   ADMINISTRATIVE_LIABILITY_CHALLENGE_APK,
@@ -520,6 +522,14 @@ const NODE_REQUIREMENTS = {
     node: SIMPLIFIED_PROCEEDINGS_APPEAL_APK,
     deps: () => ['simplified_proceedings_decision_date'],
     compute: (i) => computeSimplifiedProceedingsAppealApk(i),
+  },
+  // Узел-событие (ч. 3 ст. 229): без собственного дискриминатора, то же поле
+  // якоря, что и у simplified_proceedings_appeal_apk выше.
+  simplified_proceedings_entry_into_force_apk: {
+    node: SIMPLIFIED_PROCEEDINGS_ENTRY_INTO_FORCE_APK,
+    kind: 'event',
+    deps: () => ['simplified_proceedings_decision_date'],
+    compute: (i) => computeSimplifiedProceedingsEntryIntoForceApk(i),
   },
   // Без restoration-узла: ч. 5 ст. 229.5 говорит о возврате поздних возражений
   // без числового потолка — тот же случай, что уже был со ст. 322, 112,

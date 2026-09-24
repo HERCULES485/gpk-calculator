@@ -469,6 +469,8 @@ const BASED_ON_TEXT_APK = {
   cassation_general_apk: 'истечение срока на кассационную жалобу в суд округа',
   appellate_ruling_date: 'дата постановления апелляционной инстанции',
   district_cassation_ruling_date: 'дата постановления арбитражного суда округа',
+  simplified_proceedings_appeal_apk:
+    'истечение срока на апелляционную жалобу по делу упрощённого производства',
 };
 
 function basedOnText(basedOn) {
