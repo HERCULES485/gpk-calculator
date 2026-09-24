@@ -329,13 +329,19 @@ export const SITUATIONS_BANKRUPTCY = [
   },
   {
     id: 'external_management_third_party_satisfaction',
-    label: 'Внешний управляющий: требования погашены третьим лицом, учредителями или собственником имущества',
+    label: 'Требования погашены третьим лицом, учредителями или собственником имущества',
     // ДВА узла в одной ветви, не два узла в двух ветвях — тот же прецедент,
     // что у external_management_plan выше: оба узла считаются от ОДНОЙ и
     // той же даты (окончание исполнения обязательств третьим лицом/
     // учредителями/собственником имущества по ст. 113), это два независимых
     // обязательства (уведомить кредиторов; направить отчёт в суд), а не
     // одна обязанность под двумя именами.
+    //
+    // Лейбл БЕЗ префикса "Внешний управляющий:" — тот же принцип, что и у
+    // appraisal_report_registry_inclusion (PR #61): ст. 125 п. 2 ФЗ
+    // № 127-ФЗ распространяет тот же порядок (п. 1, п. 2 ст. 116) на
+    // конкурсное производство через конкурсного управляющего, поэтому
+    // префикс с конкретной ролью был бы неточным.
     primary_field: 'external_management_third_party_satisfaction_date_apk',
     fields: [],
     nodes: ['external_management_creditor_notification_apk', 'external_management_report_special_completion_apk'],
@@ -550,6 +556,16 @@ export const SITUATIONS_BANKRUPTCY = [
     primary_field: 'property_exclusion_amount_notice_published_date_apk',
     fields: [],
     nodes: ['property_exclusion_amount_dispute_apk'],
+  },
+  {
+    id: 'bankruptcy_proceeding_extension_appeal',
+    label: 'Обжалование определения о продлении срока конкурсного производства',
+    // Отдельная одноузловая appeal-ветвь — тот же образец, что у
+    // bankruptcy_completion_request_ruling_appeal выше: единственное поле
+    // ветви — дата изготовления определения в полном объёме.
+    primary_field: 'bankruptcy_proceeding_extension_ruling_date_apk',
+    fields: [],
+    nodes: ['bankruptcy_proceeding_extension_appeal_apk'],
   },
 ];
 

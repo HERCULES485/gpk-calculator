@@ -96,8 +96,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 42,
-  'переключатель ситуаций отрисован не на сорок две ветви',
+  (await page.locator('#situation input[type=radio]').count()) === 43,
+  'переключатель ситуаций отрисован не на сорок три ветви',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -1200,7 +1200,7 @@ check(
   notificationText.includes('п. 1 ст. 116 ФЗ № 127-ФЗ'),
   'норма п. 1 ст. 116 ФЗ № 127-ФЗ не показана на карточке уведомления кредиторов',
 );
-const specialReportCard = cardByTitle('Направление отчёта внешнего управляющего в суд без рассмотрения собранием кредиторов');
+const specialReportCard = cardByTitle('Направление отчёта арбитражного управляющего в суд без рассмотрения собранием кредиторов');
 check((await specialReportCard.count()) === 1, 'карточка отчёта без рассмотрения собранием не появилась');
 check(
   (await deadlineOf(specialReportCard)) === '27.01.2026',
@@ -1688,6 +1688,34 @@ check(
 check(
   amountDisputeText.includes('п. 2 ст. 213.27 ФЗ № 127-ФЗ'),
   'норма п. 2 ст. 213.27 ФЗ № 127-ФЗ не показана на карточке ходатайства об уменьшении размера денежных средств',
+);
+
+// --- Ветвь: обжалование определения о продлении срока конкурсного
+// производства (п. 3 ст. 124, ч. 1 ст. 61) -------------------------------------
+
+await chooseSituation('bankruptcy_proceeding_extension_appeal');
+check(
+  (await page.locator('#in-bankruptcy_proceeding_extension_ruling_date_apk').count()) === 1,
+  'ветвь "bankruptcy_proceeding_extension_appeal": основное поле не найдено в DOM',
+);
+await page.fill('#in-bankruptcy_proceeding_extension_ruling_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви обжалования определения о продлении срока конкурсного производства ожидалась одна карточка',
+);
+const proceedingExtensionCard = cardByTitle('Обжалование определения о продлении срока конкурсного производства');
+check(
+  (await proceedingExtensionCard.count()) === 1,
+  'карточка обжалования определения о продлении срока конкурсного производства не появилась',
+);
+check(
+  (await deadlineOf(proceedingExtensionCard)) === '11.04.2025',
+  `срок обжалования посчитан неверно: ${await deadlineOf(proceedingExtensionCard)}`,
+);
+check(
+  (await proceedingExtensionCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
+  'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке обжалования определения о продлении срока конкурсного производства',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------

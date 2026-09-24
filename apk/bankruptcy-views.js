@@ -74,6 +74,7 @@ import {
   computeBankNotificationDutyApk,
   computePropertyExclusionRulingAppealApk,
   computePropertyExclusionAmountDisputeApk,
+  computeBankruptcyProceedingExtensionAppealApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -127,6 +128,7 @@ import {
   BANK_NOTIFICATION_DUTY_APK,
   PROPERTY_EXCLUSION_RULING_APPEAL_APK,
   PROPERTY_EXCLUSION_AMOUNT_DISPUTE_APK,
+  BANKRUPTCY_PROCEEDING_EXTENSION_APPEAL_APK,
 } from './bankruptcy.js';
 
 import {
@@ -770,6 +772,14 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     kind: 'working_day',
     deps: () => ['property_exclusion_amount_notice_published_date_apk'],
     compute: (i) => computePropertyExclusionAmountDisputeApk(i),
+  },
+  // Обжалование определения о продлении срока конкурсного производства
+  // (п. 3 ст. 124, ч. 1 ст. 61) — обычный месячный узел, тот же паттерн
+  // регистрации, что и у остальных appeal-узлов домена (без kind).
+  bankruptcy_proceeding_extension_appeal_apk: {
+    node: BANKRUPTCY_PROCEEDING_EXTENSION_APPEAL_APK,
+    deps: () => ['bankruptcy_proceeding_extension_ruling_date_apk'],
+    compute: (i) => computeBankruptcyProceedingExtensionAppealApk(i),
   },
 };
 
