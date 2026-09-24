@@ -96,8 +96,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 44,
-  'переключатель ситуаций отрисован не на сорок четыре ветви',
+  (await page.locator('#situation input[type=radio]').count()) === 45,
+  'переключатель ситуаций отрисован не на сорок пять ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -1758,6 +1758,37 @@ await settle();
 check(
   (await deadlineOf(challengeCard)) === '10.01.2024',
   `срок оспаривания сделки при более поздней дате утверждения посчитан неверно: ${await deadlineOf(challengeCard)}`,
+);
+
+// --- Ветвь: срок исковой давности по оспариванию сделки должника-гражданина
+// (п. 2 ст. 213.32 ФЗ № 127-ФЗ; п. 2 ст. 181 ГК РФ) — одно поле, отдельная
+// ветвь от transaction_challenge_limitation выше (юрлица) ---------------------
+
+await chooseSituation('transaction_challenge_limitation_citizen');
+check(
+  (await page.locator('#in-transaction_challenge_financial_manager_knew_date_apk').count()) === 1,
+  'ветвь "transaction_challenge_limitation_citizen": поле даты знания финансового управляющего не найдено в DOM',
+);
+await page.fill('#in-transaction_challenge_financial_manager_knew_date_apk', '11.03.2024');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви оспаривания сделки должника-гражданина ожидалась одна карточка',
+);
+const challengeCitizenCard = cardByTitle(
+  'Срок исковой давности по заявлению об оспаривании сделки должника-гражданина',
+);
+check(
+  (await challengeCitizenCard.count()) === 1,
+  'карточка оспаривания сделки должника-гражданина не появилась',
+);
+check(
+  (await deadlineOf(challengeCitizenCard)) === '11.03.2025',
+  `срок оспаривания сделки должника-гражданина посчитан неверно: ${await deadlineOf(challengeCitizenCard)}`,
+);
+check(
+  (await challengeCitizenCard.innerText()).includes('п. 2 ст. 181 ГК РФ'),
+  'норма п. 2 ст. 181 ГК РФ не показана на карточке оспаривания сделки должника-гражданина',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------

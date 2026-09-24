@@ -125,6 +125,8 @@ import {
   BANKRUPTCY_PROCEEDING_EXTENSION_APPEAL_APK,
   computeTransactionChallengeLimitationApk,
   TRANSACTION_CHALLENGE_LIMITATION_APK,
+  computeTransactionChallengeLimitationCitizenApk,
+  TRANSACTION_CHALLENGE_LIMITATION_CITIZEN_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -3037,4 +3039,60 @@ test('оспаривание сделки должника: primary — п. 2 с
   assert.doesNotMatch(TRANSACTION_CHALLENGE_LIMITATION_APK.norm_versions[0].norm.primary, /61\.9|61\.2|61\.3/);
   assert.match(TRANSACTION_CHALLENGE_LIMITATION_APK.title, /61\.2, 61\.3/);
   assert.equal(TRANSACTION_CHALLENGE_LIMITATION_APK.restoration_norm, undefined);
+});
+
+// Задача — срок исковой давности по оспариванию сделки должника-гражданина
+// (п. 2 ст. 213.32 ФЗ № 127-ФЗ; п. 2 ст. 181 ГК РФ). Отдельная ветвь от
+// TRANSACTION_CHALLENGE_LIMITATION_APK выше (юрлица): здесь якорь — ОДНО
+// поле (дата, когда финансовый управляющий узнал или должен был узнать об
+// основаниях), без сравнения с датой утверждения управляющего — п. 2
+// ст. 213.32 ФЗ № 127-ФЗ не даёт второй даты, а Постановление Пленума ВС РФ
+// от 13.10.2015 № 45 не содержит аналога уточнения из п. 32 ПП ВАС РФ № 63.
+
+test('оспаривание сделки должника-гражданина: обычный случай — год с даты, когда финансовый управляющий узнал об основаниях', () => {
+  const term = computeTransactionChallengeLimitationCitizenApk({
+    transaction_challenge_financial_manager_knew_date_apk: '2024-03-11',
+  });
+  assert.equal(term.anchor, '2024-03-11');
+  assert.equal(term.raw_deadline, '2025-03-11');
+  assert.equal(term.deadline, '2025-03-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'year' });
+  assert.equal(term.norm.primary, 'п. 2 ст. 181 ГК РФ');
+});
+
+test('оспаривание сделки должника-гражданина: перенос через новогодние каникулы (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeTransactionChallengeLimitationCitizenApk({
+    transaction_challenge_financial_manager_knew_date_apk: '2025-01-01',
+  });
+  assert.equal(term.raw_deadline, '2026-01-01');
+  assert.equal(term.deadline, '2026-01-12');
+  assert.equal(term.shifted, true);
+});
+
+test('оспаривание сделки должника-гражданина: без даты знания об основаниях — понятная ошибка', () => {
+  assert.throws(
+    () => computeTransactionChallengeLimitationCitizenApk({}),
+    /transaction_challenge_financial_manager_knew_date_apk/,
+  );
+});
+
+test('оспаривание сделки должника-гражданина: primary — п. 2 ст. 181 ГК РФ (число срока), а не п. 2 ст. 213.32 ФЗ № 127-ФЗ (институт, только в title), без restoration', () => {
+  assert.equal(
+    TRANSACTION_CHALLENGE_LIMITATION_CITIZEN_APK.norm_versions[0].norm.primary,
+    'п. 2 ст. 181 ГК РФ',
+  );
+  assert.doesNotMatch(
+    TRANSACTION_CHALLENGE_LIMITATION_CITIZEN_APK.norm_versions[0].norm.primary,
+    /213\.32/,
+  );
+  assert.match(TRANSACTION_CHALLENGE_LIMITATION_CITIZEN_APK.title, /213\.32/);
+  assert.equal(TRANSACTION_CHALLENGE_LIMITATION_CITIZEN_APK.restoration_norm, undefined);
+});
+
+test('оспаривание сделки должника-гражданина: узел отдельная ветвь от TRANSACTION_CHALLENGE_LIMITATION_APK (юрлица) — разные id и разные поля ввода', () => {
+  assert.notEqual(
+    TRANSACTION_CHALLENGE_LIMITATION_CITIZEN_APK.id,
+    TRANSACTION_CHALLENGE_LIMITATION_APK.id,
+  );
 });
