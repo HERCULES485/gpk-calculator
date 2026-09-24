@@ -84,6 +84,11 @@ export const BANKRUPTCY_SITUATION_CATEGORIES = [
   },
   {
     title: 'Общее — применимо на нескольких стадиях',
-    ids: ['creditor_claims', 'appraiser_involvement_request', 'appraisal_report_registry_inclusion'],
+    ids: [
+      'creditor_claims',
+      'appraiser_involvement_request',
+      'appraisal_report_registry_inclusion',
+      'transaction_challenge_limitation',
+    ],
   },
 ];
