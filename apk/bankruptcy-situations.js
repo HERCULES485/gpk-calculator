@@ -580,6 +580,17 @@ export const SITUATIONS_BANKRUPTCY = [
     ],
     nodes: ['transaction_challenge_limitation_apk'],
   },
+  {
+    id: 'transaction_challenge_limitation_citizen',
+    label: 'Оспаривание сделки должника-гражданина — срок исковой давности',
+    // Отдельная ветвь от transaction_challenge_limitation выше (юрлица): там
+    // два обязательных поля без primary_field, здесь — ОДНО поле (п. 2
+    // ст. 213.32 ФЗ № 127-ФЗ не даёт второй даты для сравнения, см.
+    // комментарий к узлу в apk/bankruptcy.js), поэтому обычный primary_field.
+    primary_field: 'transaction_challenge_financial_manager_knew_date_apk',
+    fields: [],
+    nodes: ['transaction_challenge_limitation_citizen_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';

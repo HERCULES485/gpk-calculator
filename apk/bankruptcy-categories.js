@@ -80,6 +80,7 @@ export const BANKRUPTCY_SITUATION_CATEGORIES = [
       'out_of_court_bankruptcy',
       'out_of_court_bankruptcy_returned',
       'out_of_court_bankruptcy_prior_completed',
+      'transaction_challenge_limitation_citizen',
     ],
   },
   {

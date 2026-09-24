@@ -76,6 +76,7 @@ import {
   computePropertyExclusionAmountDisputeApk,
   computeBankruptcyProceedingExtensionAppealApk,
   computeTransactionChallengeLimitationApk,
+  computeTransactionChallengeLimitationCitizenApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -131,6 +132,7 @@ import {
   PROPERTY_EXCLUSION_AMOUNT_DISPUTE_APK,
   BANKRUPTCY_PROCEEDING_EXTENSION_APPEAL_APK,
   TRANSACTION_CHALLENGE_LIMITATION_APK,
+  TRANSACTION_CHALLENGE_LIMITATION_CITIZEN_APK,
 } from './bankruptcy.js';
 
 import {
@@ -795,6 +797,16 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
       'transaction_challenge_manager_appointed_date_apk',
     ],
     compute: (i) => computeTransactionChallengeLimitationApk(i),
+  },
+  // Срок исковой давности по оспариванию сделки должника-гражданина (п. 2
+  // ст. 213.32 ФЗ № 127-ФЗ; п. 2 ст. 181 ГК РФ) — отдельная ветвь от
+  // transaction_challenge_limitation_apk выше (юрлица): здесь одно
+  // обязательное поле, якорь не сравнивается с датой утверждения
+  // управляющего (см. комментарий к узлу в apk/bankruptcy.js).
+  transaction_challenge_limitation_citizen_apk: {
+    node: TRANSACTION_CHALLENGE_LIMITATION_CITIZEN_APK,
+    deps: () => ['transaction_challenge_financial_manager_knew_date_apk'],
+    compute: (i) => computeTransactionChallengeLimitationCitizenApk(i),
   },
 };
 
