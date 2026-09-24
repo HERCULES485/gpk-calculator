@@ -90,6 +90,8 @@ import {
   REASONABLE_TERM_EXECUTION_COMPENSATION_APK,
   computeSimplifiedProceedingsAppealApk,
   SIMPLIFIED_PROCEEDINGS_APPEAL_APK,
+  computeSimplifiedProceedingsEntryIntoForceApk,
+  SIMPLIFIED_PROCEEDINGS_ENTRY_INTO_FORCE_APK,
   computeCourtOrderObjectionApk,
   COURT_ORDER_OBJECTION_APK,
   computeNonnormativeActChallengeApk,
@@ -2658,4 +2660,42 @@ test('шесть узлов сокращённой апелляции: без re
     assert.equal(node.weekend_shift, undefined);
     assert.deepEqual(node.norm_versions[0].norm.calculation, ['ч. 3 ст. 113 АПК РФ']);
   }
+});
+
+// Задача — вступление в законную силу решения по делу упрощённого
+// производства (ч. 3 ст. 229 АПК РФ). Узел-событие, по образцу
+// ENTRY_INTO_FORCE_APK: не дедлайн, а дата наступления юридического факта.
+
+test('упрощённое производство: вступление в силу — день, следующий за дедлайном пятнадцатидневного срока', () => {
+  // Дедлайн апелляции для 11.03.2025 — 01.04.2025 (см. тест выше на
+  // computeSimplifiedProceedingsAppealApk), вступление в силу — 02.04.2025.
+  const entry = computeSimplifiedProceedingsEntryIntoForceApk({
+    simplified_proceedings_decision_date: '2025-03-11',
+  });
+  assert.equal(entry.id, 'simplified_proceedings_entry_into_force_apk');
+  assert.equal(entry.date, '2025-04-02');
+  assert.equal(entry.based_on, 'simplified_proceedings_appeal_apk');
+});
+
+test('упрощённое производство: вступление в силу — считается от рабочих дней, перенос через новогодние каникулы учтён', () => {
+  // Тот же якорь, что и в тесте на перенос через каникулы у
+  // computeSimplifiedProceedingsAppealApk: дедлайн 28.01.2026, вступление —
+  // 29.01.2026, а не «наивные» 10.01.2026 + 1.
+  const entry = computeSimplifiedProceedingsEntryIntoForceApk({
+    simplified_proceedings_decision_date: '2025-12-26',
+  });
+  assert.equal(entry.date, '2026-01-29');
+  assert.notEqual(entry.date, '2026-01-11');
+});
+
+test('упрощённое производство: вступление в силу — без simplified_proceedings_decision_date — понятная ошибка', () => {
+  assert.throws(
+    () => computeSimplifiedProceedingsEntryIntoForceApk({}),
+    /simplified_proceedings_decision_date/,
+  );
+});
+
+test('упрощённое производство: вступление в силу — норма ч. 3 ст. 229, без top-level duration (узел-событие)', () => {
+  assert.equal(SIMPLIFIED_PROCEEDINGS_ENTRY_INTO_FORCE_APK.norm.primary, 'ч. 3 ст. 229 АПК РФ');
+  assert.equal(SIMPLIFIED_PROCEEDINGS_ENTRY_INTO_FORCE_APK.duration, undefined);
 });
