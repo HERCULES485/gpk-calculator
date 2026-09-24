@@ -75,6 +75,7 @@ import {
   computePropertyExclusionRulingAppealApk,
   computePropertyExclusionAmountDisputeApk,
   computeBankruptcyProceedingExtensionAppealApk,
+  computeTransactionChallengeLimitationApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -129,6 +130,7 @@ import {
   PROPERTY_EXCLUSION_RULING_APPEAL_APK,
   PROPERTY_EXCLUSION_AMOUNT_DISPUTE_APK,
   BANKRUPTCY_PROCEEDING_EXTENSION_APPEAL_APK,
+  TRANSACTION_CHALLENGE_LIMITATION_APK,
 } from './bankruptcy.js';
 
 import {
@@ -780,6 +782,19 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     node: BANKRUPTCY_PROCEEDING_EXTENSION_APPEAL_APK,
     deps: () => ['bankruptcy_proceeding_extension_ruling_date_apk'],
     compute: (i) => computeBankruptcyProceedingExtensionAppealApk(i),
+  },
+  // Срок исковой давности по оспариванию сделки должника (п. 1 ст. 61.9,
+  // ст. 61.2/61.3 ФЗ № 127-ФЗ; п. 2 ст. 181 ГК РФ) — обычный годовой узел без
+  // kind (monthTermCard), тот же паттерн регистрации, что и у остальных
+  // term-узлов домена. Оба поля ветви обязательны одновременно — якорь
+  // считается внутри compute-функции как более позднее из них.
+  transaction_challenge_limitation_apk: {
+    node: TRANSACTION_CHALLENGE_LIMITATION_APK,
+    deps: () => [
+      'transaction_challenge_manager_knew_date_apk',
+      'transaction_challenge_manager_appointed_date_apk',
+    ],
+    compute: (i) => computeTransactionChallengeLimitationApk(i),
   },
 };
 

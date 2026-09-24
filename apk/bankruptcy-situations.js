@@ -567,6 +567,19 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['bankruptcy_proceeding_extension_appeal_apk'],
   },
+  {
+    id: 'transaction_challenge_limitation',
+    label: 'Оспаривание сделки должника — срок исковой давности',
+    // Без primary_field: оба поля нужны ОДНОВРЕМЕННО, и ни одно не главнее
+    // другого — якорь узла считается как более позднее из них (см.
+    // комментарий к узлу в apk/bankruptcy.js), выделять одно из двух полей
+    // наверх было бы произволом.
+    fields: [
+      'transaction_challenge_manager_knew_date_apk',
+      'transaction_challenge_manager_appointed_date_apk',
+    ],
+    nodes: ['transaction_challenge_limitation_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';

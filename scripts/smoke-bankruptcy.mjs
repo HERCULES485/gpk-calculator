@@ -96,8 +96,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 43,
-  'переключатель ситуаций отрисован не на сорок три ветви',
+  (await page.locator('#situation input[type=radio]').count()) === 44,
+  'переключатель ситуаций отрисован не на сорок четыре ветви',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -1716,6 +1716,48 @@ check(
 check(
   (await proceedingExtensionCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
   'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке обжалования определения о продлении срока конкурсного производства',
+);
+
+// --- Ветвь: срок исковой давности по оспариванию сделки должника (п. 1
+// ст. 61.9, ст. 61.2/61.3 ФЗ № 127-ФЗ; п. 2 ст. 181 ГК РФ) — оба поля
+// обязательны одновременно, якорь — более позднее из них ------------------------
+
+await chooseSituation('transaction_challenge_limitation');
+check(
+  (await page.locator('#in-transaction_challenge_manager_knew_date_apk').count()) === 1,
+  'ветвь "transaction_challenge_limitation": поле даты знания об основаниях не найдено в DOM',
+);
+check(
+  (await page.locator('#in-transaction_challenge_manager_appointed_date_apk').count()) === 1,
+  'ветвь "transaction_challenge_limitation": поле даты утверждения управляющего не найдено в DOM',
+);
+
+// Случай (а) позже (б): узнал об основаниях позже своего утверждения — обычный случай.
+await page.fill('#in-transaction_challenge_manager_knew_date_apk', '11.03.2024');
+await page.fill('#in-transaction_challenge_manager_appointed_date_apk', '10.01.2023');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви оспаривания сделки должника ожидалась одна карточка',
+);
+const challengeCard = cardByTitle('Срок исковой давности по заявлению об оспаривании сделки должника');
+check((await challengeCard.count()) === 1, 'карточка оспаривания сделки должника не появилась');
+check(
+  (await deadlineOf(challengeCard)) === '11.03.2025',
+  `срок оспаривания сделки при более поздней дате знания посчитан неверно: ${await deadlineOf(challengeCard)}`,
+);
+check(
+  (await challengeCard.innerText()).includes('п. 2 ст. 181 ГК РФ'),
+  'норма п. 2 ст. 181 ГК РФ не показана на карточке оспаривания сделки должника',
+);
+
+// Случай (б) позже (а): узнал об основаниях ДО своего утверждения (например, будучи
+// временным управляющим в наблюдении) — якорь переносится на дату утверждения.
+await page.fill('#in-transaction_challenge_manager_knew_date_apk', '01.05.2022');
+await settle();
+check(
+  (await deadlineOf(challengeCard)) === '10.01.2024',
+  `срок оспаривания сделки при более поздней дате утверждения посчитан неверно: ${await deadlineOf(challengeCard)}`,
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------

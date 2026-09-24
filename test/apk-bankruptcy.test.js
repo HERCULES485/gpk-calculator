@@ -123,6 +123,8 @@ import {
   PROPERTY_EXCLUSION_AMOUNT_DISPUTE_APK,
   computeBankruptcyProceedingExtensionAppealApk,
   BANKRUPTCY_PROCEEDING_EXTENSION_APPEAL_APK,
+  computeTransactionChallengeLimitationApk,
+  TRANSACTION_CHALLENGE_LIMITATION_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -2954,4 +2956,85 @@ test('обжалование определения о продлении сро
     BANKRUPTCY_COMPLETION_REQUEST_RULING_APPEAL_APK.norm_versions[0].norm.calculation,
   );
   assert.equal(BANKRUPTCY_PROCEEDING_EXTENSION_APPEAL_APK.restoration_norm, undefined);
+});
+
+// Задача — срок исковой давности по оспариванию сделки должника (п. 1
+// ст. 61.9, ст. 61.2/61.3 ФЗ № 127-ФЗ; п. 2 ст. 181 ГК РФ; п. 32
+// Постановления Пленума ВАС РФ от 23.12.2010 № 63). Первый узел домена, чей
+// якорь — более поздняя из двух независимых пользовательских дат (не
+// альтернатива и не минимум/максимум длительности, а Math.max по датам
+// внутри compute-функции, см. комментарий к узлу в apk/bankruptcy.js).
+
+test('оспаривание сделки должника: обычный случай — лицо узнало об основаниях ПОЗЖЕ своего утверждения управляющим, якорь — дата знания', () => {
+  const term = computeTransactionChallengeLimitationApk({
+    transaction_challenge_manager_knew_date_apk: '2024-03-11',
+    transaction_challenge_manager_appointed_date_apk: '2023-01-10',
+  });
+  assert.equal(term.anchor, '2024-03-11');
+  assert.equal(term.raw_deadline, '2025-03-11');
+  assert.equal(term.deadline, '2025-03-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'year' });
+  assert.equal(term.norm.primary, 'п. 2 ст. 181 ГК РФ');
+});
+
+test('оспаривание сделки должника: лицо узнало об основаниях ДО своего утверждения управляющим (например, будучи временным управляющим в наблюдении) — якорь переносится на дату утверждения', () => {
+  const term = computeTransactionChallengeLimitationApk({
+    transaction_challenge_manager_knew_date_apk: '2022-05-01',
+    transaction_challenge_manager_appointed_date_apk: '2023-01-10',
+  });
+  assert.equal(term.anchor, '2023-01-10');
+  assert.equal(term.raw_deadline, '2024-01-10');
+  assert.equal(term.deadline, '2024-01-10');
+});
+
+test('оспаривание сделки должника: равные даты знания и утверждения — якорь совпадает с обеими', () => {
+  const term = computeTransactionChallengeLimitationApk({
+    transaction_challenge_manager_knew_date_apk: '2023-06-14',
+    transaction_challenge_manager_appointed_date_apk: '2023-06-14',
+  });
+  assert.equal(term.anchor, '2023-06-14');
+  assert.equal(term.raw_deadline, '2024-06-14');
+  assert.equal(term.deadline, '2024-06-14');
+  assert.equal(term.shifted, false);
+});
+
+test('оспаривание сделки должника: перенос через новогодние каникулы (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeTransactionChallengeLimitationApk({
+    transaction_challenge_manager_knew_date_apk: '2025-01-01',
+    transaction_challenge_manager_appointed_date_apk: '2020-01-01',
+  });
+  assert.equal(term.raw_deadline, '2026-01-01');
+  assert.equal(term.deadline, '2026-01-12');
+  assert.equal(term.shifted, true);
+});
+
+test('оспаривание сделки должника: без даты знания об основаниях — понятная ошибка', () => {
+  assert.throws(
+    () =>
+      computeTransactionChallengeLimitationApk({
+        transaction_challenge_manager_appointed_date_apk: '2023-01-10',
+      }),
+    /transaction_challenge_manager_knew_date_apk/,
+  );
+});
+
+test('оспаривание сделки должника: без даты утверждения управляющего — понятная ошибка', () => {
+  assert.throws(
+    () =>
+      computeTransactionChallengeLimitationApk({
+        transaction_challenge_manager_knew_date_apk: '2024-03-11',
+      }),
+    /transaction_challenge_manager_appointed_date_apk/,
+  );
+});
+
+test('оспаривание сделки должника: primary — п. 2 ст. 181 ГК РФ (число срока), а не ст. 61.9/61.2/61.3 ФЗ № 127-ФЗ (институт, только в title), без restoration', () => {
+  assert.equal(
+    TRANSACTION_CHALLENGE_LIMITATION_APK.norm_versions[0].norm.primary,
+    'п. 2 ст. 181 ГК РФ',
+  );
+  assert.doesNotMatch(TRANSACTION_CHALLENGE_LIMITATION_APK.norm_versions[0].norm.primary, /61\.9|61\.2|61\.3/);
+  assert.match(TRANSACTION_CHALLENGE_LIMITATION_APK.title, /61\.2, 61\.3/);
+  assert.equal(TRANSACTION_CHALLENGE_LIMITATION_APK.restoration_norm, undefined);
 });
