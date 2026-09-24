@@ -33,6 +33,7 @@ export const BANKRUPTCY_SITUATION_CATEGORIES = [
       'bankruptcy_declaration',
       'bankruptcy_inventory_results_registry',
       'settlement_agreement_rejection_appeal',
+      'bankruptcy_proceeding_extension_appeal',
     ],
   },
   {
