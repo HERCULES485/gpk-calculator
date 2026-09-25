@@ -12,7 +12,23 @@
 export const SITUATION_CATEGORIES_APK = [
   {
     title: 'Решение и его обжалование',
-    ids: ['decision_chain', 'rulings', 'enforcement', 'court_costs'],
+    // evidence_unavailability_notice и enforcement_writ_duplicate_request —
+    // размещены в этой, самой широкой по темам категории за неимением более
+    // точного существующего варианта (ни одна из остальных категорий не
+    // подходит по смыслу — не обжалование определения, не приказное/
+    // упрощённое производство, не оспаривание акта госоргана, не
+    // компенсация, не надзор/пересмотр). Решение показать на проверку
+    // архитектору вместе с diff перед PR, не вводя новую категорию по
+    // собственной инициативе (CLAUDE.md: категоризация — в существующую
+    // категорию).
+    ids: [
+      'decision_chain',
+      'rulings',
+      'enforcement',
+      'court_costs',
+      'evidence_unavailability_notice',
+      'enforcement_writ_duplicate_request',
+    ],
   },
   {
     title: 'Приказное и упрощённое производство',
@@ -63,6 +79,8 @@ export const SITUATION_CATEGORIES_APK = [
       'deadline_extension_refusal_appeal',
       'decision_clarification_ruling_appeal',
       'enforcement_restoration_ruling_appeal',
+      'court_fine_appeal',
+      'additional_decision_refusal_appeal',
     ],
   },
 ];

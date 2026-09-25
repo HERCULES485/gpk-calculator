@@ -393,6 +393,61 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['enforcement_restoration_ruling_appeal_apk'],
   },
+  {
+    id: 'evidence_unavailability_notice',
+    label: 'Не могу представить истребуемое судом доказательство',
+    // Ч. 8 ст. 66 АПК РФ. Единственное поле — дата получения копии определения
+    // об истребовании доказательства (не дата его вынесения — см.
+    // apk/chain.js). Восстановления/продления этого срока норма не
+    // предусматривает вообще — отдельного узла и уточняющих полей для него
+    // нет.
+    primary_field: 'evidence_request_copy_received_date_apk',
+    fields: [],
+    nodes: ['evidence_unavailability_notice_apk'],
+  },
+  {
+    id: 'enforcement_writ_duplicate_request',
+    label:
+      'Исполнительный лист утрачен приставом или иным исполняющим лицом — ' +
+      'нужен дубликат',
+    // Ч. 2 ст. 323 АПК РФ, исключительная ветка (утрата листа судебным
+    // приставом-исполнителем или иным осуществляющим исполнение лицом,
+    // обнаруженная взыскателем после истечения срока предъявления листа к
+    // исполнению) — см. подробный разбор обеих веток ч. 2 в apk/chain.js.
+    // Восстановление без числового потолка не найдено (тот же случай, что и
+    // у ст. 322) — отдельного узла и уточняющих полей для него нет.
+    primary_field: 'enforcement_writ_loss_known_date_apk',
+    fields: [],
+    nodes: ['enforcement_writ_duplicate_request_apk'],
+  },
+  {
+    id: 'court_fine_appeal',
+    label: 'Суд наложил судебный штраф — хочу обжаловать',
+    // Ч. 6 ст. 120 АПК РФ (в задаче ошибочно указана как ст. 119 п. 6 — при
+    // сверке с первоисточником текст подтвердился, но действует в ч. 6
+    // ст. 120, см. apk/chain.js). Якорь — дата ПОЛУЧЕНИЯ копии определения,
+    // не дата его вынесения. Восстановления/продления этого срока норма не
+    // предусматривает вообще — отдельного узла и уточняющих полей для него
+    // нет.
+    primary_field: 'court_fine_ruling_copy_received_date_apk',
+    fields: [],
+    nodes: ['court_fine_appeal_apk'],
+  },
+  {
+    id: 'additional_decision_refusal_appeal',
+    label:
+      'Суд отказал в принятии дополнительного решения — хочу обжаловать ' +
+      'определение',
+    // Ч. 5 ст. 178 АПК РФ. Числа в самой норме нет — общий месячный срок по
+    // ч. 3 ст. 188 АПК РФ (та же формула, что у injunction_refusal_appeal_apk
+    // и других companion-узлов). Само дополнительное решение (в отличие от
+    // определения об отказе в его принятии) обжалуется по общему правилу
+    // (appeal_general_apk, ст. 259) — отдельной ветки для него здесь нет, см.
+    // apk/chain.js.
+    primary_field: 'additional_decision_refusal_ruling_date_apk',
+    fields: [],
+    nodes: ['additional_decision_refusal_appeal_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';
