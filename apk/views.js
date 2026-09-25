@@ -56,6 +56,8 @@ import {
   computeCaseConsolidationSeveranceRefusalAppealApk,
   computeSpecialRulingAppealApk,
   computeInjunctionRefusalAppealApk,
+  computeCounterSecurityRulingAppealApk,
+  computeInjunctionCancellationRulingAppealApk,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -95,6 +97,8 @@ import {
   CASE_CONSOLIDATION_SEVERANCE_REFUSAL_APPEAL_APK,
   SPECIAL_RULING_APPEAL_APK,
   INJUNCTION_REFUSAL_APPEAL_APK,
+  COUNTER_SECURITY_RULING_APPEAL_APK,
+  INJUNCTION_CANCELLATION_RULING_APPEAL_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -635,6 +639,16 @@ const NODE_REQUIREMENTS = {
     node: INJUNCTION_REFUSAL_APPEAL_APK,
     deps: () => ['injunction_refusal_ruling_date_apk'],
     compute: (i) => computeInjunctionRefusalAppealApk(i),
+  },
+  counter_security_ruling_appeal_apk: {
+    node: COUNTER_SECURITY_RULING_APPEAL_APK,
+    deps: () => ['counter_security_ruling_date_apk'],
+    compute: (i) => computeCounterSecurityRulingAppealApk(i),
+  },
+  injunction_cancellation_ruling_appeal_apk: {
+    node: INJUNCTION_CANCELLATION_RULING_APPEAL_APK,
+    deps: () => ['injunction_cancellation_ruling_date_apk'],
+    compute: (i) => computeInjunctionCancellationRulingAppealApk(i),
   },
 };
 
