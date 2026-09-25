@@ -77,6 +77,7 @@ import {
   computeBankruptcyProceedingExtensionAppealApk,
   computeTransactionChallengeLimitationApk,
   computeTransactionChallengeLimitationCitizenApk,
+  computeBankruptcySignsRegistryNotificationApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -133,6 +134,7 @@ import {
   BANKRUPTCY_PROCEEDING_EXTENSION_APPEAL_APK,
   TRANSACTION_CHALLENGE_LIMITATION_APK,
   TRANSACTION_CHALLENGE_LIMITATION_CITIZEN_APK,
+  BANKRUPTCY_SIGNS_REGISTRY_NOTIFICATION_APK,
 } from './bankruptcy.js';
 
 import {
@@ -807,6 +809,15 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     node: TRANSACTION_CHALLENGE_LIMITATION_CITIZEN_APK,
     deps: () => ['transaction_challenge_financial_manager_knew_date_apk'],
     compute: (i) => computeTransactionChallengeLimitationCitizenApk(i),
+  },
+  // Первая по хронологии обязанность домена (п. 1 ст. 30 ФЗ № 127-ФЗ, глава
+  // II «Предупреждение банкротства») — тот же паттерн регистрации working_day,
+  // что и у остальных duty-узлов домена.
+  bankruptcy_signs_registry_notification_apk: {
+    node: BANKRUPTCY_SIGNS_REGISTRY_NOTIFICATION_APK,
+    kind: 'working_day',
+    deps: () => ['bankruptcy_signs_known_date_apk'],
+    compute: (i) => computeBankruptcySignsRegistryNotificationApk(i),
   },
 };
 

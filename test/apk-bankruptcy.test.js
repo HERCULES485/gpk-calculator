@@ -127,6 +127,8 @@ import {
   TRANSACTION_CHALLENGE_LIMITATION_APK,
   computeTransactionChallengeLimitationCitizenApk,
   TRANSACTION_CHALLENGE_LIMITATION_CITIZEN_APK,
+  computeBankruptcySignsRegistryNotificationApk,
+  BANKRUPTCY_SIGNS_REGISTRY_NOTIFICATION_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -3094,5 +3096,56 @@ test('оспаривание сделки должника-гражданина:
   assert.notEqual(
     TRANSACTION_CHALLENGE_LIMITATION_CITIZEN_APK.id,
     TRANSACTION_CHALLENGE_LIMITATION_APK.id,
+  );
+});
+
+// Задача — включение сведений о признаках банкротства в ЕФРСБ (п. 1 ст. 30
+// ФЗ № 127-ФЗ, глава II «Предупреждение банкротства»). Первая по хронологии
+// обязанность домена — возникает до возбуждения дела о банкротстве.
+
+test('включение сведений о признаках банкротства в ЕФРСБ: десять рабочих дней с даты, когда руководителю стало известно, без праздничных кластеров рядом', () => {
+  const term = computeBankruptcySignsRegistryNotificationApk({
+    bankruptcy_signs_known_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-03-25');
+  assert.equal(term.deadline, '2025-03-25');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'п. 1 ст. 30 ФЗ № 127-ФЗ');
+});
+
+test('включение сведений о признаках банкротства в ЕФРСБ: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeBankruptcySignsRegistryNotificationApk({
+    bankruptcy_signs_known_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-21');
+});
+
+test('включение сведений о признаках банкротства в ЕФРСБ: без bankruptcy_signs_known_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeBankruptcySignsRegistryNotificationApk({}),
+    /bankruptcy_signs_known_date_apk/,
+  );
+});
+
+test('включение сведений о признаках банкротства в ЕФРСБ: calculation — тот же массив, что у остальных working_day duty-узлов домена, без restoration', () => {
+  assert.deepEqual(
+    BANKRUPTCY_SIGNS_REGISTRY_NOTIFICATION_APK.norm_versions[0].norm.calculation,
+    DEBTOR_RESPONSE_BANKRUPTCY_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(BANKRUPTCY_SIGNS_REGISTRY_NOTIFICATION_APK.restoration_norm, undefined);
+});
+
+test('включение сведений о признаках банкротства в ЕФРСБ: узел отдельная ветвь от остальных ЕФРСБ-узлов домена — разные id и разные поля ввода', () => {
+  assert.notEqual(
+    BANKRUPTCY_SIGNS_REGISTRY_NOTIFICATION_APK.id,
+    APPRAISAL_REPORT_REGISTRY_INCLUSION_APK.id,
+  );
+  assert.equal(
+    BANKRUPTCY_SIGNS_REGISTRY_NOTIFICATION_APK.norm_versions[0].norm.primary,
+    'п. 1 ст. 30 ФЗ № 127-ФЗ',
   );
 });

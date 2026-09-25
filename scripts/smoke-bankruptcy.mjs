@@ -96,8 +96,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 45,
-  'переключатель ситуаций отрисован не на сорок пять ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 46,
+  'переключатель ситуаций отрисован не на сорок шесть ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -1789,6 +1789,32 @@ check(
 check(
   (await challengeCitizenCard.innerText()).includes('п. 2 ст. 181 ГК РФ'),
   'норма п. 2 ст. 181 ГК РФ не показана на карточке оспаривания сделки должника-гражданина',
+);
+
+// --- Ветвь: включение сведений о признаках банкротства в ЕФРСБ (п. 1 ст. 30
+// ФЗ № 127-ФЗ, глава II «Предупреждение банкротства») — первая по
+// хронологии обязанность домена, десять рабочих дней -------------------------
+
+await chooseSituation('bankruptcy_signs_registry_notification');
+check(
+  (await page.locator('#in-bankruptcy_signs_known_date_apk').count()) === 1,
+  'ветвь "bankruptcy_signs_registry_notification": основное поле не найдено в DOM',
+);
+await page.fill('#in-bankruptcy_signs_known_date_apk', '26.12.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви включения сведений о признаках банкротства ожидалась одна карточка',
+);
+const signsRegistryCard = cardByTitle('Включение сведений о наличии признаков банкротства в ЕФРСБ');
+check((await signsRegistryCard.count()) === 1, 'карточка включения сведений о признаках банкротства не появилась');
+check(
+  (await deadlineOf(signsRegistryCard)) === '21.01.2026',
+  `срок включения сведений о признаках банкротства посчитан неверно: ${await deadlineOf(signsRegistryCard)}`,
+);
+check(
+  (await signsRegistryCard.innerText()).includes('п. 1 ст. 30 ФЗ № 127-ФЗ'),
+  'норма п. 1 ст. 30 ФЗ № 127-ФЗ не показана на карточке включения сведений о признаках банкротства',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------

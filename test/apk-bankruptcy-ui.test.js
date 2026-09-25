@@ -102,6 +102,7 @@ const FULL_INPUTS = {
   transaction_challenge_manager_knew_date_apk: '2024-03-11',
   transaction_challenge_manager_appointed_date_apk: '2023-01-10',
   transaction_challenge_financial_manager_knew_date_apk: '2024-03-11',
+  bankruptcy_signs_known_date_apk: '2025-03-11',
 };
 
 const cardById = (view, id) => view.cards.find((c) => c.id === id);
@@ -109,8 +110,8 @@ const incompleteById = (view, id) => view.incomplete.find((n) => n.id === id);
 
 // --- 1. Покрытие ситуаций ------------------------------------------------------
 
-test('банкротство UI: каждый из пятидесяти шести узлов закреплён ровно за одной ситуацией', () => {
-  assert.equal(BANKRUPTCY_NODE_IDS.length, 56);
+test('банкротство UI: каждый из пятидесяти семи узлов закреплён ровно за одной ситуацией', () => {
+  assert.equal(BANKRUPTCY_NODE_IDS.length, 57);
   assert.doesNotThrow(() => checkSituationCoverage(BANKRUPTCY_NODE_IDS, SITUATIONS_BANKRUPTCY));
   // Обратная сторона того же инварианта: в ситуациях нет узлов-призраков,
   // которых в apk/bankruptcy.js уже (или ещё) нет.
@@ -169,6 +170,7 @@ test('банкротство UI: сорок пять ветвей ожидаем
       'bankruptcy_proceeding_extension_appeal',
       'transaction_challenge_limitation',
       'transaction_challenge_limitation_citizen',
+      'bankruptcy_signs_registry_notification',
     ],
   );
   assert.ok(SITUATIONS_BANKRUPTCY.some((s) => s.id === DEFAULT_SITUATION_BANKRUPTCY));
@@ -189,9 +191,9 @@ test('банкротство UI: у каждого поля всех ветве�
 
 // --- 2. Полный набор данных ----------------------------------------------------
 
-test('банкротство UI: полный набор данных — пятьдесят шесть карточек, incomplete пуст', () => {
+test('банкротство UI: полный набор данных — пятьдесят семь карточек, incomplete пуст', () => {
   const view = buildViewBankruptcy(FULL_INPUTS);
-  assert.equal(view.cards.length, 56);
+  assert.equal(view.cards.length, 57);
   assert.deepEqual(view.incomplete, []);
   assert.deepEqual(view.stubs, []);
   assert.deepEqual([...view.cards.map((c) => c.id)].sort(), [...BANKRUPTCY_NODE_IDS].sort());
@@ -202,10 +204,10 @@ test('банкротство UI: полный набор данных — пят
   );
 });
 
-test('банкротство UI: пустой ввод — ни одной карточки, все пятьдесят шесть узлов в incomplete', () => {
+test('банкротство UI: пустой ввод — ни одной карточки, все пятьдесят семь узлов в incomplete', () => {
   const view = buildViewBankruptcy({});
   assert.deepEqual(view.cards, []);
-  assert.equal(view.incomplete.length, 56);
+  assert.equal(view.incomplete.length, 57);
   for (const node of view.incomplete) {
     assert.equal(node.status, 'not_computed');
     assert.ok(node.missing_inputs.length > 0);
@@ -991,7 +993,7 @@ test('банкротство UI: ни одна карточка не несёт 
   // Негативный тест: признак экспортируемости не должен появиться на карточке
   // по недосмотру — ни как поле ics, ни как метаданные реестра сроков.
   const view = buildViewBankruptcy(FULL_INPUTS);
-  assert.equal(view.cards.length, 56);
+  assert.equal(view.cards.length, 57);
   for (const card of view.cards) {
     assert.equal(card.ics, undefined, `у карточки "${card.id}" появилось поле ics`);
     assert.equal(card.ics_meta, undefined);
@@ -1549,4 +1551,39 @@ test('банкротство UI: ветвь должника-гражданин�
   assert.ok(citizenSituation);
   assert.ok(corporateSituation);
   assert.notDeepEqual(citizenSituation.nodes, corporateSituation.nodes);
+});
+
+// Задача — включение сведений о признаках банкротства в ЕФРСБ (п. 1 ст. 30
+// ФЗ № 127-ФЗ, глава II «Предупреждение банкротства»). Первая по хронологии
+// обязанность домена, категория «Общее — применимо на нескольких стадиях».
+
+test('банкротство UI: новая ветвь включения сведений о признаках банкротства отнесена к категории «Общее — применимо на нескольких стадиях»', () => {
+  const category = BANKRUPTCY_SITUATION_CATEGORIES.find(
+    (c) => c.title === 'Общее — применимо на нескольких стадиях',
+  );
+  assert.ok(category);
+  assert.ok(category.ids.includes('bankruptcy_signs_registry_notification'));
+});
+
+test('банкротство UI: включение сведений о признаках банкротства — тоже показывает первый рабочий день', () => {
+  const view = buildViewBankruptcy({
+    bankruptcy_signs_known_date_apk: '2025-12-26',
+  });
+  const card = cardById(view, 'bankruptcy_signs_registry_notification_apk');
+  assert.ok(card);
+  assert.equal(card.kind, 'term');
+  assert.equal(card.unit, 'working_day');
+  assert.ok(card.first_working_day, 'first_working_day должен быть на карточке');
+  assert.equal(card.norm, 'п. 1 ст. 30 ФЗ № 127-ФЗ');
+});
+
+test('банкротство UI: включение сведений о признаках банкротства — без данных узел в incomplete с подписью поля', () => {
+  const view = buildViewBankruptcy({});
+  const node = incompleteById(view, 'bankruptcy_signs_registry_notification_apk');
+  assert.ok(node);
+  assert.deepEqual(
+    node.missing_inputs.map((f) => f.id),
+    ['bankruptcy_signs_known_date_apk'],
+  );
+  assert.ok(node.missing_inputs[0].label);
 });
