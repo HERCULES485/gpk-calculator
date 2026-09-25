@@ -131,6 +131,16 @@ import {
   BANKRUPTCY_SIGNS_REGISTRY_NOTIFICATION_APK,
   computeFilingNoticeValidityApk,
   FILING_NOTICE_VALIDITY_APK,
+  computeExcludedPropertyAcceptanceApk,
+  EXCLUDED_PROPERTY_ACCEPTANCE_APK,
+  computeClaimSalePaymentApk,
+  CLAIM_SALE_PAYMENT_APK,
+  computeManagerReleaseAppealApk,
+  MANAGER_RELEASE_APPEAL_APK,
+  computeManagerRemovalAppealApk,
+  MANAGER_REMOVAL_APPEAL_APK,
+  computeCreditorsMeetingExternalManagementTransitionApk,
+  CREDITORS_MEETING_EXTERNAL_MANAGEMENT_TRANSITION_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -3204,4 +3214,238 @@ test('утрата силы уведомления о намерении обр�
     FILING_NOTICE_VALIDITY_APK.norm_versions[0].norm.primary,
     'абзац второй п. 2.1 ст. 7 ФЗ № 127-ФЗ',
   );
+});
+
+// --- Остаток главы VII ФЗ № 127-ФЗ (ст. 132, 140, 144, 145, 146) — конкурсное
+// производство. Пять новых узлов. Restoration — ни для одного из них: каждая
+// норма проверена отдельно на упоминание института восстановления
+// пропущенного срока, ни в одной такого упоминания нет.
+
+// 1) П. 2 ст. 132 — принятие собственником изъятого из оборота имущества.
+
+test('принятие изъятого из оборота имущества собственником: шесть месяцев с даты получения уведомления, будний день без переноса', () => {
+  const term = computeExcludedPropertyAcceptanceApk({
+    excluded_property_notice_received_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-09-11');
+  assert.equal(term.deadline, '2025-09-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 6, unit: 'month' });
+  assert.equal(term.norm.primary, 'п. 2 ст. 132 ФЗ № 127-ФЗ');
+});
+
+test('принятие изъятого из оборота имущества собственником: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeExcludedPropertyAcceptanceApk({
+    excluded_property_notice_received_date_apk: '2025-08-01',
+  });
+  assert.equal(term.raw_deadline, '2026-02-01');
+  assert.equal(term.deadline, '2026-02-02');
+  assert.equal(term.shifted, true);
+});
+
+test('принятие изъятого из оборота имущества собственником: без excluded_property_notice_received_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeExcludedPropertyAcceptanceApk({}),
+    /excluded_property_notice_received_date_apk/,
+  );
+});
+
+test('принятие изъятого из оборота имущества собственником: primary — п. 2 ст. 132 (число срока даёт сама статья), calculation тот же массив, что у остальных month-узлов домена, без restoration', () => {
+  assert.equal(
+    EXCLUDED_PROPERTY_ACCEPTANCE_APK.norm_versions[0].norm.primary,
+    'п. 2 ст. 132 ФЗ № 127-ФЗ',
+  );
+  assert.deepEqual(EXCLUDED_PROPERTY_ACCEPTANCE_APK.norm_versions[0].norm.calculation, [
+    'ч. 4 ст. 113',
+    'ч. 2, 4 ст. 114 АПК РФ',
+    'ст. 223 АПК РФ',
+  ]);
+  assert.equal(EXCLUDED_PROPERTY_ACCEPTANCE_APK.restoration_norm, undefined);
+});
+
+// 2) Абзац второй п. 2 ст. 140 — оплата по договору купли-продажи права
+// требования должника.
+
+test('оплата по договору купли-продажи права требования: тридцать рабочих дней с даты заключения договора', () => {
+  const term = computeClaimSalePaymentApk({
+    claim_sale_contract_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-04-22');
+  assert.equal(term.deadline, '2025-04-22');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 30, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'абзац второй п. 2 ст. 140 ФЗ № 127-ФЗ');
+});
+
+test('оплата по договору купли-продажи права требования: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeClaimSalePaymentApk({
+    claim_sale_contract_date_apk: '2025-12-01',
+  });
+  assert.equal(term.first_working_day, '2025-12-02');
+  assert.equal(term.deadline, '2026-01-22');
+});
+
+test('оплата по договору купли-продажи права требования: без claim_sale_contract_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeClaimSalePaymentApk({}),
+    /claim_sale_contract_date_apk/,
+  );
+});
+
+test('оплата по договору купли-продажи права требования: calculation — тот же массив, что у остальных working_day duty-узлов домена, без restoration', () => {
+  assert.deepEqual(
+    CLAIM_SALE_PAYMENT_APK.norm_versions[0].norm.calculation,
+    DEBTOR_RESPONSE_BANKRUPTCY_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(CLAIM_SALE_PAYMENT_APK.restoration_norm, undefined);
+});
+
+// 3) П. 3 ст. 144 — обжалование определения об освобождении конкурсного
+// управляющего.
+
+test('обжалование освобождения конкурсного управляющего: один месяц с даты изготовления определения, будний день без переноса', () => {
+  const term = computeManagerReleaseAppealApk({
+    manager_release_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
+});
+
+test('обжалование освобождения конкурсного управляющего: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeManagerReleaseAppealApk({
+    manager_release_ruling_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('обжалование освобождения конкурсного управляющего: без manager_release_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeManagerReleaseAppealApk({}),
+    /manager_release_ruling_date_apk/,
+  );
+});
+
+test('обжалование освобождения конкурсного управляющего: primary — ч. 1 ст. 61, не ст. 144; calculation тот же набор, что у остальных appeal-узлов, без restoration', () => {
+  assert.equal(
+    MANAGER_RELEASE_APPEAL_APK.norm_versions[0].norm.primary,
+    'ч. 1 ст. 61 ФЗ № 127-ФЗ',
+  );
+  assert.doesNotMatch(
+    MANAGER_RELEASE_APPEAL_APK.norm_versions[0].norm.primary,
+    /ст\. 144/,
+  );
+  assert.deepEqual(
+    MANAGER_RELEASE_APPEAL_APK.norm_versions[0].norm.calculation,
+    BANKRUPTCY_MANAGER_APPOINTMENT_APPEAL_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(MANAGER_RELEASE_APPEAL_APK.restoration_norm, undefined);
+});
+
+// 4) П. 3 ст. 145 — обжалование определения об отстранении конкурсного
+// управляющего. ОТДЕЛЬНЫЙ институт от узла 3 (освобождение) — принудительное
+// отстранение судом за нарушения, а не сложение полномочий по заявлению
+// самого управляющего.
+
+test('обжалование отстранения конкурсного управляющего: один месяц с даты изготовления определения, будний день без переноса', () => {
+  const term = computeManagerRemovalAppealApk({
+    manager_removal_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 1 ст. 61 ФЗ № 127-ФЗ');
+});
+
+test('обжалование отстранения конкурсного управляющего: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeManagerRemovalAppealApk({
+    manager_removal_ruling_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('обжалование отстранения конкурсного управляющего: без manager_removal_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeManagerRemovalAppealApk({}),
+    /manager_removal_ruling_date_apk/,
+  );
+});
+
+test('обжалование отстранения конкурсного управляющего: primary — ч. 1 ст. 61, не ст. 145; calculation тот же набор, что у остальных appeal-узлов, без restoration', () => {
+  assert.equal(
+    MANAGER_REMOVAL_APPEAL_APK.norm_versions[0].norm.primary,
+    'ч. 1 ст. 61 ФЗ № 127-ФЗ',
+  );
+  assert.doesNotMatch(
+    MANAGER_REMOVAL_APPEAL_APK.norm_versions[0].norm.primary,
+    /ст\. 145/,
+  );
+  assert.deepEqual(
+    MANAGER_REMOVAL_APPEAL_APK.norm_versions[0].norm.calculation,
+    BANKRUPTCY_MANAGER_APPOINTMENT_APPEAL_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(MANAGER_REMOVAL_APPEAL_APK.restoration_norm, undefined);
+});
+
+test('обжалование освобождения и обжалование отстранения конкурсного управляющего: разные узлы — разные id, разные поля ввода, разные институты', () => {
+  assert.notEqual(MANAGER_RELEASE_APPEAL_APK.id, MANAGER_REMOVAL_APPEAL_APK.id);
+  assert.match(MANAGER_RELEASE_APPEAL_APK.title, /освобождении/);
+  assert.match(MANAGER_REMOVAL_APPEAL_APK.title, /отстранении/);
+  assert.doesNotMatch(MANAGER_RELEASE_APPEAL_APK.title, /отстранении/);
+  assert.doesNotMatch(MANAGER_REMOVAL_APPEAL_APK.title, /освобождении/);
+});
+
+// 5) П. 1 ст. 146 — созыв собрания кредиторов о переходе к внешнему
+// управлению.
+
+test('созыв собрания кредиторов о переходе к внешнему управлению: один месяц с даты выявления обстоятельств, будний день без переноса', () => {
+  const term = computeCreditorsMeetingExternalManagementTransitionApk({
+    solvency_restoration_circumstances_discovered_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+  assert.equal(term.norm.primary, 'п. 1 ст. 146 ФЗ № 127-ФЗ');
+});
+
+test('созыв собрания кредиторов о переходе к внешнему управлению: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeCreditorsMeetingExternalManagementTransitionApk({
+    solvency_restoration_circumstances_discovered_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-03-01');
+  assert.equal(term.deadline, '2025-03-03');
+  assert.equal(term.shifted, true);
+});
+
+test('созыв собрания кредиторов о переходе к внешнему управлению: без solvency_restoration_circumstances_discovered_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeCreditorsMeetingExternalManagementTransitionApk({}),
+    /solvency_restoration_circumstances_discovered_date_apk/,
+  );
+});
+
+test('созыв собрания кредиторов о переходе к внешнему управлению: primary — п. 1 ст. 146 (число срока даёт сама статья), calculation тот же массив, что у остальных month-узлов домена, без restoration', () => {
+  assert.equal(
+    CREDITORS_MEETING_EXTERNAL_MANAGEMENT_TRANSITION_APK.norm_versions[0].norm.primary,
+    'п. 1 ст. 146 ФЗ № 127-ФЗ',
+  );
+  assert.deepEqual(
+    CREDITORS_MEETING_EXTERNAL_MANAGEMENT_TRANSITION_APK.norm_versions[0].norm.calculation,
+    EXCLUDED_PROPERTY_ACCEPTANCE_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(CREDITORS_MEETING_EXTERNAL_MANAGEMENT_TRANSITION_APK.restoration_norm, undefined);
 });

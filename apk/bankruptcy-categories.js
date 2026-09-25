@@ -34,6 +34,11 @@ export const BANKRUPTCY_SITUATION_CATEGORIES = [
       'bankruptcy_inventory_results_registry',
       'settlement_agreement_rejection_appeal',
       'bankruptcy_proceeding_extension_appeal',
+      'excluded_property_acceptance',
+      'claim_sale_payment',
+      'manager_release_appeal',
+      'manager_removal_appeal',
+      'creditors_meeting_external_management_transition',
     ],
   },
   {

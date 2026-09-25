@@ -627,6 +627,58 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['filing_notice_validity_apk'],
   },
+  {
+    id: 'excluded_property_acceptance',
+    label: 'Принятие собственником имущества, изъятого из оборота, от конкурсного управляющего',
+    // Единственное поле ветви — дата получения собственником уведомления от
+    // конкурсного управляющего, тот же образец, что у остальных одноузловых
+    // ветвей.
+    primary_field: 'excluded_property_notice_received_date_apk',
+    fields: [],
+    nodes: ['excluded_property_acceptance_apk'],
+  },
+  {
+    id: 'claim_sale_payment',
+    label: 'Оплата по договору купли-продажи права требования должника',
+    // Единственное поле ветви — дата заключения договора купли-продажи
+    // права требования должника.
+    primary_field: 'claim_sale_contract_date_apk',
+    fields: [],
+    nodes: ['claim_sale_payment_apk'],
+  },
+  {
+    id: 'manager_release_appeal',
+    label: 'Обжалование определения об освобождении конкурсного управляющего от исполнения обязанностей',
+    // Отдельная одноузловая appeal-ветвь — тот же образец, что у
+    // bankruptcy_manager_appointment_appeal выше: единственное поле ветви —
+    // дата изготовления определения в полном объёме. ОТДЕЛЬНАЯ ветвь от
+    // manager_removal_appeal ниже — разные институты (освобождение и
+    // отстранение), см. комментарий к узлам в apk/bankruptcy.js.
+    primary_field: 'manager_release_ruling_date_apk',
+    fields: [],
+    nodes: ['manager_release_appeal_apk'],
+  },
+  {
+    id: 'manager_removal_appeal',
+    label: 'Обжалование определения об отстранении конкурсного управляющего от исполнения обязанностей',
+    // Отдельная ветвь от manager_release_appeal выше — тот же приём, что у
+    // property_exclusion_ruling_appeal/property_exclusion_amount_dispute:
+    // разные институты одного и того же субъекта (конкурсного
+    // управляющего), не делят ни якоря, ни поля ввода.
+    primary_field: 'manager_removal_ruling_date_apk',
+    fields: [],
+    nodes: ['manager_removal_appeal_apk'],
+  },
+  {
+    id: 'creditors_meeting_external_management_transition',
+    label: 'Созыв собрания кредиторов для решения вопроса о переходе к внешнему управлению',
+    // Единственное поле ветви — дата выявления конкурсным управляющим
+    // обстоятельств, свидетельствующих о возможности восстановления
+    // платёжеспособности должника.
+    primary_field: 'solvency_restoration_circumstances_discovered_date_apk',
+    fields: [],
+    nodes: ['creditors_meeting_external_management_transition_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';
