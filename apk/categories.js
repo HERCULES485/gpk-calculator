@@ -55,6 +55,7 @@ export const SITUATION_CATEGORIES_APK = [
       'third_party_no_claim_refusal_appeal',
       'case_consolidation_severance_refusal_appeal',
       'special_ruling_appeal',
+      'injunction_refusal_appeal',
     ],
   },
 ];
