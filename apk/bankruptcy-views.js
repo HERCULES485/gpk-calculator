@@ -79,6 +79,11 @@ import {
   computeTransactionChallengeLimitationCitizenApk,
   computeBankruptcySignsRegistryNotificationApk,
   computeFilingNoticeValidityApk,
+  computeExcludedPropertyAcceptanceApk,
+  computeClaimSalePaymentApk,
+  computeManagerReleaseAppealApk,
+  computeManagerRemovalAppealApk,
+  computeCreditorsMeetingExternalManagementTransitionApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -137,6 +142,11 @@ import {
   TRANSACTION_CHALLENGE_LIMITATION_CITIZEN_APK,
   BANKRUPTCY_SIGNS_REGISTRY_NOTIFICATION_APK,
   FILING_NOTICE_VALIDITY_APK,
+  EXCLUDED_PROPERTY_ACCEPTANCE_APK,
+  CLAIM_SALE_PAYMENT_APK,
+  MANAGER_RELEASE_APPEAL_APK,
+  MANAGER_REMOVAL_APPEAL_APK,
+  CREDITORS_MEETING_EXTERNAL_MANAGEMENT_TRANSITION_APK,
 } from './bankruptcy.js';
 
 import {
@@ -830,6 +840,35 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     kind: 'working_day',
     deps: () => ['filing_notice_publication_date_apk'],
     compute: (i) => computeFilingNoticeValidityApk(i),
+  },
+  // Остаток главы VII (ст. 132, 140, 144, 145, 146) — конкурсное
+  // производство. Тот же паттерн регистрации, что и у остальных узлов
+  // домена: обычный месячный узел без kind (monthTermCard) или working_day.
+  excluded_property_acceptance_apk: {
+    node: EXCLUDED_PROPERTY_ACCEPTANCE_APK,
+    deps: () => ['excluded_property_notice_received_date_apk'],
+    compute: (i) => computeExcludedPropertyAcceptanceApk(i),
+  },
+  claim_sale_payment_apk: {
+    node: CLAIM_SALE_PAYMENT_APK,
+    kind: 'working_day',
+    deps: () => ['claim_sale_contract_date_apk'],
+    compute: (i) => computeClaimSalePaymentApk(i),
+  },
+  manager_release_appeal_apk: {
+    node: MANAGER_RELEASE_APPEAL_APK,
+    deps: () => ['manager_release_ruling_date_apk'],
+    compute: (i) => computeManagerReleaseAppealApk(i),
+  },
+  manager_removal_appeal_apk: {
+    node: MANAGER_REMOVAL_APPEAL_APK,
+    deps: () => ['manager_removal_ruling_date_apk'],
+    compute: (i) => computeManagerRemovalAppealApk(i),
+  },
+  creditors_meeting_external_management_transition_apk: {
+    node: CREDITORS_MEETING_EXTERNAL_MANAGEMENT_TRANSITION_APK,
+    deps: () => ['solvency_restoration_circumstances_discovered_date_apk'],
+    compute: (i) => computeCreditorsMeetingExternalManagementTransitionApk(i),
   },
 };
 

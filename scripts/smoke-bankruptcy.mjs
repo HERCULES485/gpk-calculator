@@ -96,8 +96,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 47,
-  'переключатель ситуаций отрисован не на сорок семь ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 52,
+  'переключатель ситуаций отрисован не на пятьдесят две ветви',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -1847,6 +1847,121 @@ check(
 check(
   (await filingNoticeValidityCard.innerText()).includes('юридических лиц'),
   'карточка утраты силы уведомления не отражает ограничение применимости юридическими лицами',
+);
+
+// --- Ветвь: принятие собственником изъятого из оборота имущества (п. 2
+// ст. 132 ФЗ № 127-ФЗ) — шесть месяцев -----------------------------------------
+
+await chooseSituation('excluded_property_acceptance');
+check(
+  (await page.locator('#in-excluded_property_notice_received_date_apk').count()) === 1,
+  'ветвь "excluded_property_acceptance": основное поле не найдено в DOM',
+);
+await page.fill('#in-excluded_property_notice_received_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви принятия изъятого из оборота имущества ожидалась одна карточка',
+);
+const excludedPropertyCard = cardByTitle(
+  'Принятие собственником имущества, изъятого из оборота, от конкурсного управляющего',
+);
+check((await excludedPropertyCard.count()) === 1, 'карточка принятия изъятого из оборота имущества не появилась');
+check(
+  (await deadlineOf(excludedPropertyCard)) === '11.09.2025',
+  `срок принятия изъятого из оборота имущества посчитан неверно: ${await deadlineOf(excludedPropertyCard)}`,
+);
+check(
+  (await excludedPropertyCard.innerText()).includes('п. 2 ст. 132 ФЗ № 127-ФЗ'),
+  'норма п. 2 ст. 132 ФЗ № 127-ФЗ не показана на карточке принятия изъятого из оборота имущества',
+);
+
+// --- Ветвь: оплата по договору купли-продажи права требования должника
+// (абзац второй п. 2 ст. 140 ФЗ № 127-ФЗ) — тридцать рабочих дней -------------
+
+await chooseSituation('claim_sale_payment');
+check(
+  (await page.locator('#in-claim_sale_contract_date_apk').count()) === 1,
+  'ветвь "claim_sale_payment": основное поле не найдено в DOM',
+);
+await page.fill('#in-claim_sale_contract_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви оплаты по договору купли-продажи права требования ожидалась одна карточка',
+);
+const claimSaleCard = cardByTitle('Оплата по договору купли-продажи права требования должника');
+check((await claimSaleCard.count()) === 1, 'карточка оплаты по договору купли-продажи права требования не появилась');
+check(
+  (await deadlineOf(claimSaleCard)) === '22.04.2025',
+  `срок оплаты по договору купли-продажи права требования посчитан неверно: ${await deadlineOf(claimSaleCard)}`,
+);
+check(
+  (await claimSaleCard.innerText()).includes('абзац второй п. 2 ст. 140 ФЗ № 127-ФЗ'),
+  'норма абзац второй п. 2 ст. 140 ФЗ № 127-ФЗ не показана на карточке оплаты по договору купли-продажи права требования',
+);
+
+// --- Ветви: обжалование освобождения и обжалование отстранения конкурсного
+// управляющего (п. 3 ст. 144 и п. 3 ст. 145 ФЗ № 127-ФЗ) — разные институты,
+// разные ветви --------------------------------------------------------------
+
+await chooseSituation('manager_release_appeal');
+check(
+  (await page.locator('#in-manager_release_ruling_date_apk').count()) === 1,
+  'ветвь "manager_release_appeal": основное поле не найдено в DOM',
+);
+await page.fill('#in-manager_release_ruling_date_apk', '11.03.2025');
+await settle();
+const managerReleaseCard = cardByTitle(
+  'Обжалование определения об освобождении конкурсного управляющего от исполнения обязанностей',
+);
+check((await managerReleaseCard.count()) === 1, 'карточка обжалования освобождения конкурсного управляющего не появилась');
+check(
+  (await deadlineOf(managerReleaseCard)) === '11.04.2025',
+  `срок обжалования освобождения конкурсного управляющего посчитан неверно: ${await deadlineOf(managerReleaseCard)}`,
+);
+
+await chooseSituation('manager_removal_appeal');
+check(
+  (await page.locator('#in-manager_removal_ruling_date_apk').count()) === 1,
+  'ветвь "manager_removal_appeal": основное поле не найдено в DOM',
+);
+await page.fill('#in-manager_removal_ruling_date_apk', '11.03.2025');
+await settle();
+const managerRemovalCard = cardByTitle(
+  'Обжалование определения об отстранении конкурсного управляющего от исполнения обязанностей',
+);
+check((await managerRemovalCard.count()) === 1, 'карточка обжалования отстранения конкурсного управляющего не появилась');
+check(
+  (await deadlineOf(managerRemovalCard)) === '11.04.2025',
+  `срок обжалования отстранения конкурсного управляющего посчитан неверно: ${await deadlineOf(managerRemovalCard)}`,
+);
+
+// --- Ветвь: созыв собрания кредиторов о переходе к внешнему управлению
+// (п. 1 ст. 146 ФЗ № 127-ФЗ) — один месяц ---------------------------------------
+
+await chooseSituation('creditors_meeting_external_management_transition');
+check(
+  (await page.locator('#in-solvency_restoration_circumstances_discovered_date_apk').count()) === 1,
+  'ветвь "creditors_meeting_external_management_transition": основное поле не найдено в DOM',
+);
+await page.fill('#in-solvency_restoration_circumstances_discovered_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви созыва собрания кредиторов о переходе к внешнему управлению ожидалась одна карточка',
+);
+const creditorsMeetingCard = cardByTitle(
+  'Созыв собрания кредиторов для решения вопроса о переходе к внешнему управлению',
+);
+check((await creditorsMeetingCard.count()) === 1, 'карточка созыва собрания кредиторов о переходе к внешнему управлению не появилась');
+check(
+  (await deadlineOf(creditorsMeetingCard)) === '11.04.2025',
+  `срок созыва собрания кредиторов о переходе к внешнему управлению посчитан неверно: ${await deadlineOf(creditorsMeetingCard)}`,
+);
+check(
+  (await creditorsMeetingCard.innerText()).includes('п. 1 ст. 146 ФЗ № 127-ФЗ'),
+  'норма п. 1 ст. 146 ФЗ № 127-ФЗ не показана на карточке созыва собрания кредиторов',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------
