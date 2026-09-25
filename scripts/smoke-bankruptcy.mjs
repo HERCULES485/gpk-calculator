@@ -96,8 +96,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 46,
-  'переключатель ситуаций отрисован не на сорок шесть ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 47,
+  'переключатель ситуаций отрисован не на сорок семь ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -1815,6 +1815,38 @@ check(
 check(
   (await signsRegistryCard.innerText()).includes('п. 1 ст. 30 ФЗ № 127-ФЗ'),
   'норма п. 1 ст. 30 ФЗ № 127-ФЗ не показана на карточке включения сведений о признаках банкротства',
+);
+
+// --- Ветвь: утрата силы сведений уведомления о намерении обратиться с
+// заявлением о банкротстве (абзац второй п. 2.1 ст. 7 ФЗ № 127-ФЗ, глава I,
+// только юридические лица) — тридцать рабочих дней ---------------------------
+
+await chooseSituation('filing_notice_validity');
+check(
+  (await page.locator('#in-filing_notice_publication_date_apk').count()) === 1,
+  'ветвь "filing_notice_validity": основное поле не найдено в DOM',
+);
+await page.fill('#in-filing_notice_publication_date_apk', '26.12.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви утраты силы уведомления ожидалась одна карточка',
+);
+const filingNoticeValidityCard = cardByTitle(
+  'Утрата силы сведений уведомления о намерении обратиться с заявлением о банкротстве (только для юридических лиц)',
+);
+check((await filingNoticeValidityCard.count()) === 1, 'карточка утраты силы уведомления не появилась');
+check(
+  (await deadlineOf(filingNoticeValidityCard)) === '18.02.2026',
+  `срок утраты силы уведомления посчитан неверно: ${await deadlineOf(filingNoticeValidityCard)}`,
+);
+check(
+  (await filingNoticeValidityCard.innerText()).includes('абзац второй п. 2.1 ст. 7 ФЗ № 127-ФЗ'),
+  'норма абзац второй п. 2.1 ст. 7 ФЗ № 127-ФЗ не показана на карточке утраты силы уведомления',
+);
+check(
+  (await filingNoticeValidityCard.innerText()).includes('юридических лиц'),
+  'карточка утраты силы уведомления не отражает ограничение применимости юридическими лицами',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------
