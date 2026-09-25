@@ -58,6 +58,11 @@ export const SITUATION_CATEGORIES_APK = [
       'injunction_refusal_appeal',
       'counter_security_ruling_appeal',
       'injunction_cancellation_ruling_appeal',
+      'claim_refusal_appeal',
+      'deadline_restoration_refusal_appeal',
+      'deadline_extension_refusal_appeal',
+      'decision_clarification_ruling_appeal',
+      'enforcement_restoration_ruling_appeal',
     ],
   },
 ];

@@ -340,6 +340,59 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['injunction_cancellation_ruling_appeal_apk'],
   },
+  {
+    id: 'claim_refusal_appeal',
+    label: 'Суд отказал в принятии искового заявления — хочу обжаловать',
+    // П. 5 ст. 127.1 АПК РФ. Числа в самой норме нет — общий месячный срок по
+    // ч. 3 ст. 188 АПК РФ (та же формула, что у injunction_refusal_appeal_apk).
+    primary_field: 'claim_refusal_ruling_date_apk',
+    fields: [],
+    nodes: ['claim_refusal_appeal_apk'],
+  },
+  {
+    id: 'deadline_restoration_refusal_appeal',
+    label: 'Суд отказал в восстановлении пропущенного срока — хочу обжаловать',
+    // П. 6 ст. 117 АПК РФ. Числа в самой норме нет — общий месячный срок по
+    // ч. 3 ст. 188 АПК РФ (та же формула, что у injunction_refusal_appeal_apk).
+    primary_field: 'deadline_restoration_refusal_ruling_date_apk',
+    fields: [],
+    nodes: ['deadline_restoration_refusal_appeal_apk'],
+  },
+  {
+    id: 'deadline_extension_refusal_appeal',
+    label: 'Суд отказал в продлении назначенного им срока — хочу обжаловать',
+    // Ч. 2 ст. 118 АПК РФ. Числа в самой норме нет — общий месячный срок по
+    // ч. 3 ст. 188 АПК РФ (та же формула, что у injunction_refusal_appeal_apk).
+    primary_field: 'deadline_extension_refusal_ruling_date_apk',
+    fields: [],
+    nodes: ['deadline_extension_refusal_appeal_apk'],
+  },
+  {
+    id: 'decision_clarification_ruling_appeal',
+    label:
+      'Суд вынес определение по вопросу разъяснения решения или исправления ' +
+      'описки/опечатки/арифметической ошибки — хочу обжаловать',
+    // Ч. 4 ст. 179 АПК РФ (последнее предложение). Числа в самой норме нет —
+    // общий месячный срок по ч. 3 ст. 188 АПК РФ (та же формула, что у
+    // injunction_refusal_appeal_apk).
+    primary_field: 'decision_clarification_ruling_date_apk',
+    fields: [],
+    nodes: ['decision_clarification_ruling_appeal_apk'],
+  },
+  {
+    id: 'enforcement_restoration_ruling_appeal',
+    label:
+      'Суд вынес определение по вопросу о восстановлении срока предъявления ' +
+      'исполнительного листа — хочу обжаловать',
+    // Ч. 3 ст. 322 АПК РФ. Числа в самой норме нет — общий месячный срок по
+    // ч. 3 ст. 188 АПК РФ (та же формула, что у injunction_refusal_appeal_apk).
+    // Не дубль enforcement_presentation_apk/enforcement_presentation_after_restoration_apk
+    // (те про сам срок предъявления, этот — про обжалование определения о
+    // восстановлении).
+    primary_field: 'enforcement_restoration_ruling_date_apk',
+    fields: [],
+    nodes: ['enforcement_restoration_ruling_appeal_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';
