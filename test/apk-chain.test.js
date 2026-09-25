@@ -138,6 +138,14 @@ import {
   DECISION_CLARIFICATION_RULING_APPEAL_APK,
   computeEnforcementRestorationRulingAppealApk,
   ENFORCEMENT_RESTORATION_RULING_APPEAL_APK,
+  computeEvidenceUnavailabilityNoticeApk,
+  EVIDENCE_UNAVAILABILITY_NOTICE_APK,
+  computeEnforcementWritDuplicateRequestApk,
+  ENFORCEMENT_WRIT_DUPLICATE_REQUEST_APK,
+  computeCourtFineAppealApk,
+  COURT_FINE_APPEAL_APK,
+  computeAdditionalDecisionRefusalAppealApk,
+  ADDITIONAL_DECISION_REFUSAL_APPEAL_APK,
 } from '../apk/chain.js';
 // Нужен ровно для одной проверки: узел-окно не должен попасть в реестр .ics
 // (см. последний тест файла) — граница решения по экспорту.
@@ -3063,4 +3071,214 @@ test('enforcement_restoration_ruling_appeal_apk: без enforcement_restoration_
 test('enforcement_restoration_ruling_appeal_apk: без restoration_norm и без ics — companion-узла восстановления нет', () => {
   assert.equal(ENFORCEMENT_RESTORATION_RULING_APPEAL_APK.restoration_norm, undefined);
   assert.equal(ENFORCEMENT_RESTORATION_RULING_APPEAL_APK.ics, undefined);
+});
+
+// --- Извещение суда о невозможности представления истребуемого доказательства (ч. 8 ст. 66 АПК РФ) ---
+//
+// Четвёртый working_day-узел домена apk/ (после SIMPLIFIED_PROCEEDINGS_APPEAL_APK,
+// COURT_ORDER_OBJECTION_APK, ADMINISTRATIVE_LIABILITY_CHALLENGE_APK) — та же
+// многократно проверенная механика, но своя длительность (пять дней, не десять)
+// и свой якорь (получение копии определения об истребовании доказательства).
+
+test('evidence_unavailability_notice_apk: пять рабочих дней от даты получения копии определения, без праздничных кластеров рядом', () => {
+  // 02.03–07.03.2025: внутри периода только обычные выходные (08/09 марта уже
+  // за пределами срока), без многодневных праздников — «чистый» базовый случай.
+  const term = computeEvidenceUnavailabilityNoticeApk({
+    evidence_request_copy_received_date_apk: '2025-03-02',
+  });
+  assert.equal(term.anchor, '2025-03-02');
+  assert.equal(term.first_working_day, '2025-03-03');
+  assert.equal(term.raw_deadline, '2025-03-07');
+  assert.equal(term.deadline, '2025-03-07');
+  assert.equal(term.shifted, false); // weekend_shift к working_day не применяется
+  assert.deepEqual(term.duration, { value: 5, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 8 ст. 66 АПК РФ');
+});
+
+test('evidence_unavailability_notice_apk: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  // Копия получена 26.12.2025 (пятница). Течение — с 29.12 (понедельник);
+  // 31.12.2025 и 01–09.01.2026 нерабочие, поэтому пятый рабочий день —
+  // 14.01.2026, а не 02.01.2026, как было бы при подсчёте 5 календарных дней
+  // (тот же случай, что и у ПРИКАЗ.1 и АДМОТВЕТСТВЕННОСТЬ.1).
+  const term = computeEvidenceUnavailabilityNoticeApk({
+    evidence_request_copy_received_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-14');
+  assert.notEqual(term.deadline, '2026-01-02'); // наивные "+5 календарных дней"
+});
+
+test('evidence_unavailability_notice_apk: без evidence_request_copy_received_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeEvidenceUnavailabilityNoticeApk({}),
+    /evidence_request_copy_received_date_apk/,
+  );
+});
+
+test('evidence_unavailability_notice_apk: объём задачи — без restoration-полей и без связанного restoration-узла', () => {
+  // Ч. 8 ст. 66 не упоминает ни продление, ни восстановление этого срока
+  // вообще — не тот случай, что у ст. 322, 112, 198 ч. 4 и других (там
+  // институт есть, но без потолка); здесь его нет вовсе, как у ст. 206 ч. 4
+  // и ст. 211 ч. 5.
+  const term = computeEvidenceUnavailabilityNoticeApk({
+    evidence_request_copy_received_date_apk: '2025-03-02',
+  });
+  assert.equal(term.id, 'evidence_unavailability_notice_apk');
+  assert.equal(EVIDENCE_UNAVAILABILITY_NOTICE_APK.restoration_norm, undefined);
+  assert.equal(EVIDENCE_UNAVAILABILITY_NOTICE_APK.ics, undefined);
+});
+
+// --- Заявление о выдаче дубликата исполнительного листа при утрате в процессе исполнения (ч. 2 ст. 323 АПК РФ) ---
+//
+// Узел считает только исключительную ветку ч. 2 (утрата листа судебным
+// приставом-исполнителем или иным осуществляющим исполнение лицом, известная
+// взыскателю уже после истечения срока предъявления листа к исполнению) — см.
+// разбор обеих веток в apk/chain.js. Формулировка в задаче при сверке с
+// первоисточником не подтвердилась (ни "окончания исполнения судебного
+// акта", ни такого условия в действующем тексте ч. 2 нет) — узел построен по
+// фактическому тексту нормы.
+
+test('enforcement_writ_duplicate_request_apk считается от enforcement_writ_loss_known_date_apk (обычная дата, без переноса)', () => {
+  const term = computeEnforcementWritDuplicateRequestApk({
+    enforcement_writ_loss_known_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11'); // 11.04.2025 — пятница, рабочий день
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'ч. 2 ст. 323 АПК РФ');
+});
+
+test('enforcement_writ_duplicate_request_apk: правило "нет такого числа" (ч. 2 ст. 114 АПК РФ) — 31 января -> последний день февраля', () => {
+  const term = computeEnforcementWritDuplicateRequestApk({
+    enforcement_writ_loss_known_date_apk: '2025-01-31',
+  });
+  assert.equal(term.raw_deadline, '2025-02-28');
+  assert.equal(term.deadline, '2025-02-28');
+  assert.equal(term.shifted, false);
+});
+
+test('enforcement_writ_duplicate_request_apk: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeEnforcementWritDuplicateRequestApk({
+    enforcement_writ_loss_known_date_apk: '2025-03-05',
+  });
+  // 05.03.2025 + 1 месяц = 05.04.2025 (суббота) -> перенос на 07.04.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-04-05');
+  assert.equal(term.deadline, '2025-04-07');
+  assert.equal(term.shifted, true);
+});
+
+test('enforcement_writ_duplicate_request_apk: без enforcement_writ_loss_known_date_apk — ошибка, упоминающая именно это поле', () => {
+  assert.throws(
+    () => computeEnforcementWritDuplicateRequestApk({}),
+    /enforcement_writ_loss_known_date_apk/,
+  );
+});
+
+test('enforcement_writ_duplicate_request_apk: без restoration_norm и без ics — специальной нормы восстановления с числовым потолком для ч. 2 ст. 323 не найдено', () => {
+  assert.equal(ENFORCEMENT_WRIT_DUPLICATE_REQUEST_APK.restoration_norm, undefined);
+  assert.equal(ENFORCEMENT_WRIT_DUPLICATE_REQUEST_APK.ics, undefined);
+});
+
+// --- Обжалование определения о наложении судебного штрафа (ч. 6 ст. 120 АПК РФ) ---
+//
+// ИСПРАВЛЕНИЕ НОРМЫ: в задаче узел описан как "ст. 119 п. 6" — при сверке с
+// первоисточником текст подтвердился, но действует в ч. 6 ст. 120 АПК РФ (см.
+// разбор в apk/chain.js). Пятый working_day-узел домена apk/, ОСОБЫЙ СЛУЧАЙ —
+// якорь "дата получения копии", а не "дата вынесения" (как у всех
+// companion-узлов ч. 3 ст. 188).
+
+test('court_fine_appeal_apk: десять рабочих дней от даты получения копии определения, без праздничных кластеров рядом', () => {
+  const term = computeCourtFineAppealApk({
+    court_fine_ruling_copy_received_date_apk: '2025-03-02',
+  });
+  assert.equal(term.anchor, '2025-03-02');
+  assert.equal(term.first_working_day, '2025-03-03');
+  assert.equal(term.raw_deadline, '2025-03-14');
+  assert.equal(term.deadline, '2025-03-14');
+  assert.equal(term.shifted, false); // weekend_shift к working_day не применяется
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 6 ст. 120 АПК РФ');
+});
+
+test('court_fine_appeal_apk: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  // Копия получена 26.12.2025 (пятница). Течение — с 29.12 (понедельник);
+  // 31.12.2025 и 01–09.01.2026 нерабочие, поэтому десятый рабочий день —
+  // 21.01.2026, а не 05.01.2026, как было бы при подсчёте 10 календарных дней
+  // (тот же случай, что и у ПРИКАЗ.1 и АДМОТВЕТСТВЕННОСТЬ.1).
+  const term = computeCourtFineAppealApk({
+    court_fine_ruling_copy_received_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-21');
+  assert.notEqual(term.deadline, '2026-01-05'); // наивные "+10 календарных дней"
+});
+
+test('court_fine_appeal_apk: без court_fine_ruling_copy_received_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeCourtFineAppealApk({}),
+    /court_fine_ruling_copy_received_date_apk/,
+  );
+});
+
+test('court_fine_appeal_apk: объём задачи — без restoration-полей и без связанного restoration-узла', () => {
+  // Ч. 6 ст. 120 не упоминает ни продление, ни восстановление этого срока
+  // вообще — не тот случай, что у ст. 322, 112, 198 ч. 4 и других (там
+  // институт есть, но без потолка); здесь его нет вовсе, как у ст. 206 ч. 4
+  // и ст. 211 ч. 5.
+  const term = computeCourtFineAppealApk({
+    court_fine_ruling_copy_received_date_apk: '2025-03-02',
+  });
+  assert.equal(term.id, 'court_fine_appeal_apk');
+  assert.equal(COURT_FINE_APPEAL_APK.restoration_norm, undefined);
+  assert.equal(COURT_FINE_APPEAL_APK.ics, undefined);
+});
+
+// --- Обжалование определения об отказе в принятии дополнительного решения (ч. 5 ст. 178 АПК РФ) ---
+//
+// "Дополнительное решение" (в отличие от определения об отказе в его
+// принятии) — РЕШЕНИЕ, принимаемое по правилам главы 20 (ч. 3 ст. 178), и
+// обжалуется по общему правилу (APPEAL_GENERAL_APK, ч. 1 ст. 259) — отдельного
+// узла для него нет и не требуется, см. разбор в apk/chain.js.
+
+test('additional_decision_refusal_appeal_apk считается от additional_decision_refusal_ruling_date_apk (обычная дата, без переноса)', () => {
+  const term = computeAdditionalDecisionRefusalAppealApk({
+    additional_decision_refusal_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11'); // 11.04.2025 — пятница, рабочий день
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'ч. 3 ст. 188 АПК РФ');
+});
+
+test('additional_decision_refusal_appeal_apk: правило "нет такого числа" (ч. 2 ст. 114 АПК РФ) — 31 января -> последний день февраля', () => {
+  const term = computeAdditionalDecisionRefusalAppealApk({
+    additional_decision_refusal_ruling_date_apk: '2025-01-31',
+  });
+  assert.equal(term.raw_deadline, '2025-02-28');
+  assert.equal(term.deadline, '2025-02-28');
+  assert.equal(term.shifted, false);
+});
+
+test('additional_decision_refusal_appeal_apk: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeAdditionalDecisionRefusalAppealApk({
+    additional_decision_refusal_ruling_date_apk: '2025-03-05',
+  });
+  // 05.03.2025 + 1 месяц = 05.04.2025 (суббота) -> перенос на 07.04.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-04-05');
+  assert.equal(term.deadline, '2025-04-07');
+  assert.equal(term.shifted, true);
+});
+
+test('additional_decision_refusal_appeal_apk: без additional_decision_refusal_ruling_date_apk — ошибка, упоминающая именно это поле', () => {
+  assert.throws(
+    () => computeAdditionalDecisionRefusalAppealApk({}),
+    /additional_decision_refusal_ruling_date_apk/,
+  );
+});
+
+test('additional_decision_refusal_appeal_apk: без restoration_norm и без ics — companion-узла восстановления нет', () => {
+  assert.equal(ADDITIONAL_DECISION_REFUSAL_APPEAL_APK.restoration_norm, undefined);
+  assert.equal(ADDITIONAL_DECISION_REFUSAL_APPEAL_APK.ics, undefined);
 });

@@ -63,6 +63,10 @@ import {
   computeDeadlineExtensionRefusalAppealApk,
   computeDecisionClarificationRulingAppealApk,
   computeEnforcementRestorationRulingAppealApk,
+  computeEvidenceUnavailabilityNoticeApk,
+  computeEnforcementWritDuplicateRequestApk,
+  computeCourtFineAppealApk,
+  computeAdditionalDecisionRefusalAppealApk,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -109,6 +113,10 @@ import {
   DEADLINE_EXTENSION_REFUSAL_APPEAL_APK,
   DECISION_CLARIFICATION_RULING_APPEAL_APK,
   ENFORCEMENT_RESTORATION_RULING_APPEAL_APK,
+  EVIDENCE_UNAVAILABILITY_NOTICE_APK,
+  ENFORCEMENT_WRIT_DUPLICATE_REQUEST_APK,
+  COURT_FINE_APPEAL_APK,
+  ADDITIONAL_DECISION_REFUSAL_APPEAL_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -684,6 +692,33 @@ const NODE_REQUIREMENTS = {
     node: ENFORCEMENT_RESTORATION_RULING_APPEAL_APK,
     deps: () => ['enforcement_restoration_ruling_date_apk'],
     compute: (i) => computeEnforcementRestorationRulingAppealApk(i),
+  },
+  // Без restoration-узла: ч. 8 ст. 66 не упоминает ни продление, ни
+  // восстановление этого срока вообще.
+  evidence_unavailability_notice_apk: {
+    node: EVIDENCE_UNAVAILABILITY_NOTICE_APK,
+    deps: () => ['evidence_request_copy_received_date_apk'],
+    compute: (i) => computeEvidenceUnavailabilityNoticeApk(i),
+  },
+  // Без restoration-узла: специальной нормы восстановления с числовым
+  // предельным сроком для ч. 2 ст. 323 не найдено (тот же случай, что и у
+  // ст. 322).
+  enforcement_writ_duplicate_request_apk: {
+    node: ENFORCEMENT_WRIT_DUPLICATE_REQUEST_APK,
+    deps: () => ['enforcement_writ_loss_known_date_apk'],
+    compute: (i) => computeEnforcementWritDuplicateRequestApk(i),
+  },
+  // Без restoration-узла: ч. 6 ст. 120 не упоминает ни продление, ни
+  // восстановление этого срока вообще.
+  court_fine_appeal_apk: {
+    node: COURT_FINE_APPEAL_APK,
+    deps: () => ['court_fine_ruling_copy_received_date_apk'],
+    compute: (i) => computeCourtFineAppealApk(i),
+  },
+  additional_decision_refusal_appeal_apk: {
+    node: ADDITIONAL_DECISION_REFUSAL_APPEAL_APK,
+    deps: () => ['additional_decision_refusal_ruling_date_apk'],
+    compute: (i) => computeAdditionalDecisionRefusalAppealApk(i),
   },
 };
 
