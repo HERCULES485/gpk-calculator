@@ -679,6 +679,28 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['creditors_meeting_external_management_transition_apk'],
   },
+  {
+    id: 'kfh_rehabilitation_plan_submission',
+    label: 'КФХ: представление плана финансового оздоровления в суд',
+    // Узкий институт главы X § 3 (крестьянское/фермерское хозяйство, ст. 219
+    // ФЗ № 127-ФЗ) — не общая глава V (финансовое оздоровление любого
+    // должника, не реализуется). Единственное поле ветви — дата вынесения
+    // определения о введении наблюдения в отношении КФХ.
+    primary_field: 'kfh_observation_introduction_ruling_date_apk',
+    fields: [],
+    nodes: ['kfh_rehabilitation_plan_submission_apk'],
+  },
+  {
+    id: 'kfh_rehabilitation_introduction_appeal',
+    label: 'Обжалование определения о введении финансового оздоровления КФХ',
+    // Отдельная от предыдущей ветвь: разные факты дела (подача плана vs
+    // обжалование определения о введении) — тот же принцип разделения, что у
+    // остальных appeal-ветвей домена. Единственное поле ветви — дата
+    // изготовления определения в полном объёме.
+    primary_field: 'kfh_rehabilitation_introduction_ruling_date_apk',
+    fields: [],
+    nodes: ['kfh_rehabilitation_introduction_appeal_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';

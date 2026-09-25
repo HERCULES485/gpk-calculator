@@ -141,6 +141,10 @@ import {
   MANAGER_REMOVAL_APPEAL_APK,
   computeCreditorsMeetingExternalManagementTransitionApk,
   CREDITORS_MEETING_EXTERNAL_MANAGEMENT_TRANSITION_APK,
+  computeKfhRehabilitationPlanSubmissionApk,
+  KFH_REHABILITATION_PLAN_SUBMISSION_APK,
+  computeKfhRehabilitationIntroductionAppealApk,
+  KFH_REHABILITATION_INTRODUCTION_APPEAL_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -3448,4 +3452,86 @@ test('созыв собрания кредиторов о переходе к в
     EXCLUDED_PROPERTY_ACCEPTANCE_APK.norm_versions[0].norm.calculation,
   );
   assert.equal(CREDITORS_MEETING_EXTERNAL_MANAGEMENT_TRANSITION_APK.restoration_norm, undefined);
+});
+
+// Глава X § 3 ФЗ № 127-ФЗ — финансовое оздоровление КФХ (ст. 219).
+
+test('КФХ: представление плана финансового оздоровления — два месяца с даты вынесения определения о введении наблюдения, перенос через выходной', () => {
+  const term = computeKfhRehabilitationPlanSubmissionApk({
+    kfh_observation_introduction_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-05-11');
+  assert.equal(term.deadline, '2025-05-12');
+  assert.equal(term.shifted, true);
+  assert.deepEqual(term.duration, { value: 2, unit: 'month' });
+  assert.equal(term.norm.primary, 'п. 1 ст. 219 ФЗ № 127-ФЗ');
+});
+
+test('КФХ: представление плана финансового оздоровления — будний день без переноса', () => {
+  const term = computeKfhRehabilitationPlanSubmissionApk({
+    kfh_observation_introduction_ruling_date_apk: '2025-02-01',
+  });
+  assert.equal(term.raw_deadline, '2025-04-01');
+  assert.equal(term.deadline, '2025-04-01');
+  assert.equal(term.shifted, false);
+});
+
+test('КФХ: представление плана финансового оздоровления — без kfh_observation_introduction_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeKfhRehabilitationPlanSubmissionApk({}),
+    /kfh_observation_introduction_ruling_date_apk/,
+  );
+});
+
+test('КФХ: представление плана финансового оздоровления — primary п. 1 ст. 219 (число срока даёт сама статья), без restoration', () => {
+  assert.equal(
+    KFH_REHABILITATION_PLAN_SUBMISSION_APK.norm_versions[0].norm.primary,
+    'п. 1 ст. 219 ФЗ № 127-ФЗ',
+  );
+  assert.deepEqual(
+    KFH_REHABILITATION_PLAN_SUBMISSION_APK.norm_versions[0].norm.calculation,
+    CREDITORS_MEETING_EXTERNAL_MANAGEMENT_TRANSITION_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(KFH_REHABILITATION_PLAN_SUBMISSION_APK.restoration_norm, undefined);
+});
+
+test('обжалование определения о введении финансового оздоровления КФХ: один месяц со дня изготовления определения в полном объёме', () => {
+  const term = computeKfhRehabilitationIntroductionAppealApk({
+    kfh_rehabilitation_introduction_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+});
+
+test('обжалование определения о введении финансового оздоровления КФХ: без kfh_rehabilitation_introduction_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeKfhRehabilitationIntroductionAppealApk({}),
+    /kfh_rehabilitation_introduction_ruling_date_apk/,
+  );
+});
+
+test('обжалование определения о введении финансового оздоровления КФХ: primary — ч. 1 ст. 61, не ст. 219; calculation тот же набор, что у остальных appeal-узлов, без restoration', () => {
+  assert.equal(
+    KFH_REHABILITATION_INTRODUCTION_APPEAL_APK.norm_versions[0].norm.primary,
+    'ч. 1 ст. 61 ФЗ № 127-ФЗ',
+  );
+  assert.doesNotMatch(
+    KFH_REHABILITATION_INTRODUCTION_APPEAL_APK.norm_versions[0].norm.primary,
+    /ст\. 219/,
+  );
+  assert.deepEqual(
+    KFH_REHABILITATION_INTRODUCTION_APPEAL_APK.norm_versions[0].norm.calculation,
+    MANAGER_REMOVAL_APPEAL_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(KFH_REHABILITATION_INTRODUCTION_APPEAL_APK.restoration_norm, undefined);
+});
+
+test('КФХ: представление плана и обжалование введения финансового оздоровления — разные узлы, разные id, разные поля ввода', () => {
+  assert.notEqual(KFH_REHABILITATION_PLAN_SUBMISSION_APK.id, KFH_REHABILITATION_INTRODUCTION_APPEAL_APK.id);
+  assert.match(KFH_REHABILITATION_PLAN_SUBMISSION_APK.title, /КФХ/);
+  assert.match(KFH_REHABILITATION_INTRODUCTION_APPEAL_APK.title, /крестьянского \(фермерского\) хозяйства/);
 });

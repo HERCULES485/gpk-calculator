@@ -58,6 +58,11 @@ export const BANKRUPTCY_SITUATION_CATEGORIES = [
       'external_management_report_on_full_satisfaction',
       'external_management_handover',
       'external_management_third_party_satisfaction',
+      // Финансовое оздоровление КФХ (глава X § 3, ст. 219 ФЗ № 127-ФЗ) — тот
+      // же редкий институт финансового оздоровления, что и остальные ветви
+      // этой категории; отдельной категории КФХ в проекте ещё нет.
+      'kfh_rehabilitation_plan_submission',
+      'kfh_rehabilitation_introduction_appeal',
     ],
   },
   {
