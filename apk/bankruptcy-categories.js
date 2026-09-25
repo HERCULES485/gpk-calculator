@@ -90,6 +90,7 @@ export const BANKRUPTCY_SITUATION_CATEGORIES = [
       'appraiser_involvement_request',
       'appraisal_report_registry_inclusion',
       'transaction_challenge_limitation',
+      'bankruptcy_signs_registry_notification',
     ],
   },
 ];
