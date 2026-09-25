@@ -124,6 +124,10 @@ import {
   SPECIAL_RULING_APPEAL_APK,
   computeInjunctionRefusalAppealApk,
   INJUNCTION_REFUSAL_APPEAL_APK,
+  computeCounterSecurityRulingAppealApk,
+  COUNTER_SECURITY_RULING_APPEAL_APK,
+  computeInjunctionCancellationRulingAppealApk,
+  INJUNCTION_CANCELLATION_RULING_APPEAL_APK,
 } from '../apk/chain.js';
 // Нужен ровно для одной проверки: узел-окно не должен попасть в реестр .ics
 // (см. последний тест файла) — граница решения по экспорту.
@@ -2744,4 +2748,92 @@ test('injunction_refusal_appeal_apk: без injunction_refusal_ruling_date_apk �
 test('injunction_refusal_appeal_apk: без restoration_norm и без ics — companion-узла восстановления нет', () => {
   assert.equal(INJUNCTION_REFUSAL_APPEAL_APK.restoration_norm, undefined);
   assert.equal(INJUNCTION_REFUSAL_APPEAL_APK.ics, undefined);
+});
+
+// --- Обжалование определения о встречном обеспечении (ч. 3 ст. 94 АПК РФ) ---
+
+test('counter_security_ruling_appeal_apk считается от counter_security_ruling_date_apk (обычная дата, без переноса)', () => {
+  const term = computeCounterSecurityRulingAppealApk({
+    counter_security_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11'); // 11.04.2025 — пятница, рабочий день
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'ч. 3 ст. 188 АПК РФ');
+});
+
+test('counter_security_ruling_appeal_apk: правило "нет такого числа" (ч. 2 ст. 114 АПК РФ) — 31 января -> последний день февраля', () => {
+  const term = computeCounterSecurityRulingAppealApk({
+    counter_security_ruling_date_apk: '2025-01-31',
+  });
+  assert.equal(term.raw_deadline, '2025-02-28');
+  assert.equal(term.deadline, '2025-02-28');
+  assert.equal(term.shifted, false);
+});
+
+test('counter_security_ruling_appeal_apk: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeCounterSecurityRulingAppealApk({
+    counter_security_ruling_date_apk: '2025-03-05',
+  });
+  // 05.03.2025 + 1 месяц = 05.04.2025 (суббота) -> перенос на 07.04.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-04-05');
+  assert.equal(term.deadline, '2025-04-07');
+  assert.equal(term.shifted, true);
+});
+
+test('counter_security_ruling_appeal_apk: без counter_security_ruling_date_apk — ошибка, упоминающая именно это поле', () => {
+  assert.throws(
+    () => computeCounterSecurityRulingAppealApk({}),
+    /counter_security_ruling_date_apk/,
+  );
+});
+
+test('counter_security_ruling_appeal_apk: без restoration_norm и без ics — companion-узла восстановления нет', () => {
+  assert.equal(COUNTER_SECURITY_RULING_APPEAL_APK.restoration_norm, undefined);
+  assert.equal(COUNTER_SECURITY_RULING_APPEAL_APK.ics, undefined);
+});
+
+// --- Обжалование определения об отмене обеспечения иска или об отказе в отмене (ч. 5 ст. 97 АПК РФ) ---
+
+test('injunction_cancellation_ruling_appeal_apk считается от injunction_cancellation_ruling_date_apk (обычная дата, без переноса)', () => {
+  const term = computeInjunctionCancellationRulingAppealApk({
+    injunction_cancellation_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11'); // 11.04.2025 — пятница, рабочий день
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'ч. 3 ст. 188 АПК РФ');
+});
+
+test('injunction_cancellation_ruling_appeal_apk: правило "нет такого числа" (ч. 2 ст. 114 АПК РФ) — 31 января -> последний день февраля', () => {
+  const term = computeInjunctionCancellationRulingAppealApk({
+    injunction_cancellation_ruling_date_apk: '2025-01-31',
+  });
+  assert.equal(term.raw_deadline, '2025-02-28');
+  assert.equal(term.deadline, '2025-02-28');
+  assert.equal(term.shifted, false);
+});
+
+test('injunction_cancellation_ruling_appeal_apk: перенос через нерабочий день (ч. 4 ст. 114 АПК РФ)', () => {
+  const term = computeInjunctionCancellationRulingAppealApk({
+    injunction_cancellation_ruling_date_apk: '2025-03-05',
+  });
+  // 05.03.2025 + 1 месяц = 05.04.2025 (суббота) -> перенос на 07.04.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-04-05');
+  assert.equal(term.deadline, '2025-04-07');
+  assert.equal(term.shifted, true);
+});
+
+test('injunction_cancellation_ruling_appeal_apk: без injunction_cancellation_ruling_date_apk — ошибка, упоминающая именно это поле', () => {
+  assert.throws(
+    () => computeInjunctionCancellationRulingAppealApk({}),
+    /injunction_cancellation_ruling_date_apk/,
+  );
+});
+
+test('injunction_cancellation_ruling_appeal_apk: без restoration_norm и без ics — companion-узла восстановления нет', () => {
+  assert.equal(INJUNCTION_CANCELLATION_RULING_APPEAL_APK.restoration_norm, undefined);
+  assert.equal(INJUNCTION_CANCELLATION_RULING_APPEAL_APK.ics, undefined);
 });

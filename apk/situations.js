@@ -320,6 +320,26 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['injunction_refusal_appeal_apk'],
   },
+  {
+    id: 'counter_security_ruling_appeal',
+    label: 'Суд вынес определение о встречном обеспечении — хочу обжаловать',
+    // Абзац четвёртый ч. 3 ст. 94 АПК РФ. Числа в самой норме нет — общий
+    // месячный срок по ч. 3 ст. 188 АПК РФ (та же формула, что у
+    // injunction_refusal_appeal_apk).
+    primary_field: 'counter_security_ruling_date_apk',
+    fields: [],
+    nodes: ['counter_security_ruling_appeal_apk'],
+  },
+  {
+    id: 'injunction_cancellation_ruling_appeal',
+    label: 'Суд отменил обеспечение иска или отказал в отмене — хочу обжаловать',
+    // Ч. 5 ст. 97 АПК РФ. Числа в самой норме нет — общий месячный срок по
+    // ч. 3 ст. 188 АПК РФ (та же формула, что у injunction_refusal_appeal_apk).
+    // Один узел на оба исхода (отмена/отказ в отмене) — тот же срок для обоих.
+    primary_field: 'injunction_cancellation_ruling_date_apk',
+    fields: [],
+    nodes: ['injunction_cancellation_ruling_appeal_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';

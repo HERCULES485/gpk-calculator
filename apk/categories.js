@@ -56,6 +56,8 @@ export const SITUATION_CATEGORIES_APK = [
       'case_consolidation_severance_refusal_appeal',
       'special_ruling_appeal',
       'injunction_refusal_appeal',
+      'counter_security_ruling_appeal',
+      'injunction_cancellation_ruling_appeal',
     ],
   },
 ];
