@@ -96,8 +96,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 52,
-  'переключатель ситуаций отрисован не на пятьдесят две ветви',
+  (await page.locator('#situation input[type=radio]').count()) === 54,
+  'переключатель ситуаций отрисован не на пятьдесят четыре ветви',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -1962,6 +1962,60 @@ check(
 check(
   (await creditorsMeetingCard.innerText()).includes('п. 1 ст. 146 ФЗ № 127-ФЗ'),
   'норма п. 1 ст. 146 ФЗ № 127-ФЗ не показана на карточке созыва собрания кредиторов',
+);
+
+// --- Ветвь: КФХ — представление плана финансового оздоровления (ст. 219 п. 1
+// ФЗ № 127-ФЗ) — два месяца ------------------------------------------------------
+
+await chooseSituation('kfh_rehabilitation_plan_submission');
+check(
+  (await page.locator('#in-kfh_observation_introduction_ruling_date_apk').count()) === 1,
+  'ветвь "kfh_rehabilitation_plan_submission": основное поле не найдено в DOM',
+);
+await page.fill('#in-kfh_observation_introduction_ruling_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви представления плана финансового оздоровления КФХ ожидалась одна карточка',
+);
+const kfhPlanCard = cardByTitle(
+  'КФХ: представление плана финансового оздоровления и графика погашения задолженности',
+);
+check((await kfhPlanCard.count()) === 1, 'карточка представления плана финансового оздоровления КФХ не появилась');
+check(
+  (await deadlineOf(kfhPlanCard)) === '12.05.2025',
+  `срок представления плана финансового оздоровления КФХ посчитан неверно: ${await deadlineOf(kfhPlanCard)}`,
+);
+check(
+  (await kfhPlanCard.innerText()).includes('п. 1 ст. 219 ФЗ № 127-ФЗ'),
+  'норма п. 1 ст. 219 ФЗ № 127-ФЗ не показана на карточке представления плана финансового оздоровления КФХ',
+);
+
+// --- Ветвь: обжалование определения о введении финансового оздоровления КФХ
+// (абз. 2 п. 2 ст. 219, ч. 1 ст. 61 ФЗ № 127-ФЗ) — один месяц ---------------------
+
+await chooseSituation('kfh_rehabilitation_introduction_appeal');
+check(
+  (await page.locator('#in-kfh_rehabilitation_introduction_ruling_date_apk').count()) === 1,
+  'ветвь "kfh_rehabilitation_introduction_appeal": основное поле не найдено в DOM',
+);
+await page.fill('#in-kfh_rehabilitation_introduction_ruling_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви обжалования определения о введении финансового оздоровления КФХ ожидалась одна карточка',
+);
+const kfhAppealCard = cardByTitle(
+  'Обжалование определения о введении финансового оздоровления крестьянского (фермерского) хозяйства',
+);
+check((await kfhAppealCard.count()) === 1, 'карточка обжалования определения о введении финансового оздоровления КФХ не появилась');
+check(
+  (await deadlineOf(kfhAppealCard)) === '11.04.2025',
+  `срок обжалования определения о введении финансового оздоровления КФХ посчитан неверно: ${await deadlineOf(kfhAppealCard)}`,
+);
+check(
+  (await kfhAppealCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
+  'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке обжалования определения о введении финансового оздоровления КФХ',
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------

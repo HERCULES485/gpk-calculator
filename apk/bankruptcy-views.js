@@ -84,6 +84,8 @@ import {
   computeManagerReleaseAppealApk,
   computeManagerRemovalAppealApk,
   computeCreditorsMeetingExternalManagementTransitionApk,
+  computeKfhRehabilitationPlanSubmissionApk,
+  computeKfhRehabilitationIntroductionAppealApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -147,6 +149,8 @@ import {
   MANAGER_RELEASE_APPEAL_APK,
   MANAGER_REMOVAL_APPEAL_APK,
   CREDITORS_MEETING_EXTERNAL_MANAGEMENT_TRANSITION_APK,
+  KFH_REHABILITATION_PLAN_SUBMISSION_APK,
+  KFH_REHABILITATION_INTRODUCTION_APPEAL_APK,
 } from './bankruptcy.js';
 
 import {
@@ -869,6 +873,16 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     node: CREDITORS_MEETING_EXTERNAL_MANAGEMENT_TRANSITION_APK,
     deps: () => ['solvency_restoration_circumstances_discovered_date_apk'],
     compute: (i) => computeCreditorsMeetingExternalManagementTransitionApk(i),
+  },
+  kfh_rehabilitation_plan_submission_apk: {
+    node: KFH_REHABILITATION_PLAN_SUBMISSION_APK,
+    deps: () => ['kfh_observation_introduction_ruling_date_apk'],
+    compute: (i) => computeKfhRehabilitationPlanSubmissionApk(i),
+  },
+  kfh_rehabilitation_introduction_appeal_apk: {
+    node: KFH_REHABILITATION_INTRODUCTION_APPEAL_APK,
+    deps: () => ['kfh_rehabilitation_introduction_ruling_date_apk'],
+    compute: (i) => computeKfhRehabilitationIntroductionAppealApk(i),
   },
 };
 
