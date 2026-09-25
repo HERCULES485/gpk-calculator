@@ -55,6 +55,7 @@ import {
   computeThirdPartyNoClaimRefusalAppealApk,
   computeCaseConsolidationSeveranceRefusalAppealApk,
   computeSpecialRulingAppealApk,
+  computeInjunctionRefusalAppealApk,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -93,6 +94,7 @@ import {
   THIRD_PARTY_NO_CLAIM_REFUSAL_APPEAL_APK,
   CASE_CONSOLIDATION_SEVERANCE_REFUSAL_APPEAL_APK,
   SPECIAL_RULING_APPEAL_APK,
+  INJUNCTION_REFUSAL_APPEAL_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -628,6 +630,11 @@ const NODE_REQUIREMENTS = {
     node: SPECIAL_RULING_APPEAL_APK,
     deps: () => ['special_ruling_issued_date_apk'],
     compute: (i) => computeSpecialRulingAppealApk(i),
+  },
+  injunction_refusal_appeal_apk: {
+    node: INJUNCTION_REFUSAL_APPEAL_APK,
+    deps: () => ['injunction_refusal_ruling_date_apk'],
+    compute: (i) => computeInjunctionRefusalAppealApk(i),
   },
 };
 

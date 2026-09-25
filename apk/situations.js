@@ -311,6 +311,15 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['special_ruling_appeal_apk'],
   },
+  {
+    id: 'injunction_refusal_appeal',
+    label: 'Суд отказал в обеспечении иска — хочу обжаловать',
+    // Ч. 7 ст. 93 АПК РФ. Числа в самой норме нет — общий месячный срок по
+    // ч. 3 ст. 188 АПК РФ (та же формула, что у private_complaint_first_instance_apk).
+    primary_field: 'injunction_refusal_ruling_date_apk',
+    fields: [],
+    nodes: ['injunction_refusal_appeal_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';
