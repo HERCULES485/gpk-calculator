@@ -78,6 +78,7 @@ import {
   computeTransactionChallengeLimitationApk,
   computeTransactionChallengeLimitationCitizenApk,
   computeBankruptcySignsRegistryNotificationApk,
+  computeFilingNoticeValidityApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -135,6 +136,7 @@ import {
   TRANSACTION_CHALLENGE_LIMITATION_APK,
   TRANSACTION_CHALLENGE_LIMITATION_CITIZEN_APK,
   BANKRUPTCY_SIGNS_REGISTRY_NOTIFICATION_APK,
+  FILING_NOTICE_VALIDITY_APK,
 } from './bankruptcy.js';
 
 import {
@@ -818,6 +820,16 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     kind: 'working_day',
     deps: () => ['bankruptcy_signs_known_date_apk'],
     compute: (i) => computeBankruptcySignsRegistryNotificationApk(i),
+  },
+  // Утрата силы уведомления о намерении обратиться с заявлением о
+  // банкротстве (абзац второй п. 2.1 ст. 7 ФЗ № 127-ФЗ, только юрлица) —
+  // тот же паттерн регистрации working_day, что и у остальных duty-узлов
+  // домена.
+  filing_notice_validity_apk: {
+    node: FILING_NOTICE_VALIDITY_APK,
+    kind: 'working_day',
+    deps: () => ['filing_notice_publication_date_apk'],
+    compute: (i) => computeFilingNoticeValidityApk(i),
   },
 };
 

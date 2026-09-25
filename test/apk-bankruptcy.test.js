@@ -129,6 +129,8 @@ import {
   TRANSACTION_CHALLENGE_LIMITATION_CITIZEN_APK,
   computeBankruptcySignsRegistryNotificationApk,
   BANKRUPTCY_SIGNS_REGISTRY_NOTIFICATION_APK,
+  computeFilingNoticeValidityApk,
+  FILING_NOTICE_VALIDITY_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -3147,5 +3149,59 @@ test('включение сведений о признаках банкротс
   assert.equal(
     BANKRUPTCY_SIGNS_REGISTRY_NOTIFICATION_APK.norm_versions[0].norm.primary,
     'п. 1 ст. 30 ФЗ № 127-ФЗ',
+  );
+});
+
+// Задача — утрата силы сведений уведомления о намерении обратиться с
+// заявлением о банкротстве (абзац второй п. 2.1 ст. 7 ФЗ № 127-ФЗ, глава I).
+// Применяется только к банкротству юридических лиц.
+
+test('утрата силы уведомления о намерении обратиться с заявлением о банкротстве: тридцать рабочих дней с даты опубликования уведомления', () => {
+  const term = computeFilingNoticeValidityApk({
+    filing_notice_publication_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-04-22');
+  assert.equal(term.deadline, '2025-04-22');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 30, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'абзац второй п. 2.1 ст. 7 ФЗ № 127-ФЗ');
+});
+
+test('утрата силы уведомления о намерении обратиться с заявлением о банкротстве: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeFilingNoticeValidityApk({
+    filing_notice_publication_date_apk: '2025-12-01',
+  });
+  assert.equal(term.first_working_day, '2025-12-02');
+  assert.equal(term.deadline, '2026-01-22');
+});
+
+test('утрата силы уведомления о намерении обратиться с заявлением о банкротстве: без filing_notice_publication_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeFilingNoticeValidityApk({}),
+    /filing_notice_publication_date_apk/,
+  );
+});
+
+test('утрата силы уведомления о намерении обратиться с заявлением о банкротстве: calculation — тот же массив, что у остальных working_day duty-узлов домена, без restoration', () => {
+  assert.deepEqual(
+    FILING_NOTICE_VALIDITY_APK.norm_versions[0].norm.calculation,
+    DEBTOR_RESPONSE_BANKRUPTCY_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(FILING_NOTICE_VALIDITY_APK.restoration_norm, undefined);
+});
+
+test('утрата силы уведомления о намерении обратиться с заявлением о банкротстве: title явно ограничивает применимость юридическими лицами', () => {
+  assert.match(FILING_NOTICE_VALIDITY_APK.title, /юридических лиц/);
+  assert.match(FILING_NOTICE_VALIDITY_APK.logic, /гражданина/);
+  assert.match(FILING_NOTICE_VALIDITY_APK.logic, /ПП ВС РФ от 13\.10\.2015 № 45/);
+});
+
+test('утрата силы уведомления о намерении обратиться с заявлением о банкротстве: узел отдельная ветвь от остальных ЕФРСБ-узлов домена — разные id и разные поля ввода', () => {
+  assert.notEqual(FILING_NOTICE_VALIDITY_APK.id, BANKRUPTCY_SIGNS_REGISTRY_NOTIFICATION_APK.id);
+  assert.equal(
+    FILING_NOTICE_VALIDITY_APK.norm_versions[0].norm.primary,
+    'абзац второй п. 2.1 ст. 7 ФЗ № 127-ФЗ',
   );
 });

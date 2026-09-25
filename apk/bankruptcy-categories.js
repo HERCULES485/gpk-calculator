@@ -91,6 +91,7 @@ export const BANKRUPTCY_SITUATION_CATEGORIES = [
       'appraisal_report_registry_inclusion',
       'transaction_challenge_limitation',
       'bankruptcy_signs_registry_notification',
+      'filing_notice_validity',
     ],
   },
 ];
