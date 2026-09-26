@@ -1121,6 +1121,313 @@ await calendarBadgeScenario({
   summary: null,
 });
 
+// --- Цепочка шагов ветви decision_chain: непрерывная линия ------------------
+//
+// Пять шагов situation.chain связаны вертикальной линией, собранной из
+// сегментов — каждый шаг (и .chain-aside узла восстановления между шагами)
+// рисует свой ::before на свою высоту. Геометрия меряется здесь, в тесте, через
+// getBoundingClientRect и computed style псевдоэлементов — в рабочем коде
+// измерений нет. Инварианты:
+//   - соседние сегменты стыкуются встык (без щели и нахлёста);
+//   - у первого шага сегмент начинается на центре маркера, у последнего — на
+//     нём кончается, после последнего шага линии нет;
+//   - сегмент равен высоте своего слота, а слот — высоте карточки вместе с её
+//     нижним margin (flow-root): линия не короче и не длиннее карточки;
+//   - маркер и линия на одной вертикали, маркер — на строке заголовка карточки;
+//   - маркер полый ровно у шагов-invite, у остальных — сплошной --accent.
+
+const CHAIN_TOLERANCE_PX = 0.5;
+const CHAIN_HEAD_TOLERANCE_PX = 1;
+
+async function measureChain(p) {
+  return p.evaluate(() => {
+    const chain = document.querySelector('#results .chain');
+    if (!chain) return null;
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    const probe = document.createElement('span');
+    probe.style.color = accent;
+    document.body.appendChild(probe);
+    const accentRgb = getComputedStyle(probe).color;
+    probe.remove();
+    const slots = [...chain.children].map((slot) => {
+      const r = slot.getBoundingClientRect();
+      const before = getComputedStyle(slot, '::before');
+      const after = getComputedStyle(slot, '::after');
+      const child = slot.firstElementChild;
+      const childRect = child.getBoundingClientRect();
+      const isStep = slot.classList.contains('chain-step');
+      let head = null;
+      if (isStep) {
+        const h = child.matches('.event-line')
+          ? child.querySelector('.event-text')
+          : child.querySelector(':scope > h2');
+        const range = document.createRange();
+        range.selectNodeContents(h);
+        const line = range.getClientRects()[0];
+        head = (line.top + line.bottom) / 2;
+      }
+      return {
+        cls: slot.className,
+        isStep,
+        pending: slot.classList.contains('pending'),
+        childCls: child.className,
+        childCount: slot.childElementCount,
+        top: r.top,
+        bottom: r.bottom,
+        childOuterBottom: childRect.bottom + parseFloat(getComputedStyle(child).marginBottom),
+        line:
+          before.content === 'none'
+            ? null
+            : {
+                top: r.top + parseFloat(before.top),
+                bottom: r.top + parseFloat(before.top) + parseFloat(before.height),
+                centerX: r.left + parseFloat(before.left) + parseFloat(before.width) / 2,
+              },
+        marker: isStep
+          ? {
+              centerY: r.top + parseFloat(after.top) + parseFloat(after.height) / 2,
+              centerX: r.left + parseFloat(after.left) + parseFloat(after.width) / 2,
+              bg: after.backgroundColor,
+              border: after.borderTopColor,
+            }
+          : null,
+        head,
+      };
+    });
+    return { accentRgb, slots };
+  });
+}
+
+function chainProblems(tag, m) {
+  const out = [];
+  if (!m) return [`${tag}: контейнер .chain не отрисован`];
+  const { slots, accentRgb } = m;
+  const near = (a, b, tol = CHAIN_TOLERANCE_PX) => Math.abs(a - b) <= tol;
+  const fmt = (n) => n.toFixed(1);
+  const first = slots.findIndex((s) => s.cls.includes('chain-first'));
+  const last = slots.findIndex((s) => s.cls.includes('chain-last'));
+  if (first < 0 || last < first) return [`${tag}: нет шагов chain-first/chain-last в нужном порядке`];
+  const lineX = slots[first].line?.centerX;
+  let prev = null;
+  slots.forEach((s, i) => {
+    const where = `${tag}, слот ${i} (${s.cls} > ${s.childCls})`;
+    if (s.childCount !== 1) out.push(`${where}: в слоте ${s.childCount} элементов вместо одного`);
+    if (!near(s.bottom, s.childOuterBottom)) {
+      out.push(`${where}: слот кончается на ${fmt(s.bottom)}, карточка с margin — на ${fmt(s.childOuterBottom)}`);
+    }
+    const inLine = i >= first && i <= last;
+    if (!inLine) {
+      if (s.line) out.push(`${where}: линия выходит за пределы цепочки`);
+      return;
+    }
+    if (!s.line) {
+      out.push(`${where}: внутри цепочки нет сегмента линии`);
+      return;
+    }
+    const expectTop = i === first ? s.marker.centerY : s.top;
+    const expectBottom = i === last ? s.marker.centerY : s.bottom;
+    if (!near(s.line.top, expectTop)) {
+      out.push(`${where}: сегмент начинается на ${fmt(s.line.top)}, ждали ${fmt(expectTop)}`);
+    }
+    if (!near(s.line.bottom, expectBottom)) {
+      out.push(`${where}: сегмент кончается на ${fmt(s.line.bottom)}, ждали ${fmt(expectBottom)}`);
+    }
+    if (prev && !near(prev.line.bottom, s.line.top)) {
+      out.push(`${where}: разрыв линии ${fmt(s.line.top - prev.line.bottom)}px со слотом выше`);
+    }
+    if (!near(s.line.centerX, lineX)) out.push(`${where}: сегмент смещён по горизонтали`);
+    if (s.isStep) {
+      if (!near(s.marker.centerX, lineX)) out.push(`${where}: маркер не на линии`);
+      if (!near(s.marker.centerY, s.head, CHAIN_HEAD_TOLERANCE_PX)) {
+        out.push(`${where}: маркер на ${fmt(s.marker.centerY)}, строка заголовка — на ${fmt(s.head)}`);
+      }
+      const isInvite = s.childCls.split(' ').includes('invite');
+      if (s.pending !== isInvite) out.push(`${where}: признак pending не совпадает с invite-карточкой`);
+      if (s.marker.border !== accentRgb) out.push(`${where}: обводка маркера не --accent`);
+      if (isInvite && s.marker.bg === accentRgb) out.push(`${where}: у invite-шага маркер сплошной`);
+      if (!isInvite && s.marker.bg !== accentRgb) out.push(`${where}: у посчитанного шага маркер не сплошной`);
+    }
+    prev = s;
+  });
+  return out;
+}
+
+async function openChainPage(tag) {
+  const p = await browser.newPage();
+  p.on('console', (m) => {
+    if (m.type() === 'error') problems.push(`${tag}: console error: ${m.text()}`);
+  });
+  p.on('pageerror', (e) => problems.push(`${tag}: pageerror: ${e.message}`));
+  await p.goto(`http://localhost:${port}/apk.html`, { waitUntil: 'networkidle' });
+  await p.fill('#in-decision_full_text_date', '15.10.2026');
+  await p.waitForTimeout(200);
+  return p;
+}
+
+// Все пять шагов посчитаны: дедлайны кассаций уходят в 2027 год (draft) —
+// на карточках есть календарные бейджи для сценария с раскрытием.
+async function fillFullChain(p) {
+  const steps = [
+    ['select', 'appeal_filed', 'yes'],
+    ['select', 'appeal_outcome', 'affirmed'],
+    ['fill', 'appellate_ruling_date', '20.12.2026'],
+    ['select', 'cassation_filed', 'yes'],
+    ['fill', 'district_cassation_ruling_date', '15.03.2027'],
+    ['select', 'subject_category', 'participating_duly_notified'],
+  ];
+  for (const [action, id, value] of steps) {
+    if (action === 'select') await p.selectOption(`#in-${id}`, value);
+    else await p.fill(`#in-${id}`, value);
+    await p.waitForTimeout(200);
+  }
+}
+
+const stepKinds = (m) => m.slots.filter((s) => s.isStep).map((s) => s.childCls);
+const stepHeights = (m) => m.slots.map((s) => s.bottom - s.top);
+
+// п. 1 — полностью заполненная цепочка.
+{
+  const tag = 'цепочка decision_chain, все шаги посчитаны';
+  const p = await openChainPage(tag);
+  await fillFullChain(p);
+  const m = await measureChain(p);
+  problems.push(...chainProblems(tag, m));
+  if (m) {
+    check(
+      JSON.stringify(stepKinds(m)) === JSON.stringify(['card', 'event-line', 'card', 'event-line', 'card']),
+      `${tag}: виды карточек шагов ${JSON.stringify(stepKinds(m))}`,
+    );
+    check(m.slots.filter((s) => !s.isStep).length === 3, `${tag}: узлов восстановления в контейнере не три`);
+  }
+  // У события внутри шага своей левой границы нет (иначе она дублирует линию
+  // цепочки), а текст стоит на том же отступе от левого края, что у события
+  // вне цепочки — эталон строится тут же, прямо в #results.
+  const events = await p.evaluate(() => {
+    const textOffset = (box) =>
+      box.querySelector('.event-text').getBoundingClientRect().left - box.getBoundingClientRect().left;
+    const ref = document.createElement('div');
+    ref.className = 'event-line';
+    ref.innerHTML = '<div class="event-head"><span class="event-text">x</span></div>';
+    document.getElementById('results').appendChild(ref);
+    const reference = { offset: textOffset(ref), border: getComputedStyle(ref).borderLeftWidth };
+    ref.remove();
+    const inChain = [...document.querySelectorAll('#results .chain-step > .event-line')].map((box) => ({
+      offset: textOffset(box),
+      border: getComputedStyle(box).borderLeftWidth,
+    }));
+    return { reference, inChain };
+  });
+  check(events.inChain.length === 2, `${tag}: событий-шагов ${events.inChain.length} вместо двух`);
+  check(events.reference.border === '3px', `${tag}: у события вне цепочки граница «${events.reference.border}»`);
+  for (const [i, e] of events.inChain.entries()) {
+    check(e.border === '0px', `${tag}: у события-шага ${i} осталась левая граница ${e.border}`);
+    check(
+      e.offset === events.reference.offset,
+      `${tag}: текст события-шага ${i} сдвинут: ${e.offset}px от края против ${events.reference.offset}px вне цепочки`,
+    );
+  }
+  await p.close();
+}
+
+// п. 2 — высота шагов меняется на живом взаимодействии: раскрытие календарного
+// бейджа и «Подробнее». Линия должна пересобраться без перерисовки страницы.
+async function expandChainCards(p, tag) {
+  const before = stepHeights(await measureChain(p));
+  const steps = p.locator('#results .chain > .chain-step');
+  const badge = steps.nth(2).locator('summary.calendar-warning-badge');
+  check((await badge.count()) === 1, `${tag}: у шага кассации округа нет календарного бейджа`);
+  await badge.click();
+  for (const k of [0, 1, 4]) await steps.nth(k).locator('details.more > summary').click();
+  await p.waitForTimeout(100);
+  const m = await measureChain(p);
+  const after = stepHeights(m);
+  const stepIdx = m.slots.map((s, i) => (s.isStep ? i : -1)).filter((i) => i >= 0);
+  for (const k of [0, 1, 2, 4]) {
+    const i = stepIdx[k];
+    check(after[i] > before[i], `${tag}: высота шага ${k} не выросла (${before[i]} → ${after[i]})`);
+  }
+  return m;
+}
+
+{
+  const tag = 'цепочка decision_chain, раскрытие бейджа и «Подробнее»';
+  const p = await openChainPage(tag);
+  await fillFullChain(p);
+  problems.push(...chainProblems(`${tag} (до)`, await measureChain(p)));
+  problems.push(...chainProblems(`${tag} (после)`, await expandChainCards(p, tag)));
+  await p.close();
+}
+
+// п. 3 — неполные данные: посчитан только первый шаг, остальные — invite.
+{
+  const tag = 'цепочка decision_chain, неполные данные';
+  const p = await openChainPage(tag);
+  const m = await measureChain(p);
+  problems.push(...chainProblems(tag, m));
+  if (m) {
+    check(
+      JSON.stringify(stepKinds(m)) === JSON.stringify(['card', 'invite', 'invite', 'invite', 'invite']),
+      `${tag}: виды карточек шагов ${JSON.stringify(stepKinds(m))}`,
+    );
+  }
+  await p.close();
+}
+
+// п. 4 — ошибка расчёта на шаге вступления в силу: отмена/изменение решения
+// апелляцией моделью намеренно не поддерживается (apk/chain.js).
+{
+  const tag = 'цепочка decision_chain, error-карточка';
+  const p = await openChainPage(tag);
+  await p.selectOption('#in-appeal_filed', 'yes');
+  await p.waitForTimeout(200);
+  await p.selectOption('#in-appeal_outcome', 'reversed_or_changed');
+  await p.waitForTimeout(200);
+  await p.fill('#in-appellate_ruling_date', '20.12.2026');
+  await p.waitForTimeout(200);
+  const m = await measureChain(p);
+  problems.push(...chainProblems(tag, m));
+  if (m) {
+    check(stepKinds(m)[1] === 'card calc-error', `${tag}: шаг вступления в силу — «${stepKinds(m)[1]}», ждали error`);
+  }
+  await p.close();
+}
+
+// п. 5 — мутация: сегменты заморожены на пиксельных top/height, снятых до
+// раскрытия (то, что дало бы однократное измерение в JS). До взаимодействия
+// геометрия совпадает и проверка проходит; после раскрытия она обязана упасть —
+// иначе проверки п. 2 ничего не ловят.
+{
+  const tag = 'цепочка decision_chain, мутация фиксированных px';
+  const p = await openChainPage(tag);
+  await fillFullChain(p);
+  const frozen = await p.evaluate(() => {
+    const rules = [...document.querySelectorAll('#results .chain > *')].map((slot, i) => {
+      const cs = getComputedStyle(slot, '::before');
+      return (
+        `#results .chain > :nth-child(${i + 1})::before ` +
+        `{ top: ${cs.top} !important; bottom: auto !important; height: ${cs.height} !important; }`
+      );
+    });
+    const style = document.createElement('style');
+    style.textContent = rules.join('\n');
+    document.head.appendChild(style);
+    return rules.length;
+  });
+  check(frozen === 8, `${tag}: заморожено ${frozen} сегментов вместо восьми`);
+  const staticProblems = chainProblems(`${tag} (до)`, await measureChain(p));
+  check(staticProblems.length === 0, `${tag}: мутация ломает уже статичную геометрию: ${staticProblems.join('; ')}`);
+  const mutated = chainProblems(`${tag} (после)`, await expandChainCards(p, tag));
+  check(mutated.length > 0, `${tag}: проверки линии не поймали сегменты фиксированной высоты`);
+  await p.close();
+}
+
+// Остальные ветви рендерятся без контейнера цепочки.
+{
+  await chooseSituation('decision_chain');
+  check((await page.locator('#results .chain').count()) === 1, 'у ветви decision_chain нет контейнера цепочки');
+  await chooseSituation('rulings');
+  check((await page.locator('#results .chain, #results .chain-step').count()) === 0, 'контейнер цепочки у ветви rulings');
+}
 
 await browser.close();
 server.close();

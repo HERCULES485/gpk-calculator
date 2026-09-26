@@ -48,6 +48,17 @@ export const SITUATIONS_APK = [
       'cassation_vs_apk',
       'cassation_vs_apk_restoration',
     ],
+    // Основная цепочка ветви — последовательные шаги обжалования, которые UI
+    // связывает вертикальной линией (chainSlot в apk/app.js). Порядок — тот
+    // же, что в `nodes`; узлы восстановления в цепочку не входят и рисуются на
+    // своих местах без маркера. Как и всё здесь, это чисто представление.
+    chain: [
+      'appeal_general_apk',
+      'entry_into_force_apk',
+      'cassation_general_apk',
+      'entry_into_force_after_cassation_apk',
+      'cassation_vs_apk',
+    ],
   },
   {
     id: 'rulings',
