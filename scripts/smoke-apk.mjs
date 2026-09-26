@@ -521,6 +521,197 @@ check(
   `execution_compensation[empty]: пояснение о закрытом окне не показано: «${emptyNote}»`,
 );
 
+
+// --- Поиск по ситуациям (фильтр переключателя) --------------------------------
+//
+// filterSituations() только прячет label и категории атрибутом hidden: радио-
+// кнопки и их checked не трогает. Страница перезагружается, чтобы начать с
+// исходного состояния — выше chooseSituation() уже раскрывал свёрнутые <details>.
+// «Видимые на экране» считаются через :visible (реальная отрисовка), а не по
+// атрибуту: display у label.situation иначе перебивает [hidden].
+
+await page.goto(`http://localhost:${port}/apk.html`, { waitUntil: 'networkidle' });
+
+const searchState = () =>
+  page.evaluate(() => {
+    const root = document.getElementById('situation');
+    const labels = [...root.querySelectorAll('label.situation')];
+    const groups = [...root.querySelectorAll(':scope > fieldset.situations, :scope > details.situations-group')];
+    return {
+      total: labels.length,
+      shown: labels.filter((l) => !l.hidden).map((l) => l.querySelector('input').value),
+      hiddenGroups: groups.filter((g) => g.hidden).length,
+      detailsOpen: [...root.querySelectorAll('details.situations-group')].map((d) => d.open),
+      count: document.getElementById('situation-search-count').textContent,
+      emptyHidden: document.getElementById('situation-search-empty').hidden,
+      checked: root.querySelector('input[type=radio]:checked')?.value ?? null,
+      firstGroupMarginTop: getComputedStyle(groups[0]).marginTop,
+    };
+  });
+const renderedLabels = () => page.locator('#situation label.situation:visible').count();
+const search = async (text) => {
+  await page.fill('#situation-search-input', text);
+  await settle();
+};
+
+check(
+  (await page.locator('#situation > :first-child').getAttribute('id')) === 'situation-search-input',
+  'поле поиска не первый потомок #situation',
+);
+const searchInitial = await searchState();
+const renderedInitial = await renderedLabels();
+check(searchInitial.total === 35, `поиск: ждали 35 label.situation, получили ${searchInitial.total}`);
+check(
+  searchInitial.shown.length === 35 && searchInitial.hiddenGroups === 0,
+  'поиск: до ввода часть ветвей или категорий уже скрыта',
+);
+check(
+  searchInitial.detailsOpen.every((open) => !open),
+  'поиск: свёрнутая категория раскрыта до ввода',
+);
+check(searchInitial.count === '' && searchInitial.emptyHidden, 'поиск: счётчик или «ничего не найдено» видны до ввода');
+check(
+  searchInitial.firstGroupMarginTop === '0px',
+  `поиск: у первой категории отступ сверху ${searchInitial.firstGroupMarginTop}, ждали 0px`,
+);
+
+// 1. Однозначное совпадение: видна только одна ветвь, пустые категории скрыты.
+await search('судебные расходы');
+let st = await searchState();
+check(
+  st.shown.length === 1 && st.shown[0] === 'court_costs',
+  `поиск «судебные расходы»: ждали одну ветвь court_costs, видны ${JSON.stringify(st.shown)}`,
+);
+check((await renderedLabels()) === 1, `поиск «судебные расходы»: на экране видно ${await renderedLabels()} label, ждали 1`);
+check(st.count === 'Показано 1 из 35', `поиск «судебные расходы»: счётчик «${st.count}»`);
+check(st.emptyHidden, 'поиск: «ничего не найдено» показано при совпадении');
+const groupsWithMatch = await page.locator('#situation > fieldset.situations:not([hidden]), #situation > details.situations-group:not([hidden])').count();
+check(
+  groupsWithMatch === 1 && st.hiddenGroups > 0,
+  `поиск «судебные расходы»: видимых категорий ${groupsWithMatch}, ждали одну`,
+);
+
+// 2. Нет совпадений: скрыты все label, видно «Ничего не найдено.».
+await search('zzzqqq');
+st = await searchState();
+check(st.shown.length === 0 && (await renderedLabels()) === 0, 'поиск без совпадений: label остались видны');
+check(!st.emptyHidden && (await page.locator('#situation-search-empty').isVisible()), 'поиск без совпадений: «Ничего не найдено.» не показано');
+check(st.count === 'Показано 0 из 35', `поиск без совпадений: счётчик «${st.count}»`);
+
+// 3. Совпадение внутри изначально свёрнутой категории раскрывает её <details>.
+await search('судебный штраф');
+st = await searchState();
+check(
+  st.shown.length === 1 && st.shown[0] === 'court_fine_appeal',
+  `поиск «судебный штраф»: ждали одну ветвь court_fine_appeal, видны ${JSON.stringify(st.shown)}`,
+);
+check(st.detailsOpen.every((open) => open), 'поиск в свёрнутой категории: <details> не раскрылся');
+check(
+  (await page.locator('#situation input[value="court_fine_appeal"]').isVisible()) && (await renderedLabels()) === 1,
+  'поиск в свёрнутой категории: найденная ветвь не видна на экране или видны лишние',
+);
+
+// 4. Регистронезависимость: тот же запрос в другом регистре — тот же результат.
+await search('СУДЕБНЫЕ РАСХОДЫ');
+st = await searchState();
+check(
+  st.shown.length === 1 && st.shown[0] === 'court_costs' && st.count === 'Показано 1 из 35',
+  `поиск «СУДЕБНЫЕ РАСХОДЫ»: регистр влияет на результат — ${JSON.stringify(st.shown)}`,
+);
+
+// 5. Очистка поля — всё как до ввода, включая снова свёрнутые <details>.
+await search('');
+st = await searchState();
+check(
+  JSON.stringify(st) === JSON.stringify(searchInitial),
+  `поиск: после очистки состояние не исходное: ${JSON.stringify(st)}`,
+);
+check((await renderedLabels()) === renderedInitial, 'поиск: после очистки на экране другое число label');
+
+// 6. Выбранная ветвь, скрытая фильтром, не теряет checked и возвращается.
+await chooseSituation('court_costs');
+const pickLabel = page.locator('#situation input[value="court_costs"]').locator('xpath=ancestor::label[1]');
+await search('судебный штраф');
+check(await pickLabel.isHidden(), 'поиск: выбранная ветвь не скрыта фильтром, сценарий не проверяет то, что должен');
+check(
+  (await page.locator('#situation input[value="court_costs"]').isChecked()) &&
+    (await searchState()).checked === 'court_costs',
+  'поиск: скрытая фильтром выбранная ветвь потеряла checked',
+);
+await search('');
+check(
+  (await pickLabel.isVisible()) && (await page.locator('#situation input[value="court_costs"]').isChecked()),
+  'поиск: после очистки выбранная ветвь не видна или не отмечена',
+);
+check(
+  (await pickLabel.evaluate((l) => l.classList.contains('active'))),
+  'поиск: после очистки у выбранной ветви пропал класс active',
+);
+
+
+// --- Поиск по ситуациям: отступ первой ВИДИМОЙ категории ------------------------
+//
+// При активном фильтре первые по DOM категории бывают скрыты, и CSS-правило для
+// первой категории в DOM до первой видимой не дотягивается. filterSituations()
+// отмечает первую видимую категорию верхнего уровня классом
+// situations-first-visible: у неё margin-top 0px, у остальных видимых — прежние
+// 16px. После очистки поля — разметка и вычисленные отступы как до ввода.
+
+await page.goto(`http://localhost:${port}/apk.html`, { waitUntil: 'networkidle' });
+
+const categoryLayout = () =>
+  page.evaluate(() => {
+    const root = document.getElementById('situation');
+    return [...root.querySelectorAll(':scope > fieldset.situations, :scope > details.situations-group')].map(
+      (g) => ({
+        hidden: g.hidden,
+        marginTop: getComputedStyle(g).marginTop,
+        firstVisible: g.classList.contains('situations-first-visible'),
+      }),
+    );
+  });
+const situationHtml = () => page.locator('#situation').evaluate((n) => n.outerHTML);
+
+const layoutInitial = await categoryLayout();
+const htmlInitial = await situationHtml();
+check(
+  layoutInitial.every((g) => !g.hidden && !g.firstVisible) &&
+    layoutInitial.map((g) => g.marginTop).join() ===
+      ['0px', ...Array(layoutInitial.length - 1).fill('16px')].join(),
+  `первая видимая категория: исходные отступы не 0px/16px…: ${JSON.stringify(layoutInitial)}`,
+);
+
+for (const query of ['штраф', 'апелляци']) {
+  await page.fill('#situation-search-input', query);
+  await settle();
+  const layout = await categoryLayout();
+  const visible = layout.filter((g) => !g.hidden);
+  check(
+    layout[0].hidden && visible.length > 0 && visible.length < layout.length,
+    `первая видимая категория «${query}»: сценарий не скрывает первую категорию или скрывает все: ${JSON.stringify(layout)}`,
+  );
+  check(
+    visible.length > 0 && visible[0].marginTop === '0px',
+    `первая видимая категория «${query}»: margin-top ${visible[0]?.marginTop}, ждали 0px`,
+  );
+  check(
+    visible.slice(1).every((g) => g.marginTop === '16px'),
+    `первая видимая категория «${query}»: у остальных видимых категорий отступ не 16px: ${JSON.stringify(visible)}`,
+  );
+  check(
+    layout.filter((g) => g.firstVisible).length === 1 && visible[0].firstVisible,
+    `первая видимая категория «${query}»: класс situations-first-visible не ровно на первой видимой: ${JSON.stringify(layout)}`,
+  );
+}
+
+await page.fill('#situation-search-input', '');
+await settle();
+check(
+  JSON.stringify(await categoryLayout()) === JSON.stringify(layoutInitial),
+  `первая видимая категория: после очистки отступы не исходные: ${JSON.stringify(await categoryLayout())}`,
+);
+check((await situationHtml()) === htmlInitial, 'первая видимая категория: после очистки outerHTML #situation не совпадает с исходным');
+
 await browser.close();
 server.close();
 

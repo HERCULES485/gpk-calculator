@@ -91,8 +91,15 @@
          свёрнутая (external_management_*) внутри <details>. */
       .situation-switch > fieldset.situations,
       .situation-switch > details.situations-group { margin-top: 16px; }
-      .situation-switch > fieldset.situations:first-child,
-      .situation-switch > details.situations-group:first-child { margin-top: 0; }
+      /* Поиск по ситуациям стоит первым потомком #situation, поэтому первая
+         категория больше не :first-child — отступ сверху снимаем от
+         последнего элемента блока поиска. */
+      .situation-switch > #situation-search-empty + fieldset.situations,
+      .situation-switch > #situation-search-empty + details.situations-group { margin-top: 0; }
+      /* При активном фильтре первые категории могут быть скрыты — первую
+         видимую отмечает filterSituations() классом situations-first-visible. */
+      .situation-switch > fieldset.situations.situations-first-visible,
+      .situation-switch > details.situations-group.situations-first-visible { margin-top: 0; }
       .situations { border: none; margin: 0; padding: 0; }
       .situations legend {
         padding: 0; margin-bottom: 8px;
@@ -118,6 +125,9 @@
         color: var(--accent); font-weight: 600;
       }
       label.situation:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+      /* Фильтр поиска прячет label атрибутом hidden, а display: inline-flex
+         выше перебивает правило браузера для [hidden]. */
+      label.situation[hidden] { display: none; }
 
       .card {
         background: var(--card);
