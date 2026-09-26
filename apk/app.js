@@ -353,11 +353,19 @@ function renderField(id, labelOverride) {
 // того, к какой ситуации относится поле — устойчивее не утверждать его вовсе.
 function fieldOrPointer(id, labelOverride) {
   if (fieldAlreadyRendered(id)) {
-    return el(
-      'p',
-      'hint',
-      `Поле «${labelOverride ?? INPUT_LABELS_APK[id]}» уже есть в этой форме.`,
-    );
+    const label = labelOverride ?? INPUT_LABELS_APK[id];
+    const target = document.getElementById(`in-${id}`)?.closest('.field');
+    if (!target) return el('p', 'hint', `Поле «${label}» уже есть в этой форме.`);
+    // classList.add, а не className =: одно поле может быть нужно нескольким
+    // карточкам сразу. Снимать класс не нужно — render() рисует поля заново.
+    target.classList.add('needed');
+    const btn = el('button', 'link-button', `Перейти к полю «${label}»`);
+    btn.type = 'button';
+    btn.addEventListener('click', () => {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target.querySelector('input, select')?.focus({ preventScroll: true });
+    });
+    return btn;
   }
   return renderField(id, labelOverride);
 }
@@ -577,9 +585,6 @@ function renderIncompleteNode(node) {
   box.appendChild(el('h2', null, node.title));
   box.appendChild(el('p', 'reason', node.reason));
   for (const m of node.missing_inputs) box.appendChild(fieldOrPointer(m.id));
-  if (!node.missing_inputs.length) {
-    box.appendChild(el('p', 'hint', 'Данных для расчёта пока недостаточно.'));
-  }
   return box;
 }
 

@@ -144,7 +144,7 @@ for (const text of inviteTexts) {
   check(!text.includes('выше'), `формулировка ссылки на поле всё ещё утверждает направление: «${text}»`);
 }
 check(
-  inviteTexts.some((t) => t.includes('уже есть в этой форме')),
+  inviteTexts.some((t) => t.includes('Перейти к полю «Категория заявителя»')),
   'ссылка на уже показанное поле subject_category не найдена ни на одной карточке восстановления',
 );
 
@@ -811,6 +811,161 @@ for (const [today, text, tier] of [
     `срочность: цвет истёкшего .deadline ${info.deadlineColor}, ждали ${URGENCY_COLORS.muted}`,
   );
 }
+
+// --- Подсветка недостающего поля и кнопка «Перейти к полю» ---------------------
+//
+// fieldOrPointer в apk/app.js: когда поле уже нарисовано в форме, карточка
+// «что ещё уточнить» показывает кнопку-ссылку, а само поле получает класс
+// needed. Проверяется живым рендером: точный текст кнопки, вычисленные стили
+// подсветки (box-shadow и цвет подписи — --accent #1f5fbf), фокус и прокрутка
+// после клика и то, что подсветка не залипает после заполнения поля.
+//
+// Ветка — цепочка обжалования решения (по умолчанию): после даты решения
+// «Категория заявителя» нарисована блоком «Дополнительные данные» в
+// #other-terms, и на неё ссылаются три карточки восстановления (апелляция,
+// кассация, кассация в СК ВС РФ). После выбора категории они либо считаются,
+// либо просят уже другое поле (дату, когда узнали о нарушении).
+
+const NEEDED_ACCENT = 'rgb(31, 95, 191)';
+
+async function neededFieldScenario({ label, fieldId, owners, setup, fillValue }) {
+  const tag = `подсветка поля «${label}»`;
+  const p = await browser.newPage();
+  p.on('console', (m) => {
+    if (m.type() === 'error') problems.push(`${tag}: console error: ${m.text()}`);
+  });
+  p.on('pageerror', (e) => problems.push(`${tag}: pageerror: ${e.message}`));
+  await p.goto(`http://localhost:${port}/apk.html`, { waitUntil: 'networkidle' });
+  await setup(p);
+  await p.waitForTimeout(200);
+
+  const buttonText = `Перейти к полю «${label}»`;
+  const before = await p.evaluate(
+    ({ fieldId, buttonText }) => {
+      const invites = [...document.querySelectorAll('#results .invite')];
+      const target = document.getElementById(`in-${fieldId}`)?.closest('.field');
+      const cs = target ? getComputedStyle(target) : null;
+      const labelEl = target?.querySelector(':scope > label');
+      return {
+        owners: invites
+          .filter((i) => [...i.querySelectorAll('button.link-button')].some((b) => b.textContent === buttonText))
+          .map((i) => i.querySelector('h2').textContent),
+        fieldCount: document.querySelectorAll(`#in-${fieldId}`).length,
+        targetInInvite: Boolean(target?.closest('.invite')),
+        targetClass: target?.className ?? null,
+        boxShadow: cs?.boxShadow ?? null,
+        paddingLeft: cs?.paddingLeft ?? null,
+        labelColor: labelEl ? getComputedStyle(labelEl).color : null,
+        buttonType: document.querySelector('#results .invite button.link-button')?.type ?? null,
+      };
+    },
+    { fieldId, buttonText },
+  );
+  check(before.fieldCount === 1, `${tag}: поле #in-${fieldId} в DOM ${before.fieldCount} раз, ждали один`);
+  check(before.targetInInvite === false, `${tag}: целевое поле лежит внутри карточки, а не в блоке полей`);
+  for (const owner of owners) {
+    check(
+      before.owners.some((t) => t.includes(owner)),
+      `${tag}: у карточки «${owner}» нет кнопки ровно «${buttonText}»: ${JSON.stringify(before.owners)}`,
+    );
+  }
+  check(before.owners.length >= 2, `${tag}: кнопку показали ${before.owners.length} карточек, ждали минимум две`);
+  check(before.buttonType === 'button', `${tag}: у кнопки type «${before.buttonType}»`);
+  check(before.targetClass === 'field needed', `${tag}: класс целевого поля «${before.targetClass}»`);
+  check(
+    before.boxShadow === `${NEEDED_ACCENT} -3px 0px 0px 0px`,
+    `${tag}: вычисленный box-shadow «${before.boxShadow}»`,
+  );
+  check(before.paddingLeft === '10px', `${tag}: padding-left «${before.paddingLeft}»`);
+  check(before.labelColor === NEEDED_ACCENT, `${tag}: цвет подписи ${before.labelColor}, ждали ${NEEDED_ACCENT}`);
+
+  // Клик по кнопке первой карточки-владельца: сначала уводим поле за экран.
+  const button = p
+    .locator('#results .invite')
+    .filter({ hasText: owners[0] })
+    .first()
+    .locator('button.link-button', { hasText: buttonText });
+  const rectOf = (id) =>
+    p.evaluate((id) => {
+      const r = document.getElementById(`in-${id}`).closest('.field').getBoundingClientRect();
+      const atEnd =
+        window.scrollY === 0 ||
+        window.scrollY >= document.documentElement.scrollHeight - window.innerHeight - 1;
+      return { top: r.top, bottom: r.bottom, viewport: window.innerHeight, scrollY: window.scrollY, atEnd };
+    }, id);
+  const inViewport = (r) => r.top >= 0 && r.bottom <= r.viewport;
+  // Перед кликом поле видно лишь кромкой у края экрана: у верхнего, если
+  // страницу есть куда прокрутить (именно там focus() без preventScroll
+  // обрывает плавную прокрутку и оставляет подпись срезанной), иначе у нижнего.
+  await p.evaluate((id) => {
+    const r = document.getElementById(`in-${id}`).closest('.field').getBoundingClientRect();
+    const room = document.documentElement.scrollHeight - window.innerHeight - window.scrollY;
+    window.scrollBy(0, r.bottom - 8 <= room ? r.bottom - 8 : r.top - window.innerHeight + 8);
+  }, fieldId);
+  const rectBefore = await rectOf(fieldId);
+  check(!inViewport(rectBefore), `${tag}: поле уже в viewport до клика — прокрутка не проверяется: ${JSON.stringify(rectBefore)}`);
+  await button.click();
+  await p.waitForTimeout(1000);
+  const active = await p.evaluate(() => document.activeElement?.id ?? null);
+  check(active === `in-${fieldId}`, `${tag}: после клика фокус на «${active}», ждали in-${fieldId}`);
+  const rectAfter = await rectOf(fieldId);
+  check(inViewport(rectAfter), `${tag}: после клика поле не прокручено в viewport: ${JSON.stringify(rectAfter)}`);
+  check(
+    rectAfter.atEnd || Math.abs((rectAfter.top + rectAfter.bottom) / 2 - rectAfter.viewport / 2) <= 20,
+    `${tag}: после клика поле не по центру экрана (block: 'center'): ${JSON.stringify(rectAfter)}`,
+  );
+
+  // Заполняем поле: при перерисовке подсветка снимается, кнопки на него пропадают.
+  const input = p.locator(`#in-${fieldId}`);
+  if ((await input.evaluate((x) => x.tagName)) === 'SELECT') await input.selectOption(fillValue);
+  else await input.fill(fillValue);
+  await p.waitForTimeout(200);
+  const after = await p.evaluate(
+    ({ fieldId, buttonText, owners }) => {
+      const target = document.getElementById(`in-${fieldId}`)?.closest('.field');
+      const labelEl = target?.querySelector(':scope > label');
+      return {
+        targetClass: target?.className ?? null,
+        boxShadow: target ? getComputedStyle(target).boxShadow : null,
+        labelColor: labelEl ? getComputedStyle(labelEl).color : null,
+        buttons: [...document.querySelectorAll('button.link-button')].filter((b) => b.textContent === buttonText).length,
+        owners: owners.map((o) => {
+          const card = [...document.querySelectorAll('#results .card')].find((c) => c.textContent.includes(o));
+          const invite = [...document.querySelectorAll('#results .invite')].find((c) =>
+            c.querySelector('h2').textContent.includes(o),
+          );
+          return { o, card: Boolean(card), invite: invite ? invite.textContent : null };
+        }),
+      };
+    },
+    { fieldId, buttonText, owners },
+  );
+  check(after.targetClass === 'field', `${tag}: после заполнения класс поля «${after.targetClass}»`);
+  check(after.boxShadow === 'none', `${tag}: после заполнения box-shadow «${after.boxShadow}»`);
+  check(after.labelColor !== NEEDED_ACCENT, `${tag}: после заполнения подпись осталась цвета --accent`);
+  check(after.buttons === 0, `${tag}: после заполнения осталось ${after.buttons} кнопок на это поле`);
+  for (const { o, card, invite } of after.owners) {
+    check(
+      card || (invite !== null && !invite.includes(label)),
+      `${tag}: карточка «${o}» после заполнения не посчиталась и всё ещё ссылается на поле`,
+    );
+  }
+  await p.close();
+}
+
+await neededFieldScenario({
+  label: 'Категория заявителя',
+  fieldId: 'subject_category',
+  owners: [
+    'Восстановление срока подачи апелляционной жалобы',
+    'Восстановление срока подачи кассационной жалобы (предельный срок',
+    'Восстановление срока подачи кассационной жалобы в Судебную коллегию',
+  ],
+  async setup(p) {
+    await p.fill('#in-decision_full_text_date', '11.03.2025');
+  },
+  fillValue: 'participating_improperly_notified',
+});
 
 await browser.close();
 server.close();
