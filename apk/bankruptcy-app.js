@@ -687,6 +687,23 @@ function renderSituationSwitch(current) {
   }
   root.textContent = '';
   const byId = new Map(SITUATIONS_BANKRUPTCY.map((s) => [s.id, s]));
+  // Поиск по ситуациям — первым потомком root, над категориями. Фильтр только
+  // прячет label/категории атрибутом hidden: радиокнопки, их checked и
+  // change-слушатели не трогает, поэтому выбранная ветвь, скрытая фильтром,
+  // остаётся выбранной и возвращается на экран при очистке поля.
+  const search = el('input');
+  search.type = 'text';
+  search.id = 'situation-search-input';
+  search.placeholder = 'Поиск по ситуациям…';
+  search.addEventListener('input', () => filterSituations(search.value));
+  root.appendChild(search);
+  const count = el('p', 'hint');
+  count.id = 'situation-search-count';
+  root.appendChild(count);
+  const empty = el('p', 'empty', 'Ничего не найдено.');
+  empty.id = 'situation-search-empty';
+  empty.hidden = true;
+  root.appendChild(empty);
   for (const category of BANKRUPTCY_SITUATION_CATEGORIES) {
     const row = el('div', 'situation-row');
     for (const id of category.ids) {
@@ -727,6 +744,51 @@ function renderSituationSwitch(current) {
     }
   }
   root.dataset.rendered = 'yes';
+}
+
+// Фильтр переключателя по названию ситуации (текст <span> внутри label),
+// регистронезависимо. Пустой запрос возвращает исходное состояние: все
+// категории видимы, свёрнутые — снова свёрнуты, счётчик пуст.
+function filterSituations(query) {
+  const root = document.getElementById('situation');
+  const q = query.trim().toLocaleLowerCase('ru');
+  const labels = root.querySelectorAll('label.situation');
+  let matched = 0;
+  for (const label of labels) {
+    const name = label.querySelector('span').textContent.toLocaleLowerCase('ru');
+    label.hidden = q !== '' && !name.includes(q);
+    if (!label.hidden) matched += 1;
+  }
+  // Первая видимая категория верхнего уровня (не fieldset внутри details) при
+  // активном фильтре — без верхнего отступа: CSS-правило для первой категории
+  // в DOM её не находит, если категории перед ней скрыты. Класс выставляется и
+  // снимается явно на каждой категории при каждом вызове; при пустом запросе
+  // снимается со всех — исходный отступ даёт то же CSS-правило, что и до ввода.
+  let firstVisibleSeen = false;
+  for (const group of root.querySelectorAll('fieldset.situations, details.situations-group')) {
+    const isDetails = group.matches('details.situations-group');
+    if (q === '') {
+      group.hidden = false;
+      if (isDetails) group.open = false;
+      group.classList.remove('situations-first-visible');
+      continue;
+    }
+    const anyVisible = [...group.querySelectorAll('label.situation')].some((l) => !l.hidden);
+    group.hidden = !anyVisible;
+    if (anyVisible && isDetails) group.open = true;
+    const isFirstVisible = group.parentElement === root && anyVisible && !firstVisibleSeen;
+    if (isFirstVisible) firstVisibleSeen = true;
+    group.classList.toggle('situations-first-visible', isFirstVisible);
+  }
+  const count = document.getElementById('situation-search-count');
+  const empty = document.getElementById('situation-search-empty');
+  if (q === '') {
+    count.textContent = '';
+    empty.hidden = true;
+    return;
+  }
+  count.textContent = `Показано ${matched} из ${labels.length}`;
+  empty.hidden = matched !== 0;
 }
 
 // Основное поле ветви — только у debtor_response; у остальных четырёх ветвей
