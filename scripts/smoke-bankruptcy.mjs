@@ -96,8 +96,8 @@ check(
   '.fatal показан — страница не инициализировалась',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 54,
-  'переключатель ситуаций отрисован не на пятьдесят четыре ветви',
+  (await page.locator('#situation input[type=radio]').count()) === 58,
+  'переключатель ситуаций отрисован не на пятьдесят восемь ветвей',
 );
 
 // --- Ветвь 1: отзыв должника (working_day-узел, ст. 47 п. 1) -------------------
@@ -2016,6 +2016,106 @@ check(
 check(
   (await kfhAppealCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
   'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке обжалования определения о введении финансового оздоровления КФХ',
+);
+
+// --- § 7 главы IX ФЗ № 127-ФЗ — банкротство застройщиков (ст. 201.4) ------------
+
+// Ветвь: передача сведений об участниках строительства (п. 2 ст. 201.4,
+// первое предложение) — десять календарных дней.
+
+await chooseSituation('developer_participants_info_transfer');
+check(
+  (await page.locator('#in-developer_bankruptcy_manager_approved_date_apk').count()) === 1,
+  'ветвь "developer_participants_info_transfer": основное поле не найдено в DOM',
+);
+await page.fill('#in-developer_bankruptcy_manager_approved_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви передачи сведений об участниках строительства ожидалась одна карточка',
+);
+const infoTransferCard = cardByTitle('Передача руководителем застройщика сведений об участниках строительства');
+check((await infoTransferCard.count()) === 1, 'карточка передачи сведений об участниках строительства не появилась');
+check(
+  (await deadlineOf(infoTransferCard)) === '21.03.2025',
+  `срок передачи сведений об участниках строительства посчитан неверно: ${await deadlineOf(infoTransferCard)}`,
+);
+check(
+  (await infoTransferCard.innerText()).includes('п. 2 ст. 201.4 ФЗ № 127-ФЗ'),
+  'норма п. 2 ст. 201.4 ФЗ № 127-ФЗ не показана на карточке передачи сведений об участниках строительства',
+);
+
+// Ветвь: уведомление участников строительства об открытии конкурсного
+// производства (п. 2 ст. 201.4, второе предложение) — пять рабочих дней.
+
+await chooseSituation('developer_participants_notification');
+check(
+  (await page.locator('#in-developer_participants_info_received_date_apk').count()) === 1,
+  'ветвь "developer_participants_notification": основное поле не найдено в DOM',
+);
+await page.fill('#in-developer_participants_info_received_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви уведомления участников строительства ожидалась одна карточка',
+);
+const participantsNotificationCard = cardByTitle('Уведомление конкурсным управляющим участников строительства');
+check(
+  (await participantsNotificationCard.count()) === 1,
+  'карточка уведомления участников строительства не появилась',
+);
+check(
+  (await deadlineOf(participantsNotificationCard)) === '18.03.2025',
+  `срок уведомления участников строительства посчитан неверно: ${await deadlineOf(participantsNotificationCard)}`,
+);
+
+// Ветвь: обжалование определения об исключении требования участника
+// строительства из реестра (абз. 3 п. 7 ст. 201.4, ч. 1 ст. 61) — один месяц.
+
+await chooseSituation('participant_claim_exclusion_ruling_appeal');
+check(
+  (await page.locator('#in-participant_claim_exclusion_ruling_date_apk').count()) === 1,
+  'ветвь "participant_claim_exclusion_ruling_appeal": основное поле не найдено в DOM',
+);
+await page.fill('#in-participant_claim_exclusion_ruling_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви обжалования определения об исключении требования участника строительства ожидалась одна карточка',
+);
+const claimExclusionAppealCard = cardByTitle('Обжалование определения об исключении требования участника строительства из реестра');
+check(
+  (await claimExclusionAppealCard.count()) === 1,
+  'карточка обжалования определения об исключении требования участника строительства не появилась',
+);
+check(
+  (await deadlineOf(claimExclusionAppealCard)) === '11.04.2025',
+  `срок обжалования определения об исключении требования участника строительства посчитан неверно: ${await deadlineOf(claimExclusionAppealCard)}`,
+);
+check(
+  (await claimExclusionAppealCard.innerText()).includes('ч. 1 ст. 61 ФЗ № 127-ФЗ'),
+  'норма ч. 1 ст. 61 ФЗ № 127-ФЗ не показана на карточке обжалования определения об исключении требования участника строительства',
+);
+
+// Ветвь: возражения участника строительства по результатам рассмотрения его
+// требования (п. 8 ст. 201.4) — пятнадцать рабочих дней.
+
+await chooseSituation('participant_claim_objection');
+check(
+  (await page.locator('#in-participant_claim_review_notification_received_date_apk').count()) === 1,
+  'ветвь "participant_claim_objection": основное поле не найдено в DOM',
+);
+await page.fill('#in-participant_claim_review_notification_received_date_apk', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 1,
+  'в ветви возражений участника строительства ожидалась одна карточка',
+);
+const claimObjectionCard = cardByTitle('Возражения участника строительства по результатам рассмотрения его требования');
+check((await claimObjectionCard.count()) === 1, 'карточка возражений участника строительства не появилась');
+check(
+  (await deadlineOf(claimObjectionCard)) === '01.04.2025',
+  `срок возражений участника строительства посчитан неверно: ${await deadlineOf(claimObjectionCard)}`,
 );
 
 // --- Негативные проверки: чего на странице быть не должно ----------------------

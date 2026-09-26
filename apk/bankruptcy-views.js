@@ -86,6 +86,10 @@ import {
   computeCreditorsMeetingExternalManagementTransitionApk,
   computeKfhRehabilitationPlanSubmissionApk,
   computeKfhRehabilitationIntroductionAppealApk,
+  computeDeveloperParticipantsInfoTransferApk,
+  computeDeveloperParticipantsNotificationApk,
+  computeParticipantClaimExclusionRulingAppealApk,
+  computeParticipantClaimObjectionApk,
   DEBTOR_RESPONSE_BANKRUPTCY_APK,
   CREDITOR_CLAIMS_SUBMISSION_APK,
   CREDITOR_CLAIM_EXCLUSION_APK,
@@ -151,6 +155,10 @@ import {
   CREDITORS_MEETING_EXTERNAL_MANAGEMENT_TRANSITION_APK,
   KFH_REHABILITATION_PLAN_SUBMISSION_APK,
   KFH_REHABILITATION_INTRODUCTION_APPEAL_APK,
+  DEVELOPER_PARTICIPANTS_INFO_TRANSFER_APK,
+  DEVELOPER_PARTICIPANTS_NOTIFICATION_APK,
+  PARTICIPANT_CLAIM_EXCLUSION_RULING_APPEAL_APK,
+  PARTICIPANT_CLAIM_OBJECTION_APK,
 } from './bankruptcy.js';
 
 import {
@@ -883,6 +891,35 @@ const NODE_REQUIREMENTS_BANKRUPTCY = {
     node: KFH_REHABILITATION_INTRODUCTION_APPEAL_APK,
     deps: () => ['kfh_rehabilitation_introduction_ruling_date_apk'],
     compute: (i) => computeKfhRehabilitationIntroductionAppealApk(i),
+  },
+  // § 7 главы IX ФЗ № 127-ФЗ — банкротство застройщиков (ст. 201.4). Без kind:
+  // calendar_day-узел строится обычной monthTermCard, тот же паттерн, что у
+  // creditor_claims_submission_apk выше (ст. 71 п. 1).
+  developer_participants_info_transfer_apk: {
+    node: DEVELOPER_PARTICIPANTS_INFO_TRANSFER_APK,
+    deps: () => ['developer_bankruptcy_manager_approved_date_apk'],
+    compute: (i) => computeDeveloperParticipantsInfoTransferApk(i),
+  },
+  // kind: 'working_day' — тот же паттерн регистрации, что у остальных
+  // working_day duty-узлов домена (например observation_information_request_response_apk).
+  developer_participants_notification_apk: {
+    node: DEVELOPER_PARTICIPANTS_NOTIFICATION_APK,
+    kind: 'working_day',
+    deps: () => ['developer_participants_info_received_date_apk'],
+    compute: (i) => computeDeveloperParticipantsNotificationApk(i),
+  },
+  // Без kind: обычная месячная appeal term-карточка через monthTermCard, тот
+  // же паттерн, что у остальных appeal-узлов домена.
+  participant_claim_exclusion_ruling_appeal_apk: {
+    node: PARTICIPANT_CLAIM_EXCLUSION_RULING_APPEAL_APK,
+    deps: () => ['participant_claim_exclusion_ruling_date_apk'],
+    compute: (i) => computeParticipantClaimExclusionRulingAppealApk(i),
+  },
+  participant_claim_objection_apk: {
+    node: PARTICIPANT_CLAIM_OBJECTION_APK,
+    kind: 'working_day',
+    deps: () => ['participant_claim_review_notification_received_date_apk'],
+    compute: (i) => computeParticipantClaimObjectionApk(i),
   },
 };
 

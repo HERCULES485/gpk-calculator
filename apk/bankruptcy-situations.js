@@ -701,6 +701,51 @@ export const SITUATIONS_BANKRUPTCY = [
     fields: [],
     nodes: ['kfh_rehabilitation_introduction_appeal_apk'],
   },
+  {
+    id: 'developer_participants_info_transfer',
+    label: 'Банкротство застройщика: передача сведений об участниках строительства конкурсному управляющему',
+    // Единственное поле ветви — дата утверждения конкурсного управляющего,
+    // тот же образец, что у остальных одноузловых ветвей. Отдельная от
+    // developer_participants_notification ветвь ниже: общая тема (сведения об
+    // участниках строительства), но разные субъекты обязанности (руководитель
+    // застройщика / конкурсный управляющий) и разные факты-якоря — см.
+    // комментарий к узлам в apk/bankruptcy.js.
+    primary_field: 'developer_bankruptcy_manager_approved_date_apk',
+    fields: [],
+    nodes: ['developer_participants_info_transfer_apk'],
+  },
+  {
+    id: 'developer_participants_notification',
+    label: 'Банкротство застройщика: уведомление участников строительства об открытии конкурсного производства',
+    // Якорь — дата получения конкурсным управляющим сведений от руководителя
+    // застройщика (не дата утверждения конкурсного управляющего из предыдущей
+    // ветви) — другой факт, наступающий позже.
+    primary_field: 'developer_participants_info_received_date_apk',
+    fields: [],
+    nodes: ['developer_participants_notification_apk'],
+  },
+  {
+    id: 'participant_claim_exclusion_ruling_appeal',
+    label: 'Банкротство застройщика: обжалование определения об исключении требования участника строительства из реестра',
+    // Отдельная одноузловая appeal-ветвь — тот же образец, что у остальных
+    // appeal-ветвей домена: единственное поле ветви — дата изготовления
+    // определения в полном объёме.
+    primary_field: 'participant_claim_exclusion_ruling_date_apk',
+    fields: [],
+    nodes: ['participant_claim_exclusion_ruling_appeal_apk'],
+  },
+  {
+    id: 'participant_claim_objection',
+    label: 'Банкротство застройщика: возражения участника строительства по результатам рассмотрения его требования',
+    // Отдельная от participant_claim_exclusion_ruling_appeal ветвь: другой
+    // институт и другой якорь — день получения участником строительства
+    // уведомления о результатах рассмотрения ЕГО требования, а не дата
+    // определения суда по заявлению конкурсного управляющего об исключении
+    // чужого требования из реестра. Единственное поле ветви.
+    primary_field: 'participant_claim_review_notification_received_date_apk',
+    fields: [],
+    nodes: ['participant_claim_objection_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_BANKRUPTCY = 'debtor_response';

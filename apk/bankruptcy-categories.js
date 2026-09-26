@@ -39,6 +39,16 @@ export const BANKRUPTCY_SITUATION_CATEGORIES = [
       'manager_release_appeal',
       'manager_removal_appeal',
       'creditors_meeting_external_management_transition',
+      // § 7 главы IX (банкротство застройщиков, ст. 201.4) — узкий институт
+      // внутри конкурсного производства (все четыре нормы регулируют действия
+      // конкурсного управляющего и руководителя застройщика после открытия
+      // конкурсного производства по делу о банкротстве застройщика).
+      // Отдельной категории «застройщики» в проекте ещё нет — ближайшая по
+      // смыслу существующая категория, выбор явно зафиксирован здесь.
+      'developer_participants_info_transfer',
+      'developer_participants_notification',
+      'participant_claim_exclusion_ruling_appeal',
+      'participant_claim_objection',
     ],
   },
   {
