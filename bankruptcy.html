@@ -190,6 +190,27 @@
       details.warn.collapsible .warn-body { margin-top: 8px; }
       details.warn.collapsible .warn-body > div + div { margin-top: 6px; }
 
+      /* Календарный бейдж: в свёрнутом виде — только пилюля, без блока-плашки
+         вокруг; в раскрытом — тот же цветной блок .warn, что и раньше. */
+      details.warn.collapsible:not([open]):has(> summary.calendar-warning-badge) {
+        background: none; border-color: transparent; padding: 0;
+      }
+      .calendar-warning-badge {
+        display: inline-block; font-size: 12px; font-weight: 600;
+      }
+      details.warn.collapsible > summary.calendar-warning-badge { font-size: 12px; }
+      /* Вид пилюли — только в свёрнутом виде; в раскрытом сводка — обычный
+         заголовок блока на одной линии с .warn-body. */
+      details.warn.collapsible:not([open]) > summary.calendar-warning-badge {
+        padding: 2px 8px; border-radius: 999px;
+        background: var(--warn-bg); color: var(--warn-ink);
+      }
+      /* inline-block снимает родной маркер <summary> — свой шеврон вместо него. */
+      .calendar-warning-badge::after {
+        content: '▸'; margin-left: 4px; font-size: 10px; color: var(--warn-ink);
+      }
+      details[open] > summary.calendar-warning-badge::after { content: '▾'; }
+
       .invite {
         background: var(--card);
         border: 1px dashed var(--accent);

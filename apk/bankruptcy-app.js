@@ -301,19 +301,29 @@ function renderDetails(details) {
   return wrap;
 }
 
-function collapsedWarning(summaryText, detailNodes, cls = 'warn') {
+function collapsedWarning(summaryText, detailNodes, cls = 'warn', summaryCls = null) {
   const box = el('details', `${cls} collapsible`);
-  box.appendChild(el('summary', null, summaryText));
+  box.appendChild(el('summary', summaryCls, summaryText));
   const body = el('div', 'warn-body');
   for (const node of detailNodes) if (node) body.appendChild(node);
   box.appendChild(body);
   return box;
 }
 
+// Сводка бейджа зависит от уровня достоверности календаря: проект постановления
+// о переносах ('draft') или календарь без переносов вовсе ('preliminary').
+const CALENDAR_WARNING_SUMMARY = {
+  draft: 'Проект переноса выходных',
+  preliminary: 'Календарь предварительный',
+};
+
 function calendarWarning(card) {
-  return collapsedWarning('Календарь на этот год ещё не окончательный', [
-    el('div', null, card.calendar_warning.text),
-  ]);
+  return collapsedWarning(
+    CALENDAR_WARNING_SUMMARY[card.calendar_warning.level],
+    [el('div', null, card.calendar_warning.text)],
+    'warn',
+    'calendar-warning-badge',
+  );
 }
 
 // Пометка истёкшего срока. Пропуск ('missed') в этом домене невозможен: ни у

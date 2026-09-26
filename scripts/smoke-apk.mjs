@@ -967,6 +967,161 @@ await neededFieldScenario({
   fillValue: 'participating_improperly_notified',
 });
 
+// --- Календарный бейдж: сводка по уровню достоверности, пилюля в свёрнутом виде --
+//
+// card.calendar_warning приходит из calendarNote() (core/) с уровнем 'draft' или
+// 'preliminary'; сводка бейджа зависит от уровня, тело — текст из ядра как есть.
+// Даты дедлайнов сверены с core/calendar.test.js: 05.05.2027 — draft,
+// 05.05.2028 — preliminary, 15.07.2027 — draft-год, но вне зоны риска.
+
+const { calendarNote } = await import('../core/calendar/calendar.js');
+
+async function calendarBadgeScenario({ tag, input, deadline, summary }) {
+  const p = await browser.newPage();
+  p.on('console', (m) => {
+    if (m.type() === 'error') problems.push(`${tag}: console error: ${m.text()}`);
+  });
+  p.on('pageerror', (e) => problems.push(`${tag}: pageerror: ${e.message}`));
+  await p.goto(`http://localhost:${port}/apk.html`, { waitUntil: 'networkidle' });
+  await p.fill('#in-decision_full_text_date', input);
+  await p.waitForTimeout(200);
+  const card = p.locator('#results .card').filter({ hasText: 'Апелляционная жалоба' });
+  const got = (await card.locator('.deadline').first().innerText()).trim();
+  check(got === isoToRuDate(deadline), `${tag}: ждали дедлайн ${isoToRuDate(deadline)}, получили «${got}»`);
+  const badges = card.locator('details.warn.collapsible > summary.calendar-warning-badge');
+  if (summary === null) {
+    check((await badges.count()) === 0, `${tag}: бейдж календаря показан вне зоны риска`);
+    check(
+      (await card.locator('details.warn').count()) === 0,
+      `${tag}: вне зоны риска отрисован блок-предупреждение`,
+    );
+    await p.close();
+    return;
+  }
+  check((await badges.count()) === 1, `${tag}: ждали один бейдж календаря, найдено ${await badges.count()}`);
+  const measure = () =>
+    card.evaluate((c) => {
+      const s = c.querySelector('summary.calendar-warning-badge');
+      const d = s.parentElement;
+      const cs = getComputedStyle(s);
+      const ds = getComputedStyle(d);
+      const after = getComputedStyle(s, '::after');
+      const body = d.querySelector('.warn-body');
+      const text = document.createRange();
+      text.selectNodeContents(s);
+      return {
+        open: d.open,
+        summary: s.textContent,
+        display: cs.display,
+        padding: cs.padding,
+        radius: cs.borderRadius,
+        fontSize: cs.fontSize,
+        fontWeight: cs.fontWeight,
+        summaryBg: cs.backgroundColor,
+        detailsBg: ds.backgroundColor,
+        detailsBorder: ds.borderTopColor,
+        summaryWidth: s.getBoundingClientRect().width,
+        cardWidth: c.getBoundingClientRect().width,
+        bodyVisible: Boolean(body && body.checkVisibility()),
+        bodyText: body ? body.textContent : null,
+        detailsLeft: d.getBoundingClientRect().left,
+        summaryLeft: s.getBoundingClientRect().left,
+        summaryTextLeft: text.getBoundingClientRect().left,
+        bodyFirstLeft: body?.firstElementChild ? body.firstElementChild.getBoundingClientRect().left : null,
+        afterContent: after.content,
+        afterColor: after.color,
+        warnInk: ds.color,
+      };
+    });
+  const closed = await measure();
+  check(closed.open === false, `${tag}: бейдж раскрыт по умолчанию`);
+  check(closed.summary === summary, `${tag}: текст пилюли «${closed.summary}», ждали «${summary}»`);
+  check(closed.display === 'inline-block', `${tag}: display пилюли «${closed.display}»`);
+  check(closed.padding === '2px 8px', `${tag}: padding пилюли «${closed.padding}»`);
+  check(closed.radius === '999px', `${tag}: border-radius пилюли «${closed.radius}»`);
+  check(closed.fontSize === '12px', `${tag}: font-size пилюли «${closed.fontSize}»`);
+  check(closed.fontWeight === '600', `${tag}: font-weight пилюли «${closed.fontWeight}»`);
+  check(closed.summaryBg !== 'rgba(0, 0, 0, 0)', `${tag}: у пилюли нет фона`);
+  // Свёрнутый вид — именно пилюля: блок-плашка вокруг неё не рисуется, а сама
+  // пилюля заметно уже карточки.
+  check(
+    closed.detailsBg === 'rgba(0, 0, 0, 0)' && closed.detailsBorder === 'rgba(0, 0, 0, 0)',
+    `${tag}: в свёрнутом виде вокруг пилюли остался блок на всю ширину (фон «${closed.detailsBg}», рамка «${closed.detailsBorder}»)`,
+  );
+  check(
+    closed.summaryWidth < closed.cardWidth / 2,
+    `${tag}: пилюля шириной ${closed.summaryWidth}px при карточке ${closed.cardWidth}px — это строка, не пилюля`,
+  );
+  check(!closed.bodyVisible, `${tag}: текст предупреждения виден в свёрнутом виде`);
+  // Пилюля прижата к левому краю блока (1px — прозрачная рамка details), текст
+  // внутри неё — через padding 8px.
+  check(
+    closed.summaryLeft === closed.detailsLeft + 1 && closed.summaryTextLeft === closed.summaryLeft + 8,
+    `${tag}: сдвиг пилюли в свёрнутом виде: details ${closed.detailsLeft}, summary ${closed.summaryLeft}, текст ${closed.summaryTextLeft}`,
+  );
+  // Свой шеврон вместо снятого inline-block-ом маркера, цветом --warn-ink.
+  check(closed.afterContent === '"▸"', `${tag}: ::after в свёрнутом виде «${closed.afterContent}», ждали "▸"`);
+  check(
+    closed.afterColor === closed.warnInk,
+    `${tag}: цвет шеврона «${closed.afterColor}» не совпадает с --warn-ink «${closed.warnInk}»`,
+  );
+
+  await badges.click();
+  await p.waitForTimeout(100);
+  const opened = await measure();
+  const expectedText = calendarNote(deadline)?.text;
+  check(opened.open === true, `${tag}: по клику бейдж не раскрылся`);
+  check(opened.bodyVisible, `${tag}: после раскрытия текст предупреждения не виден`);
+  check(
+    opened.bodyText === expectedText,
+    `${tag}: раскрытый текст «${opened.bodyText}» не совпадает с calendar_warning.text «${expectedText}»`,
+  );
+  // В раскрытом виде сводка — обычный заголовок: без паддинга и фона пилюли,
+  // текст на одной линии с телом.
+  check(opened.padding === '0px', `${tag}: padding сводки в раскрытом виде «${opened.padding}»`);
+  check(opened.summaryBg === 'rgba(0, 0, 0, 0)', `${tag}: у сводки в раскрытом виде остался фон «${opened.summaryBg}»`);
+  check(
+    opened.summaryTextLeft === opened.bodyFirstLeft,
+    `${tag}: в раскрытом виде текст сводки (left ${opened.summaryTextLeft}) не на одной линии с телом (left ${opened.bodyFirstLeft})`,
+  );
+  check(opened.afterContent === '"▾"', `${tag}: ::after в раскрытом виде «${opened.afterContent}», ждали "▾"`);
+  check(
+    opened.afterColor === opened.warnInk,
+    `${tag}: цвет шеврона в раскрытом виде «${opened.afterColor}» не совпадает с --warn-ink «${opened.warnInk}»`,
+  );
+  // Раскрытое состояние — прежний цветной блок .warn.
+  check(
+    opened.detailsBg !== 'rgba(0, 0, 0, 0)' && opened.detailsBg === closed.summaryBg,
+    `${tag}: в раскрытом виде нет цветного блока (фон «${opened.detailsBg}»)`,
+  );
+  await p.close();
+}
+
+function isoToRuDate(iso) {
+  const [y, m, d] = iso.split('-');
+  return `${d}.${m}.${y}`;
+}
+
+await calendarBadgeScenario({
+  tag: 'календарный бейдж АПК, draft',
+  input: '05.04.2027',
+  deadline: '2027-05-05',
+  summary: 'Проект переноса выходных',
+});
+await calendarBadgeScenario({
+  tag: 'календарный бейдж АПК, preliminary',
+  input: '05.04.2028',
+  deadline: '2028-05-05',
+  summary: 'Календарь предварительный',
+});
+await calendarBadgeScenario({
+  tag: 'календарный бейдж АПК, вне зоны риска',
+  input: '15.06.2027',
+  deadline: '2027-07-15',
+  summary: null,
+});
+
+
 await browser.close();
 server.close();
 

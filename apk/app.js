@@ -408,13 +408,29 @@ function renderDetails(details) {
   return wrap;
 }
 
-function collapsedWarning(summaryText, detailNodes, cls = 'warn') {
+function collapsedWarning(summaryText, detailNodes, cls = 'warn', summaryCls = null) {
   const box = el('details', `${cls} collapsible`);
-  box.appendChild(el('summary', null, summaryText));
+  box.appendChild(el('summary', summaryCls, summaryText));
   const body = el('div', 'warn-body');
   for (const node of detailNodes) if (node) body.appendChild(node);
   box.appendChild(body);
   return box;
+}
+
+// Сводка бейджа зависит от уровня достоверности календаря: проект постановления
+// о переносах ('draft') или календарь без переносов вовсе ('preliminary').
+const CALENDAR_WARNING_SUMMARY = {
+  draft: 'Проект переноса выходных',
+  preliminary: 'Календарь предварительный',
+};
+
+function calendarWarning(card) {
+  return collapsedWarning(
+    CALENDAR_WARNING_SUMMARY[card.calendar_warning.level],
+    [el('div', null, card.calendar_warning.text)],
+    'warn',
+    'calendar-warning-badge',
+  );
 }
 
 function renderTermCard(card) {
@@ -453,13 +469,7 @@ function renderTermCard(card) {
   if (card.interruptions) c.appendChild(renderInterruptionHistory(card));
   if (card.excluded_periods) c.appendChild(renderExclusionHistory(card));
 
-  if (card.calendar_warning) {
-    c.appendChild(
-      collapsedWarning('Календарь на этот год ещё не окончательный', [
-        el('div', null, card.calendar_warning.text),
-      ]),
-    );
-  }
+  if (card.calendar_warning) c.appendChild(calendarWarning(card));
 
   if (card.details) c.appendChild(renderDetails(card.details));
   if (exportableIds.has(card.id)) c.appendChild(googleCalendarLink(card));
@@ -481,13 +491,7 @@ function renderEvent(card) {
   // От чего посчитана дата: от дедлайна соседнего срока или от введённой даты
   // акта вышестоящей инстанции. Без этого непонятно, откуда она взялась.
   box.appendChild(el('div', 'hint', `Основание расчёта: ${basedOnText(card.based_on)}`));
-  if (card.calendar_warning) {
-    box.appendChild(
-      collapsedWarning('Календарь на этот год ещё не окончательный', [
-        el('div', null, card.calendar_warning.text),
-      ]),
-    );
-  }
+  if (card.calendar_warning) box.appendChild(calendarWarning(card));
   if (card.details) box.appendChild(renderDetails(card.details));
   return box;
 }
@@ -560,13 +564,7 @@ function renderWindow(card) {
     );
   }
 
-  if (card.calendar_warning) {
-    c.appendChild(
-      collapsedWarning('Календарь на этот год ещё не окончательный', [
-        el('div', null, card.calendar_warning.text),
-      ]),
-    );
-  }
+  if (card.calendar_warning) c.appendChild(calendarWarning(card));
   if (card.details) c.appendChild(renderDetails(card.details));
   return c;
 }
