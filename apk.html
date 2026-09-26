@@ -247,6 +247,27 @@
       details.warn.collapsible .warn-body > div + div { margin-top: 6px; }
       details.warn.collapsible .hint { color: inherit; opacity: .85; }
 
+      /* Календарный бейдж: в свёрнутом виде — только пилюля, без блока-плашки
+         вокруг; в раскрытом — тот же цветной блок .warn, что и раньше. */
+      details.warn.collapsible:not([open]):has(> summary.calendar-warning-badge) {
+        background: none; border-color: transparent; padding: 0;
+      }
+      .calendar-warning-badge {
+        display: inline-block; font-size: 12px; font-weight: 600;
+      }
+      details.warn.collapsible > summary.calendar-warning-badge { font-size: 12px; }
+      /* Вид пилюли — только в свёрнутом виде; в раскрытом сводка — обычный
+         заголовок блока на одной линии с .warn-body. */
+      details.warn.collapsible:not([open]) > summary.calendar-warning-badge {
+        padding: 2px 8px; border-radius: 999px;
+        background: var(--warn-bg); color: var(--warn-ink);
+      }
+      /* inline-block снимает родной маркер <summary> — свой шеврон вместо него. */
+      .calendar-warning-badge::after {
+        content: '▸'; margin-left: 4px; font-size: 10px; color: var(--warn-ink);
+      }
+      details[open] > summary.calendar-warning-badge::after { content: '▾'; }
+
       .alt {
         margin-top: 12px; padding: 12px; border-radius: 8px;
         background: #f7f9fc; border: 1px solid var(--line); font-size: 14px;
