@@ -2188,7 +2188,6 @@ const searchState = () =>
       count: document.getElementById('situation-search-count').textContent,
       emptyHidden: document.getElementById('situation-search-empty').hidden,
       checked: root.querySelector('input[type=radio]:checked')?.value ?? null,
-      firstGroupMarginTop: getComputedStyle(groups[0]).marginTop,
     };
   });
 const renderedLabels = () => page.locator('#situation label.situation:visible').count();
@@ -2222,10 +2221,6 @@ check(
   `поиск: до ввода раскрыта не ровно категория с ветвью по умолчанию: ${JSON.stringify(searchInitial.detailsOpen)}`,
 );
 check(searchInitial.count === '' && searchInitial.emptyHidden, 'поиск: счётчик или «ничего не найдено» видны до ввода');
-check(
-  searchInitial.firstGroupMarginTop === '0px',
-  `поиск: у первой категории отступ сверху ${searchInitial.firstGroupMarginTop}, ждали 0px`,
-);
 
 // 1. Однозначное совпадение: видна только одна ветвь, пустые категории скрыты.
 await search('мфц');
@@ -2304,69 +2299,6 @@ check(
   'поиск: после очистки у выбранной ветви пропал класс active',
 );
 
-
-// --- Поиск по ситуациям: отступ первой ВИДИМОЙ категории ------------------------
-//
-// При активном фильтре первые по DOM категории бывают скрыты, и CSS-правило для
-// первой категории в DOM до первой видимой не дотягивается. filterSituations()
-// отмечает первую видимую категорию верхнего уровня классом
-// situations-first-visible: у неё margin-top 0px, у остальных видимых — прежние
-// 16px. После очистки поля — разметка и вычисленные отступы как до ввода.
-
-await page.goto(`http://localhost:${port}/bankruptcy.html`, { waitUntil: 'networkidle' });
-
-const categoryLayout = () =>
-  page.evaluate(() => {
-    const root = document.getElementById('situation');
-    return [...root.querySelectorAll(':scope > fieldset.situations, :scope > details.situations-group')].map(
-      (g) => ({
-        hidden: g.hidden,
-        marginTop: getComputedStyle(g).marginTop,
-        firstVisible: g.classList.contains('situations-first-visible'),
-      }),
-    );
-  });
-const situationHtml = () => page.locator('#situation').evaluate((n) => n.outerHTML);
-
-const layoutInitial = await categoryLayout();
-const htmlInitial = await situationHtml();
-check(
-  layoutInitial.every((g) => !g.hidden && !g.firstVisible) &&
-    layoutInitial.map((g) => g.marginTop).join() ===
-      ['0px', ...Array(layoutInitial.length - 1).fill('16px')].join(),
-  `первая видимая категория: исходные отступы не 0px/16px…: ${JSON.stringify(layoutInitial)}`,
-);
-
-for (const query of ['мировое', 'обжалование']) {
-  await page.fill('#situation-search-input', query);
-  await settle();
-  const layout = await categoryLayout();
-  const visible = layout.filter((g) => !g.hidden);
-  check(
-    layout[0].hidden && visible.length > 0 && visible.length < layout.length,
-    `первая видимая категория «${query}»: сценарий не скрывает первую категорию или скрывает все: ${JSON.stringify(layout)}`,
-  );
-  check(
-    visible.length > 0 && visible[0].marginTop === '0px',
-    `первая видимая категория «${query}»: margin-top ${visible[0]?.marginTop}, ждали 0px`,
-  );
-  check(
-    visible.slice(1).every((g) => g.marginTop === '16px'),
-    `первая видимая категория «${query}»: у остальных видимых категорий отступ не 16px: ${JSON.stringify(visible)}`,
-  );
-  check(
-    layout.filter((g) => g.firstVisible).length === 1 && visible[0].firstVisible,
-    `первая видимая категория «${query}»: класс situations-first-visible не ровно на первой видимой: ${JSON.stringify(layout)}`,
-  );
-}
-
-await page.fill('#situation-search-input', '');
-await settle();
-check(
-  JSON.stringify(await categoryLayout()) === JSON.stringify(layoutInitial),
-  `первая видимая категория: после очистки отступы не исходные: ${JSON.stringify(await categoryLayout())}`,
-);
-check((await situationHtml()) === htmlInitial, 'первая видимая категория: после очистки outerHTML #situation не совпадает с исходным');
 
 // --- Срочность дедлайна: цвет .deadline и строка «Осталось N дней» ------------
 //

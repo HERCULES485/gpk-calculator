@@ -164,33 +164,29 @@
         .reveal.reveal-in { animation: none; }
       }
 
-      .situation-switch { margin-bottom: 16px; }
-      /* Несколько <fieldset> подряд — одна категория на каждый, плюс одна
-         свёрнутая внутри <details> (та же механика, что у bankruptcy.html,
-         PR #65). */
-      .situation-switch > fieldset.situations,
-      .situation-switch > details.situations-group { margin-top: 16px; }
-      /* Поиск по ситуациям стоит первым потомком #situation, поэтому первая
-         категория больше не :first-child — отступ сверху снимаем от
-         последнего элемента блока поиска. */
-      .situation-switch > #situation-search-empty + fieldset.situations,
-      .situation-switch > #situation-search-empty + details.situations-group { margin-top: 0; }
-      /* При активном фильтре первые категории могут быть скрыты — первую
-         видимую отмечает filterSituations() классом situations-first-visible. */
-      .situation-switch > fieldset.situations.situations-first-visible,
-      .situation-switch > details.situations-group.situations-first-visible { margin-top: 0; }
+      .situation-switch {
+        margin-bottom: 16px;
+        display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px 8px;
+      }
+      #situation-search-input, #situation-search-count, #situation-search-empty {
+        flex-basis: 100%;
+      }
+      details.situations-group[open] { flex-basis: 100%; }
       .situations { border: none; margin: 0; padding: 0; }
       .situations legend {
         padding: 0; margin-bottom: 8px;
         font-size: 12px; letter-spacing: .02em; text-transform: uppercase; color: var(--muted);
       }
-      /* Свёрнутая категория: <summary> занимает место <legend>, тот же вид. */
       .situations-group > summary {
-        cursor: pointer; padding: 0; margin-bottom: 8px;
+        cursor: pointer;
+        display: inline-flex; align-items: center;
+        padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px;
+        background: var(--surface-subtle);
         font-size: 12px; letter-spacing: .02em; text-transform: uppercase; color: var(--muted);
         list-style-position: outside;
       }
       .situations-group > summary::marker { color: var(--muted); }
+      .situations-group[open] > summary { border-color: var(--accent); color: var(--accent-text); }
       .situation-row { display: flex; flex-wrap: wrap; gap: 8px; }
       label.situation {
         display: inline-flex; align-items: center; gap: 8px;
