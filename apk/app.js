@@ -1280,6 +1280,28 @@ function renderSituationFields(situation, primaryFilled) {
   root.appendChild(box);
 }
 
+// --- Цепочка шагов ------------------------------------------------------------
+//
+// Узлы situation.chain — последовательные шаги одной ветви. Каждый шаг — обёртка
+// .chain-step с маркером; вертикальная линия собирается из сегментов, которые
+// каждый шаг рисует на свою высоту (.chain-step::before в apk.html), поэтому
+// переживает любое изменение высоты карточки без измерений в JS. Прочие узлы
+// ветви (восстановления) лежат в том же контейнере на своих местах — в обёртке
+// .chain-aside без маркера, мимо которой линия проходит. Полый маркер — у шага,
+// карточка которого не построена (узел неполный, показан invite).
+
+function chainSlot(chain, stepIds, id, calculated) {
+  let cls = 'chain-aside';
+  if (stepIds.includes(id)) {
+    cls = calculated ? 'chain-step' : 'chain-step pending';
+    if (id === stepIds[0]) cls += ' chain-first';
+    if (id === stepIds[stepIds.length - 1]) cls += ' chain-last';
+  }
+  const slot = el('div', cls);
+  chain.appendChild(slot);
+  return slot;
+}
+
 // --- Рендер -------------------------------------------------------------------
 
 function render() {
@@ -1313,12 +1335,16 @@ function render() {
 
   const cardById = (id) => view.cards.find((c) => c.id === id);
   const incById = (id) => view.incomplete.find((n) => n.id === id);
+  // У ветви с цепочкой узлы кладутся в её контейнер (см. chainSlot), у всех
+  // остальных — прямо в #results, как и раньше.
+  const chain = situation.chain ? el('div', 'chain') : null;
 
   for (const id of situation.nodes) {
     const card = cardById(id);
+    const parent = chain ? chainSlot(chain, situation.chain, id, Boolean(card)) : root;
     if (card) {
-      if (card.kind === 'event') root.appendChild(renderEvent(card));
-      else if (card.kind === 'window') root.appendChild(renderWindow(card));
+      if (card.kind === 'event') parent.appendChild(renderEvent(card));
+      else if (card.kind === 'window') parent.appendChild(renderWindow(card));
       else if (card.kind === 'error') {
         const errorEl = renderErrorCard(card);
         // Списки остаются на экране и при отказе расчёта: пересечение периодов
@@ -1328,8 +1354,8 @@ function render() {
           errorEl.appendChild(renderInterruptions());
           errorEl.appendChild(renderPeriods());
         }
-        root.appendChild(errorEl);
-      } else if (card.kind === 'not_applicable') root.appendChild(renderNotApplicableCard(card));
+        parent.appendChild(errorEl);
+      } else if (card.kind === 'not_applicable') parent.appendChild(renderNotApplicableCard(card));
       else {
         const termEl = renderTermCard(card);
         // Повторяемые списки — у единственного узла, к которому применимы обе
@@ -1338,15 +1364,16 @@ function render() {
         // в chain.js незачем.
         if (card.interruptible) termEl.appendChild(renderInterruptions());
         if (id === 'enforcement_presentation_apk') termEl.appendChild(renderPeriods());
-        root.appendChild(termEl);
+        parent.appendChild(termEl);
       }
       continue;
     }
     // Карточка не построена: у узла ст. 321 списки периодов всё равно нужны —
     // иначе, ошибившись в периоде, пользователь не найдёт, где его исправить.
     const inc = incById(id);
-    if (inc) root.appendChild(renderIncompleteNode(inc));
+    if (inc) parent.appendChild(renderIncompleteNode(inc));
   }
+  if (chain) root.appendChild(chain);
 
   if (!root.childElementCount) {
     const first = situation.primary_field ?? situation.fields[0];

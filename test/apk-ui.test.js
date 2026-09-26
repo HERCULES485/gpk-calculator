@@ -609,3 +609,23 @@ test("АПК buildView: у event, window, not_applicable и error days_left не
   // Контроль: term-карточки того же расчёта days_left получили.
   assert.ok(byKind('term').every((c) => typeof c.days_left === 'number'));
 });
+
+test('АПК ситуации: цепочка шагов есть только у decision_chain и идёт по порядку nodes', () => {
+  const withChain = SITUATIONS_APK.filter((s) => s.chain);
+  assert.deepEqual(withChain.map((s) => s.id), ['decision_chain']);
+  const [situation] = withChain;
+  assert.deepEqual(situation.chain, [
+    'appeal_general_apk',
+    'entry_into_force_apk',
+    'cassation_general_apk',
+    'entry_into_force_after_cassation_apk',
+    'cassation_vs_apk',
+  ]);
+  // Шаги — подпоследовательность nodes: chainSlot в apk/app.js кладёт узлы в
+  // контейнер в порядке nodes, и шаг не на своём месте разорвал бы линию.
+  const positions = situation.chain.map((id) => situation.nodes.indexOf(id));
+  assert.ok(positions.every((p) => p >= 0), 'шаг цепочки не входит в nodes ветви');
+  assert.deepEqual(positions, [...positions].sort((a, b) => a - b));
+  // Восстановления в цепочку не входят — они остаются узлами ветви без маркера.
+  assert.ok(situation.chain.every((id) => !id.endsWith('_restoration')));
+});

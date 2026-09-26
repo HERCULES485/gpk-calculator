@@ -423,6 +423,39 @@
       /* --- Карточка «норма к этому случаю не применяется» -------------------- */
       .card.not-applicable { border-left: 3px solid var(--line); }
       .card.not-applicable .na-reason { color: var(--muted); font-size: 14px; }
+
+      /* --- Цепочка шагов (situation.chain, см. chainSlot в apk/app.js) -------
+         Линия — не один элемент на всю цепочку, а сегменты: каждый шаг рисует
+         свой ::before от своего верха до своего низа (top: 0; bottom: 0), и
+         соседние сегменты стыкуются встык. Высота сегмента — всегда высота
+         своего шага, поэтому раскрытие бейджа или «Подробнее» тянет линию само.
+         flow-root нужен, чтобы нижний margin карточки остался внутри шага, а
+         не выпал наружу разрывом между сегментами. У первого шага сегмент
+         начинается от маркера, у последнего — на маркере кончается; обёртка
+         .chain-aside (узел вне цепочки) линию продолжает, но маркера не имеет.
+         --chain-marker-y — центр строки заголовка своего вида карточки. */
+      .chain { padding-left: 28px; }
+      .chain-step, .chain-aside { position: relative; display: flow-root; }
+      .chain-step::before, .chain-aside::before {
+        content: ''; position: absolute; left: -19px; width: 2px;
+        top: 0; bottom: 0; background: var(--line);
+      }
+      .chain-step.chain-first::before { top: var(--chain-marker-y); }
+      .chain-step.chain-last::before { bottom: auto; height: var(--chain-marker-y); }
+      .chain-step.chain-last ~ .chain-aside::before { content: none; }
+      .chain-step::after {
+        content: ''; position: absolute; left: -24px; top: calc(var(--chain-marker-y) - 6px);
+        width: 12px; height: 12px; box-sizing: border-box; border-radius: 50%;
+        border: 2px solid var(--accent); background: var(--accent);
+      }
+      .chain-step.pending::after { background: var(--bg); }
+      .chain-step:has(> .card) { --chain-marker-y: 50px; }
+      .chain-step:has(> .invite) { --chain-marker-y: 29px; }
+      .chain-step:has(> .event-line) { --chain-marker-y: 22px; }
+      /* Своя левая граница события внутри цепочки дублировала бы линию шага
+         тем же --line в 7px от неё. Ширина границы (3px) уходит в padding —
+         текст остаётся там же, где у события вне цепочки. */
+      .chain-step > .event-line { border-left: none; padding-left: 17px; }
     </style>
 
     <script type="importmap">
