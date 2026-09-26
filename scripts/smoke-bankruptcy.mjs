@@ -2355,6 +2355,163 @@ check(
 );
 check((await situationHtml()) === htmlInitial, 'первая видимая категория: после очистки outerHTML #situation не совпадает с исходным');
 
+// --- Срочность дедлайна: цвет .deadline и строка «Осталось N дней» ------------
+//
+// days_left считается в apk/bankruptcy-views.js (markExpired) от текущей даты,
+// tier — в apk/bankruptcy-app.js (urgencyTier): до 3 дней включительно —
+// urgent, до 14 — soon, дальше — без выделения. Текущая дата страницы берётся
+// из new Date(), поэтому каждая точка — отдельная страница с зафиксированными
+// часами браузера. Цвет проверяется вычисленным стилем, а не только классом.
+// Цвета — значения переменных bankruptcy.html: --miss-ink #a3241f,
+// --warn-ink #8a5a00, --muted #5b6472.
+//
+// Две ветки, обе с разными рендерерами: отзыв должника (term, renderTermCard;
+// 26.12.2025 → 21.01.2026) и субсидиарная ответственность в деле о банкротстве
+// (capped_term, renderCappedTerm; связывает трёхлетний потолок → 10.03.2025).
+// У capped_term дополнительно: строка «Осталось…» стоит между .norm и блоком
+// «Пределы срока», и этот блок по-прежнему развёрнут и цел.
+
+const URGENCY_COLORS = {
+  miss: 'rgb(163, 36, 31)',
+  warn: 'rgb(138, 90, 0)',
+  muted: 'rgb(91, 100, 114)',
+};
+
+const URGENCY_BRANCHES = {
+  term: {
+    title: 'Отзыв должника',
+    deadline: '21.01.2026',
+    async setup(p) {
+      await p.fill('#in-creditor_petition_acceptance_ruling_received_date_apk', '26.12.2025');
+    },
+  },
+  capped: {
+    title: 'к субсидиарной ответственности (в деле о банкротстве)',
+    deadline: '10.03.2025',
+    async setup(p) {
+      const input = p.locator('#situation input[value="subsidiary_in_case"]');
+      const details = input.locator('xpath=ancestor::details[1]');
+      if (await details.count()) await details.evaluate((node) => { node.open = true; });
+      await input.check();
+      await p.waitForTimeout(200);
+      await p.selectOption('#in-objective_cap_event', 'bankruptcy_declared');
+      await p.waitForTimeout(200);
+      await p.fill('#in-subsidiary_liability_grounds_known_date_apk', '10.03.2022');
+      await p.fill('#in-bankruptcy_declared_date_apk', '01.06.2023');
+      await p.fill('#in-subsidiary_liability_conduct_date_apk', '01.01.2020');
+    },
+  },
+};
+
+async function urgencyCard(branch, today) {
+  const spec = URGENCY_BRANCHES[branch];
+  const p = await context.newPage();
+  p.on('console', (m) => {
+    if (m.type() === 'error') problems.push(`срочность ${branch} ${today}: console error: ${m.text()}`);
+  });
+  p.on('pageerror', (e) => problems.push(`срочность ${branch} ${today}: pageerror: ${e.message}`));
+  await p.clock.setFixedTime(new Date(`${today}T12:00:00`));
+  await p.goto(`http://localhost:${port}/bankruptcy.html`, { waitUntil: 'networkidle' });
+  await spec.setup(p);
+  await p.waitForTimeout(200);
+  const card = p.locator('#results .card').filter({ hasText: spec.title }).first();
+  const info = await card.evaluate((c) => {
+    const deadline = c.querySelector('.deadline');
+    const daysLeft = c.querySelector('.days-left');
+    const caps = c.querySelector('.caps');
+    return {
+      deadlineClass: deadline.className,
+      deadlineText: deadline.textContent,
+      deadlineColor: getComputedStyle(deadline).color,
+      cardColor: getComputedStyle(c).color,
+      daysLeftCount: c.querySelectorAll('.days-left').length,
+      daysLeftClass: daysLeft?.className ?? null,
+      daysLeftText: daysLeft?.textContent ?? null,
+      daysLeftColor: daysLeft ? getComputedStyle(daysLeft).color : null,
+      daysLeftWeight: daysLeft ? getComputedStyle(daysLeft).fontWeight : null,
+      prevIsNorm: daysLeft?.previousElementSibling?.classList.contains('norm') ?? null,
+      nextIsCaps: daysLeft ? daysLeft.nextElementSibling === caps : null,
+      capsCount: c.querySelectorAll('.caps').length,
+      capsInDetails: c.querySelectorAll('details .caps').length,
+      capRows: c.querySelectorAll('.cap').length,
+      // Геометрия: строка «Осталось…» целиком над блоком потолков, без наложения.
+      daysLeftBottom: daysLeft ? daysLeft.getBoundingClientRect().bottom : null,
+      capsTop: caps ? caps.getBoundingClientRect().top : null,
+    };
+  });
+  await p.close();
+  return info;
+}
+
+for (const [branch, today, text, tier] of [
+  ['term', '2026-01-21', 'Осталось 0 дней', 'urgent'],
+  ['term', '2026-01-18', 'Осталось 3 дня', 'urgent'],
+  ['term', '2026-01-17', 'Осталось 4 дня', 'soon'],
+  ['term', '2026-01-07', 'Осталось 14 дней', 'soon'],
+  ['term', '2026-01-06', 'Осталось 15 дней', null],
+  ['capped', '2025-03-10', 'Осталось 0 дней', 'urgent'],
+  ['capped', '2025-03-07', 'Осталось 3 дня', 'urgent'],
+  ['capped', '2025-03-06', 'Осталось 4 дня', 'soon'],
+  ['capped', '2025-02-24', 'Осталось 14 дней', 'soon'],
+  ['capped', '2025-02-23', 'Осталось 15 дней', null],
+]) {
+  const info = await urgencyCard(branch, today);
+  const label = `срочность ${branch} ${today} (${tier ?? 'calm'})`;
+  const deadline = URGENCY_BRANCHES[branch].deadline;
+  check(info.deadlineText === deadline, `${label}: дедлайн «${info.deadlineText}», ждали ${deadline}`);
+  check(
+    info.deadlineClass === (tier ? `deadline ${tier}` : 'deadline'),
+    `${label}: класс .deadline «${info.deadlineClass}»`,
+  );
+  check(info.daysLeftCount === 1, `${label}: строк .days-left ${info.daysLeftCount}, ждали одну`);
+  check(info.daysLeftText === text, `${label}: текст «${info.daysLeftText}», ждали «${text}»`);
+  check(
+    info.daysLeftClass === (tier ? `days-left ${tier}` : 'days-left'),
+    `${label}: класс .days-left «${info.daysLeftClass}»`,
+  );
+  check(info.prevIsNorm === true, `${label}: .days-left стоит не сразу после .norm`);
+  const expectedDeadline =
+    tier === 'urgent' ? URGENCY_COLORS.miss : tier === 'soon' ? URGENCY_COLORS.warn : info.cardColor;
+  const expectedDaysLeft =
+    tier === 'urgent' ? URGENCY_COLORS.miss : tier === 'soon' ? URGENCY_COLORS.warn : URGENCY_COLORS.muted;
+  check(
+    info.deadlineColor === expectedDeadline,
+    `${label}: цвет .deadline ${info.deadlineColor}, ждали ${expectedDeadline}`,
+  );
+  check(
+    info.daysLeftColor === expectedDaysLeft,
+    `${label}: цвет .days-left ${info.daysLeftColor}, ждали ${expectedDaysLeft}`,
+  );
+  check(
+    info.daysLeftWeight === (tier ? '600' : '400'),
+    `${label}: жирность .days-left ${info.daysLeftWeight}`,
+  );
+  if (branch === 'capped') {
+    check(info.nextIsCaps === true, `${label}: сразу после .days-left должен идти блок «Пределы срока»`);
+    check(info.capsCount === 1 && info.capsInDetails === 0, `${label}: блок потолков не показан или свёрнут`);
+    check(info.capRows === 3, `${label}: потолков ${info.capRows}, ждали три`);
+    check(
+      info.daysLeftBottom <= info.capsTop,
+      `${label}: строка «Осталось…» наезжает на блок потолков (${info.daysLeftBottom} > ${info.capsTop})`,
+    );
+  }
+}
+
+// Истёкший срок: строки «Осталось…» нет, дата приглушена, как и раньше.
+for (const [branch, today] of [
+  ['term', '2026-01-22'],
+  ['capped', '2025-03-11'],
+]) {
+  const info = await urgencyCard(branch, today);
+  const label = `срочность ${branch}: истёкший срок`;
+  check(info.deadlineClass === 'deadline expired', `${label}: класс «${info.deadlineClass}»`);
+  check(info.daysLeftCount === 0, `${label}: показана строка .days-left`);
+  check(
+    info.deadlineColor === URGENCY_COLORS.muted,
+    `${label}: цвет .deadline ${info.deadlineColor}, ждали ${URGENCY_COLORS.muted}`,
+  );
+}
+
 await browser.close();
 server.close();
 

@@ -132,6 +132,7 @@ import {
   incompleteNode,
   missingInputs as genericMissingInputs,
   markExpired as genericMarkExpired,
+  daysBetween,
 } from '../core/view/cards.js';
 import { toISO } from '../core/engine/term.js';
 import { INPUT_LABELS_APK } from './labels.js';
@@ -733,10 +734,22 @@ const ACTION_FACT_INPUT_APK = {};
 const MISSED_FROM_FILING_APK = new Set();
 
 function markExpired(cards, inputs, today) {
-  return genericMarkExpired(cards, inputs, today, {
+  genericMarkExpired(cards, inputs, today, {
     factInputMap: ACTION_FACT_INPUT_APK,
     missedFromFilingIds: MISSED_FROM_FILING_APK,
   });
+  // Сколько дней осталось до дедлайна — для индикации срочности на странице.
+  // Условие то же, что в начале genericMarkExpired: только term/capped_term,
+  // ещё не истёкшие ('computed') и с готовым дедлайном. У остальных карточек,
+  // включая 'expired', поля days_left нет вовсе. Без текущей даты считать не
+  // от чего — как и genericMarkExpired, в этом случае ничего не помечаем.
+  if (today == null) return cards;
+  for (const card of cards) {
+    const markable = card.kind === 'term' || card.kind === 'capped_term';
+    if (!markable || card.status !== 'computed' || !card.deadline) continue;
+    card.days_left = daysBetween(today, card.deadline);
+  }
+  return cards;
 }
 
 // --- Публичная сборка ---------------------------------------------------------
