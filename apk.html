@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Калькулятор процессуальных сроков по АПК РФ</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%231f5fbf'/%3E%3Cpath d='M9 17l5 5 9-11' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
     <style>
       :root {
         --bg: #f5f6f8;
@@ -12,6 +13,7 @@
         --muted: #5b6472;
         --line: #e2e5ea;
         --accent: #1f5fbf;
+        --accent-text: #1f5fbf;
         --accent-soft: #eaf1fb;
         --warn-bg: #fff6e6;
         --warn-ink: #8a5a00;
@@ -34,7 +36,8 @@
         --ink: #e7e9ee;
         --muted: #9aa3b2;
         --line: #2c313c;
-        --accent: #3b7ddd;
+        --accent: #2f6bc4;
+        --accent-text: #6c98e0;
         --accent-soft: #1f2a3d;
         --warn-bg: #3a2f14;
         --warn-ink: #e8b563;
@@ -46,7 +49,7 @@
         --surface-alt: #242832;
         --surface-subtle: #1f232b;
         --input-bg: #1c1f27;
-        --accent-hover: #5b93e0;
+        --accent-hover: #2559a3;
         --btn-disabled-bg: #3a3f4a;
         --badge-wd-bg: #1a3324;
         --on-accent: #ffffff;
@@ -62,6 +65,10 @@
       .wrap { max-width: 760px; margin: 0 auto; padding: 28px 18px 64px; }
       header h1 { font-size: 22px; margin: 0 0 4px; }
       header p { margin: 0 0 24px; color: var(--muted); font-size: 14px; }
+      header p:not(.header-nav) { margin-bottom: 8px; }
+      .header-nav { font-size: 14px; }
+      .header-nav a { color: var(--accent-text); text-decoration: none; }
+      .header-nav a:hover { text-decoration: underline; }
       header { position: relative; }
       .theme-toggle {
         position: absolute; top: 0; right: 0;
@@ -79,7 +86,7 @@
         margin-bottom: 22px;
       }
       label { display: block; font-weight: 600; margin-bottom: 6px; }
-      .req { color: var(--accent); }
+      .req { color: var(--accent-text); }
       input[type="text"] {
         width: 100%;
         font-size: 16px;
@@ -117,7 +124,7 @@
       /* Файл .ics — запасной способ: на iOS система его почти не принимает. */
       .toolbar-secondary { margin: 0 0 18px; }
       .link-button {
-        font: inherit; font-size: 13px; color: var(--accent);
+        font: inherit; font-size: 13px; color: var(--accent-text);
         background: none; border: none; padding: 0; cursor: pointer;
         text-decoration: underline;
       }
@@ -127,7 +134,7 @@
       /* Ссылка «в Google Календарь» у каждого рассчитанного срока. */
       .to-calendar {
         display: inline-block; margin-top: 10px;
-        font-size: 13px; color: var(--accent); text-decoration: none; font-weight: 600;
+        font-size: 13px; color: var(--accent-text); text-decoration: none; font-weight: 600;
       }
       .to-calendar:hover { text-decoration: underline; }
       .to-calendar-block { margin-top: 10px; }
@@ -194,7 +201,7 @@
       label.situation:hover { border-color: var(--accent); }
       label.situation.active {
         border-color: var(--accent); background: var(--accent-soft);
-        color: var(--accent); font-weight: 600;
+        color: var(--accent-text); font-weight: 600;
       }
       label.situation:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
       /* Фильтр поиска прячет label атрибутом hidden, а display: inline-flex
@@ -216,13 +223,13 @@
         display: inline-block; font-size: 12px; font-weight: 600;
         padding: 2px 8px; border-radius: 999px; margin-left: 8px; vertical-align: 2px;
       }
-      .badge.assume { background: var(--accent-soft); color: var(--accent); }
+      .badge.assume { background: var(--accent-soft); color: var(--accent-text); }
       .badge.wd { background: var(--badge-wd-bg); color: var(--ok); }
       .badge.info { background: var(--surface-alt); color: var(--muted); }
 
       details.more { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
       details.more > summary {
-        cursor: pointer; color: var(--accent); font-size: 14px; font-weight: 600;
+        cursor: pointer; color: var(--accent-text); font-size: 14px; font-weight: 600;
       }
       details.more > summary::marker { color: var(--accent); }
       .more dl { margin: 10px 0 0; }
@@ -330,7 +337,7 @@
         padding-left: 10px;
         border-radius: 2px;
       }
-      .field.needed > label { color: var(--accent); }
+      .field.needed > label { color: var(--accent-text); }
       /* Кнопка-ссылка на уже показанное поле стоит на месте прежней строки
          .hint — блоком, иначе несколько таких кнопок сливаются в одну строку. */
       .invite > .link-button { display: block; margin-top: 10px; text-align: left; }
@@ -353,9 +360,9 @@
         font: inherit; font-size: 14px; padding: 8px 12px; margin-top: 10px;
         border-radius: 8px; cursor: pointer;
       }
-      .row-add { border: 1px dashed var(--accent); background: var(--input-bg); color: var(--accent); }
+      .row-add { border: 1px dashed var(--accent); background: var(--input-bg); color: var(--accent-text); }
       .row-remove { border: 1px solid var(--line); background: var(--input-bg); color: var(--muted); }
-      .row-add:hover, .row-remove:hover { border-color: var(--accent); color: var(--accent); }
+      .row-add:hover, .row-remove:hover { border-color: var(--accent); color: var(--accent-text); }
       .interruption-scope { font-size: 13px; }
       .interruption-history {
         margin-top: 12px; padding: 10px 12px; border-radius: 8px;
@@ -400,6 +407,7 @@
            карточки скрыты, чтобы печать не повторяла неоднозначность карточек. */
         header h1,
         header p,
+        .header-nav,
         .situation-switch,
         section.primary,
         .toolbar,
@@ -546,6 +554,7 @@
           от календарных и учитывает переносы выходных. Для каждого срока показана
           норма АПК и логика её исчисления.
         </p>
+        <p class="header-nav"><a href="bankruptcy.html">Сроки в банкротстве (ФЗ № 127-ФЗ) →</a></p>
       </header>
 
       <section class="situation-switch" id="situation"></section>
