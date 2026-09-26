@@ -101,6 +101,16 @@ function pluralDays(n) {
   return 'дней';
 }
 
+// Срочность дедлайна по числу оставшихся дней (card.days_left, считается в
+// markExpired): до трёх дней включительно — 'urgent', до четырнадцати — 'soon',
+// дальше — без выделения (null). Без days_left — тоже null.
+function urgencyTier(daysLeft) {
+  if (daysLeft == null) return null;
+  if (daysLeft <= 3) return 'urgent';
+  if (daysLeft <= 14) return 'soon';
+  return null;
+}
+
 // Название поля для фразы «Укажите …»: подписи дат начинаются с «Дата», дальше
 // уже родительный падеж — остаётся отбросить уточнение в скобках.
 function askFor(id) {
@@ -414,8 +424,18 @@ function renderTermCard(card) {
     c.appendChild(el('div', 'norm', card.norm));
     c.appendChild(expiredNote(card));
   } else {
-    c.appendChild(el('div', 'deadline', isoToRu(card.deadline)));
+    const tier = urgencyTier(card.days_left);
+    c.appendChild(el('div', tier ? `deadline ${tier}` : 'deadline', isoToRu(card.deadline)));
     c.appendChild(el('div', 'norm', card.norm));
+    if (card.days_left != null) {
+      c.appendChild(
+        el(
+          'div',
+          tier ? `days-left ${tier}` : 'days-left',
+          `Осталось ${card.days_left} ${pluralDays(card.days_left)}`,
+        ),
+      );
+    }
   }
 
   // Для сроков в рабочих днях — первый день течения, тем же способом, что у
@@ -452,8 +472,18 @@ function renderCappedTerm(card) {
     c.appendChild(el('div', 'norm', card.norm));
     c.appendChild(expiredNote(card));
   } else {
-    c.appendChild(el('div', 'deadline', isoToRu(card.deadline)));
+    const tier = urgencyTier(card.days_left);
+    c.appendChild(el('div', tier ? `deadline ${tier}` : 'deadline', isoToRu(card.deadline)));
     c.appendChild(el('div', 'norm', card.norm));
+    if (card.days_left != null) {
+      c.appendChild(
+        el(
+          'div',
+          tier ? `days-left ${tier}` : 'days-left',
+          `Осталось ${card.days_left} ${pluralDays(card.days_left)}`,
+        ),
+      );
+    }
   }
 
   c.appendChild(renderCaps(card));

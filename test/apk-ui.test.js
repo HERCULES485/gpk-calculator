@@ -541,3 +541,71 @@ test('АПК buildView: на узле ст. 321 одновременно вид�
   assert.match(card.details.interruption_norm, /ч\. 3, 4 ст\. 321/);
   assert.match(card.details.exclusion_norm, /ч\. 2 ст\. 321/);
 });
+
+// --- days_left: сколько дней осталось до дедлайна (индикация срочности) --------
+//
+// days_left проставляет markExpired (apk/views.js) после пометки истёкших: только
+// у term/capped_term со status 'computed' и готовым дедлайном. Цвет (tier) по
+// нему выбирает страница (apk/app.js, urgencyTier) — это DOM-код, node --test его
+// не исполняет; границы tier в живом браузере проверяет scripts/smoke-apk.mjs.
+// Здесь — само число на тех же границах. Узел — апелляционная жалоба
+// (appeal_general_apk): решение 11.03.2025 → дедлайн 11.04.2025.
+
+const DAYS_LEFT_INPUTS_APK = { decision_full_text_date: '2025-03-11' };
+
+for (const [today, daysLeft, tier] of [
+  ['2025-04-11', 0, 'urgent'],
+  ['2025-04-08', 3, 'urgent'],
+  ['2025-04-07', 4, 'soon'],
+  ['2025-03-28', 14, 'soon'],
+  ['2025-03-27', 15, 'calm'],
+]) {
+  test(`АПК buildView: days_left = ${daysLeft} (${tier}) при today ${today}`, () => {
+    const view = buildView(DAYS_LEFT_INPUTS_APK, { today });
+    const card = view.cards.find((c) => c.id === 'appeal_general_apk');
+    assert.equal(card.kind, 'term');
+    assert.equal(card.status, 'computed');
+    assert.equal(card.deadline, '2025-04-11');
+    assert.equal(card.days_left, daysLeft);
+  });
+}
+
+test("АПК buildView: у истёкшей карточки (status 'expired') days_left нет", () => {
+  const view = buildView(DAYS_LEFT_INPUTS_APK, { today: '2025-04-12' });
+  const card = view.cards.find((c) => c.id === 'appeal_general_apk');
+  assert.equal(card.status, 'expired');
+  assert.equal(card.expired.days, 1);
+  assert.equal(card.days_left, undefined);
+  assert.ok(!('days_left' in card));
+});
+
+test('АПК buildView: без today days_left не проставляется', () => {
+  const view = buildView(DAYS_LEFT_INPUTS_APK);
+  const card = view.cards.find((c) => c.id === 'appeal_general_apk');
+  assert.equal(card.status, 'computed');
+  assert.ok(!('days_left' in card));
+});
+
+test("АПК buildView: у event, window, not_applicable и error days_left нет", () => {
+  const view = buildView(
+    {
+      ...ALL_NODES_INPUTS_APK,
+      subject_category: 'participating_improperly_notified',
+      suspension_periods: [{ start: '2023-03-01', end: '2023-05-10' }],
+      execution_ended_periods: [
+        { type: 'withdrawal_by_claimant_apk', start: '2023-05-09', end: '2023-08-15' },
+      ],
+    },
+    { today: TODAY_APK },
+  );
+  const byKind = (kind) => view.cards.filter((c) => c.kind === kind);
+  for (const kind of ['event', 'window', 'not_applicable', 'error']) {
+    const cards = byKind(kind);
+    assert.ok(cards.length > 0, `нет ни одной карточки kind '${kind}'`);
+    for (const card of cards) assert.ok(!('days_left' in card), `${card.id}: days_left у ${kind}`);
+  }
+  // Окно приходит со status 'computed' — отсекает его именно kind, а не статус.
+  assert.ok(byKind('window').every((c) => c.status === 'computed'));
+  // Контроль: term-карточки того же расчёта days_left получили.
+  assert.ok(byKind('term').every((c) => typeof c.days_left === 'number'));
+});

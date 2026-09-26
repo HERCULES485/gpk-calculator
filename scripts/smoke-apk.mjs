@@ -712,6 +712,106 @@ check(
 );
 check((await situationHtml()) === htmlInitial, 'первая видимая категория: после очистки outerHTML #situation не совпадает с исходным');
 
+// --- Срочность дедлайна: цвет .deadline и строка «Осталось N дней» ------------
+//
+// days_left считается в apk/views.js (markExpired) от текущей даты, tier —
+// в apk/app.js (urgencyTier): до 3 дней включительно — urgent, до 14 — soon,
+// дальше — без выделения. Текущая дата страницы берётся из new Date(), поэтому
+// каждая точка — отдельная страница с зафиксированными часами браузера. Цвет
+// проверяется вычисленным стилем, а не только классом: иначе не поймать
+// потерянное или перебитое CSS-правило. Цвета — значения переменных apk.html:
+// --miss-ink #a3241f, --warn-ink #8a5a00, --muted #5b6472.
+//
+// Ветка — апелляционная жалоба (по умолчанию): решение 11.03.2025 → дедлайн
+// 11.04.2025.
+
+const URGENCY_COLORS = {
+  miss: 'rgb(163, 36, 31)',
+  warn: 'rgb(138, 90, 0)',
+  muted: 'rgb(91, 100, 114)',
+};
+
+async function urgencyCard(today) {
+  const p = await browser.newPage();
+  p.on('console', (m) => {
+    if (m.type() === 'error') problems.push(`срочность ${today}: console error: ${m.text()}`);
+  });
+  p.on('pageerror', (e) => problems.push(`срочность ${today}: pageerror: ${e.message}`));
+  await p.clock.setFixedTime(new Date(`${today}T12:00:00`));
+  await p.goto(`http://localhost:${port}/apk.html`, { waitUntil: 'networkidle' });
+  await p.fill('#in-decision_full_text_date', '11.03.2025');
+  await p.waitForTimeout(200);
+  const card = p.locator('#results .card').filter({ hasText: 'Апелляционная жалоба' }).first();
+  const info = await card.evaluate((c) => {
+    const deadline = c.querySelector('.deadline');
+    const daysLeft = c.querySelector('.days-left');
+    return {
+      deadlineClass: deadline.className,
+      deadlineText: deadline.textContent,
+      deadlineColor: getComputedStyle(deadline).color,
+      cardColor: getComputedStyle(c).color,
+      daysLeftCount: c.querySelectorAll('.days-left').length,
+      daysLeftClass: daysLeft?.className ?? null,
+      daysLeftText: daysLeft?.textContent ?? null,
+      daysLeftColor: daysLeft ? getComputedStyle(daysLeft).color : null,
+      daysLeftWeight: daysLeft ? getComputedStyle(daysLeft).fontWeight : null,
+      prevIsNorm: daysLeft?.previousElementSibling?.classList.contains('norm') ?? null,
+    };
+  });
+  await p.close();
+  return info;
+}
+
+for (const [today, text, tier] of [
+  ['2025-04-11', 'Осталось 0 дней', 'urgent'],
+  ['2025-04-08', 'Осталось 3 дня', 'urgent'],
+  ['2025-04-07', 'Осталось 4 дня', 'soon'],
+  ['2025-03-28', 'Осталось 14 дней', 'soon'],
+  ['2025-03-27', 'Осталось 15 дней', null],
+]) {
+  const info = await urgencyCard(today);
+  const label = `срочность ${today} (${tier ?? 'calm'})`;
+  check(info.deadlineText === '11.04.2025', `${label}: дедлайн «${info.deadlineText}»`);
+  check(
+    info.deadlineClass === (tier ? `deadline ${tier}` : 'deadline'),
+    `${label}: класс .deadline «${info.deadlineClass}»`,
+  );
+  check(info.daysLeftCount === 1, `${label}: строк .days-left ${info.daysLeftCount}, ждали одну`);
+  check(info.daysLeftText === text, `${label}: текст «${info.daysLeftText}», ждали «${text}»`);
+  check(
+    info.daysLeftClass === (tier ? `days-left ${tier}` : 'days-left'),
+    `${label}: класс .days-left «${info.daysLeftClass}»`,
+  );
+  check(info.prevIsNorm === true, `${label}: .days-left стоит не сразу после .norm`);
+  const expectedDeadline =
+    tier === 'urgent' ? URGENCY_COLORS.miss : tier === 'soon' ? URGENCY_COLORS.warn : info.cardColor;
+  const expectedDaysLeft =
+    tier === 'urgent' ? URGENCY_COLORS.miss : tier === 'soon' ? URGENCY_COLORS.warn : URGENCY_COLORS.muted;
+  check(
+    info.deadlineColor === expectedDeadline,
+    `${label}: цвет .deadline ${info.deadlineColor}, ждали ${expectedDeadline}`,
+  );
+  check(
+    info.daysLeftColor === expectedDaysLeft,
+    `${label}: цвет .days-left ${info.daysLeftColor}, ждали ${expectedDaysLeft}`,
+  );
+  check(
+    info.daysLeftWeight === (tier ? '600' : '400'),
+    `${label}: жирность .days-left ${info.daysLeftWeight}`,
+  );
+}
+
+// Истёкший срок: строки «Осталось…» нет, дата приглушена, как и раньше.
+{
+  const info = await urgencyCard('2025-04-12');
+  check(info.deadlineClass === 'deadline expired', `срочность: истёкший срок, класс «${info.deadlineClass}»`);
+  check(info.daysLeftCount === 0, 'срочность: у истёкшего срока показана строка .days-left');
+  check(
+    info.deadlineColor === URGENCY_COLORS.muted,
+    `срочность: цвет истёкшего .deadline ${info.deadlineColor}, ждали ${URGENCY_COLORS.muted}`,
+  );
+}
+
 await browser.close();
 server.close();
 

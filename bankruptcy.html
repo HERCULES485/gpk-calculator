@@ -166,6 +166,11 @@
          одного поля «дата фактической подачи», поэтому состояния 'missed' здесь
          не бывает вовсе — только 'expired'. */
       .deadline.expired { color: var(--muted); }
+      .deadline.soon { color: var(--warn-ink); }
+      .deadline.urgent { color: var(--miss-ink); }
+      .days-left { font-size: 14px; margin-top: 4px; color: var(--muted); }
+      .days-left.soon { color: var(--warn-ink); font-weight: 600; }
+      .days-left.urgent { color: var(--miss-ink); font-weight: 600; }
       .expired-note {
         margin-top: 10px; padding: 8px 12px; border-radius: 8px;
         background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-line);

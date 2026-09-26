@@ -158,6 +158,8 @@ import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
 // помечаться истёкшей наравне с обычным term (см. последний тест файла).
 import { markExpired } from '../core/view/cards.js';
+// Сборка карточек домена целиком — для проверок days_left (конец файла).
+import { buildViewBankruptcy } from '../apk/bankruptcy-views.js';
 
 // Задача БАНКРОТСТВО.1 — отзыв должника на заявление о банкротстве
 // (ст. 47 п. 1 ФЗ № 127-ФЗ). Первый узел домена банкротства.
@@ -3753,4 +3755,112 @@ test('возражения участника строительства: primar
     'ст. 223 АПК РФ',
   ]);
   assert.equal(PARTICIPANT_CLAIM_OBJECTION_APK.restoration_norm, undefined);
+});
+
+// --- days_left: сколько дней осталось до дедлайна (индикация срочности) --------
+//
+// days_left проставляет markExpired (apk/bankruptcy-views.js) после пометки
+// истёкших: только у term/capped_term со status 'computed' и готовым дедлайном.
+// Цвет (tier) по нему выбирает страница (apk/bankruptcy-app.js, urgencyTier) —
+// DOM-код, его границы в живом браузере проверяет scripts/smoke-bankruptcy.mjs.
+//
+// Узлы: отзыв должника (term, working_day-узел ст. 47 п. 1): определение
+// получено 26.12.2025 → дедлайн 21.01.2026; субсидиарная ответственность в деле
+// о банкротстве (capped_term, п. 5 ст. 61.14): связывает трёхлетний субъективный
+// потолок → дедлайн 10.03.2025.
+
+const DAYS_LEFT_TERM_INPUTS_BANKRUPTCY = {
+  creditor_petition_acceptance_ruling_received_date_apk: '2025-12-26',
+};
+const DAYS_LEFT_CAPPED_INPUTS_BANKRUPTCY = {
+  subsidiary_liability_grounds_known_date_apk: '2022-03-10',
+  objective_cap_event: 'bankruptcy_declared',
+  bankruptcy_declared_date_apk: '2023-06-01',
+  subsidiary_liability_conduct_date_apk: '2020-01-01',
+};
+
+for (const [today, daysLeft, tier] of [
+  ['2026-01-21', 0, 'urgent'],
+  ['2026-01-18', 3, 'urgent'],
+  ['2026-01-17', 4, 'soon'],
+  ['2026-01-07', 14, 'soon'],
+  ['2026-01-06', 15, 'calm'],
+]) {
+  test(`банкротство buildView: term — days_left = ${daysLeft} (${tier}) при today ${today}`, () => {
+    const view = buildViewBankruptcy(DAYS_LEFT_TERM_INPUTS_BANKRUPTCY, { today });
+    const card = view.cards.find((c) => c.id === 'debtor_response_bankruptcy_apk');
+    assert.equal(card.kind, 'term');
+    assert.equal(card.status, 'computed');
+    assert.equal(card.deadline, '2026-01-21');
+    assert.equal(card.days_left, daysLeft);
+  });
+}
+
+for (const [today, daysLeft, tier] of [
+  ['2025-03-10', 0, 'urgent'],
+  ['2025-03-07', 3, 'urgent'],
+  ['2025-03-06', 4, 'soon'],
+  ['2025-02-24', 14, 'soon'],
+  ['2025-02-23', 15, 'calm'],
+]) {
+  test(`банкротство buildView: capped_term — days_left = ${daysLeft} (${tier}) при today ${today}`, () => {
+    const view = buildViewBankruptcy(DAYS_LEFT_CAPPED_INPUTS_BANKRUPTCY, { today });
+    const card = view.cards.find((c) => c.id === 'subsidiary_liability_in_case_apk');
+    assert.equal(card.kind, 'capped_term');
+    assert.equal(card.status, 'computed');
+    assert.equal(card.deadline, '2025-03-10');
+    assert.equal(card.days_left, daysLeft);
+  });
+}
+
+test("банкротство buildView: у истёкших term и capped_term days_left нет", () => {
+  const term = buildViewBankruptcy(DAYS_LEFT_TERM_INPUTS_BANKRUPTCY, {
+    today: '2026-01-22',
+  }).cards.find((c) => c.id === 'debtor_response_bankruptcy_apk');
+  assert.equal(term.status, 'expired');
+  assert.ok(!('days_left' in term));
+
+  const capped = buildViewBankruptcy(DAYS_LEFT_CAPPED_INPUTS_BANKRUPTCY, {
+    today: '2025-03-11',
+  }).cards.find((c) => c.id === 'subsidiary_liability_in_case_apk');
+  assert.equal(capped.status, 'expired');
+  assert.equal(capped.expired.days, 1);
+  assert.ok(!('days_left' in capped));
+});
+
+test('банкротство buildView: без today days_left не проставляется', () => {
+  const view = buildViewBankruptcy(DAYS_LEFT_CAPPED_INPUTS_BANKRUPTCY);
+  const card = view.cards.find((c) => c.id === 'subsidiary_liability_in_case_apk');
+  assert.equal(card.status, 'computed');
+  assert.ok(!('days_left' in card));
+});
+
+test("банкротство buildView: у event, window и error days_left нет", () => {
+  // kind 'not_applicable' в домене банкротства buildViewBankruptcy не строит
+  // вовсе — он проверен на стороне АПК (test/apk-ui.test.js).
+  const today = '2025-03-07';
+  const view = buildViewBankruptcy(
+    {
+      ...DAYS_LEFT_TERM_INPUTS_BANKRUPTCY,
+      out_of_court_bankruptcy_initiation_notice_included_date_apk: '2025-03-11',
+      settlement_agreement_conclusion_date_apk: '2025-12-26',
+    },
+    { today },
+  );
+  const event = view.cards.find((c) => c.kind === 'event');
+  const window = view.cards.find((c) => c.kind === 'window');
+  assert.ok(event && window);
+  // Окно приходит со status 'computed' — отсекает его именно kind, а не статус.
+  assert.equal(window.status, 'computed');
+  assert.ok(!('days_left' in event));
+  assert.ok(!('days_left' in window));
+
+  // Неизвестное значение дискриминатора — карточка-ошибка вместо capped_term.
+  const errorView = buildViewBankruptcy(
+    { ...DAYS_LEFT_CAPPED_INPUTS_BANKRUPTCY, objective_cap_event: 'unknown_event' },
+    { today },
+  );
+  const errors = errorView.cards.filter((c) => c.kind === 'error');
+  assert.ok(errors.length > 0);
+  for (const card of errors) assert.ok(!('days_left' in card));
 });
