@@ -265,6 +265,15 @@
       .invite h2 { font-size: 16px; margin: 0 0 4px; }
       .invite p.reason { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
       .invite .field { margin-top: 10px; }
+      .field.needed {
+        box-shadow: -3px 0 0 var(--accent);
+        padding-left: 10px;
+        border-radius: 2px;
+      }
+      .field.needed > label { color: var(--accent); }
+      /* Кнопка-ссылка на уже показанное поле стоит на месте прежней строки
+         .hint — блоком, иначе несколько таких кнопок сливаются в одну строку. */
+      .invite > .link-button { display: block; margin-top: 10px; text-align: left; }
       .invite label { font-weight: 600; font-size: 14px; }
 
       .notice-card .deadline { color: var(--muted); }
@@ -309,7 +318,6 @@
       .other-terms { margin-top: 26px; }
       .other-terms h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin-bottom: 4px; }
       .other-terms > p { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
-      .other-terms .invite { border-style: solid; border-color: var(--line); }
 
       .stubs { margin-top: 30px; }
       .stubs h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
