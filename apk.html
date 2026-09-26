@@ -20,6 +20,37 @@
         --miss-ink: #a3241f;
         --miss-line: #f0b6b2;
         --ok: #1f7a44;
+        --surface-alt: #f0f2f5;
+        --surface-subtle: #f7f9fc;
+        --input-bg: #ffffff;
+        --accent-hover: #1a52a6;
+        --btn-disabled-bg: #c3ccd8;
+        --badge-wd-bg: #eaf6ec;
+        --on-accent: #ffffff;
+      }
+      :root[data-theme="dark"] {
+        --bg: #14161c;
+        --card: #1c1f27;
+        --ink: #e7e9ee;
+        --muted: #9aa3b2;
+        --line: #2c313c;
+        --accent: #3b7ddd;
+        --accent-soft: #1f2a3d;
+        --warn-bg: #3a2f14;
+        --warn-ink: #e8b563;
+        --warn-line: #5c4a1e;
+        --miss-bg: #3a1f1e;
+        --miss-ink: #e8827c;
+        --miss-line: #5c2e2b;
+        --ok: #4caf7d;
+        --surface-alt: #242832;
+        --surface-subtle: #1f232b;
+        --input-bg: #1c1f27;
+        --accent-hover: #5b93e0;
+        --btn-disabled-bg: #3a3f4a;
+        --badge-wd-bg: #1a3324;
+        --on-accent: #ffffff;
+        color-scheme: dark;
       }
       * { box-sizing: border-box; }
       body {
@@ -31,6 +62,14 @@
       .wrap { max-width: 760px; margin: 0 auto; padding: 28px 18px 64px; }
       header h1 { font-size: 22px; margin: 0 0 4px; }
       header p { margin: 0 0 24px; color: var(--muted); font-size: 14px; }
+      header { position: relative; }
+      .theme-toggle {
+        position: absolute; top: 0; right: 0;
+        font-size: 18px; line-height: 1; padding: 6px 10px;
+        border: 1px solid var(--line); border-radius: 8px;
+        background: var(--card); cursor: pointer;
+      }
+      header h1 { padding-right: 52px; }
 
       .primary {
         background: var(--card);
@@ -47,7 +86,7 @@
         padding: 10px 12px;
         border: 1px solid var(--line);
         border-radius: 8px;
-        background: #fff;
+        background: var(--input-bg);
         color: var(--ink);
       }
       input[type="text"]:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
@@ -60,11 +99,11 @@
       .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
       .toolbar button {
         font: inherit; font-weight: 600; font-size: 14px;
-        color: #fff; background: var(--accent); border: none;
+        color: var(--on-accent); background: var(--accent); border: none;
         padding: 9px 16px; border-radius: 8px; cursor: pointer;
       }
-      .toolbar button:hover:not(:disabled) { background: #1a52a6; }
-      .toolbar button:disabled { background: #c3ccd8; cursor: not-allowed; }
+      .toolbar button:hover:not(:disabled) { background: var(--accent-hover); }
+      .toolbar button:disabled { background: var(--btn-disabled-bg); cursor: not-allowed; }
       .copy-status { color: var(--ok); font-size: 13px; font-weight: 600; }
       .toolbar-note { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
 
@@ -178,8 +217,8 @@
         padding: 2px 8px; border-radius: 999px; margin-left: 8px; vertical-align: 2px;
       }
       .badge.assume { background: var(--accent-soft); color: var(--accent); }
-      .badge.wd { background: #eaf6ec; color: var(--ok); }
-      .badge.info { background: #f0f2f5; color: var(--muted); }
+      .badge.wd { background: var(--badge-wd-bg); color: var(--ok); }
+      .badge.info { background: var(--surface-alt); color: var(--muted); }
 
       details.more { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
       details.more > summary {
@@ -189,7 +228,7 @@
       .more dl { margin: 10px 0 0; }
       .more dt { font-size: 12px; text-transform: uppercase; letter-spacing: .02em; color: var(--muted); margin-top: 8px; }
       .more dd { margin: 2px 0 0; font-size: 14px; }
-      .more code { background: #f0f2f5; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+      .more code { background: var(--surface-alt); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
 
       .note {
         margin-top: 12px; padding: 10px 12px; border-radius: 8px;
@@ -215,7 +254,7 @@
       }
       /* Уровень 2 — срок суда: без рамки-акцента и без крупной даты. */
       .card.info-card {
-        padding: 12px 14px; background: #fbfcfd; border-style: dashed;
+        padding: 12px 14px; background: var(--surface-subtle); border-style: dashed;
       }
       .info-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
       .info-title { font-size: 14px; font-weight: 600; color: var(--muted); }
@@ -270,7 +309,7 @@
 
       .alt {
         margin-top: 12px; padding: 12px; border-radius: 8px;
-        background: #f7f9fc; border: 1px solid var(--line); font-size: 14px;
+        background: var(--surface-subtle); border: 1px solid var(--line); font-size: 14px;
       }
       .alt .row { display: flex; justify-content: space-between; gap: 12px; margin: 4px 0; }
       .alt .recommended { color: var(--ok); font-weight: 700; }
@@ -300,27 +339,27 @@
       .notice-card .deadline { color: var(--muted); }
       select {
         width: 100%; font: inherit; font-size: 15px; padding: 9px 10px;
-        border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink);
+        border: 1px solid var(--line); border-radius: 8px; background: var(--input-bg); color: var(--ink);
       }
 
       /* Перерывы срока предъявления (ст. 22 ФЗ № 229-ФЗ): повторяемый список. */
       .interruptions .field { margin-top: 10px; }
       .interruptions label { font-weight: 600; font-size: 14px; }
       .interruption-row {
-        background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+        background: var(--input-bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
       }
       .interruption-date-label { margin-top: 10px; }
       .row-add, .row-remove {
         font: inherit; font-size: 14px; padding: 8px 12px; margin-top: 10px;
         border-radius: 8px; cursor: pointer;
       }
-      .row-add { border: 1px dashed var(--accent); background: #fff; color: var(--accent); }
-      .row-remove { border: 1px solid var(--line); background: #fff; color: var(--muted); }
+      .row-add { border: 1px dashed var(--accent); background: var(--input-bg); color: var(--accent); }
+      .row-remove { border: 1px solid var(--line); background: var(--input-bg); color: var(--muted); }
       .row-add:hover, .row-remove:hover { border-color: var(--accent); color: var(--accent); }
       .interruption-scope { font-size: 13px; }
       .interruption-history {
         margin-top: 12px; padding: 10px 12px; border-radius: 8px;
-        background: #f7f9fc; border: 1px solid var(--line); font-size: 14px;
+        background: var(--surface-subtle); border: 1px solid var(--line); font-size: 14px;
       }
       .interruption-history-title {
         font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted);
@@ -390,6 +429,7 @@
         }
         .print-item .print-norm { font-size: 10pt; color: #555; margin-bottom: 4px; }
         .print-item .print-reco { font-size: 11pt; font-style: italic; margin-top: 2px; }
+        #theme-toggle { display: none; }
       }
 
       /* --- Периоды, не засчитываемые в срок (ч. 2, 5 ст. 321 АПК РФ) ---------
@@ -462,6 +502,34 @@
          текст остаётся там же, где у события вне цепочки. */
       .chain-step > .event-line { border-left: none; padding-left: 17px; }
     </style>
+    <script>
+      (function () {
+        var KEY = 'apk-theme';
+        var stored = null;
+        try { stored = localStorage.getItem(KEY); } catch (e) {}
+        var theme = stored || (window.matchMedia &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+        document.addEventListener('DOMContentLoaded', function () {
+          var btn = document.getElementById('theme-toggle');
+          if (!btn) return;
+          function sync() {
+            var t = document.documentElement.getAttribute('data-theme');
+            btn.textContent = t === 'dark' ? '☀️' : '🌙';
+            btn.setAttribute('aria-label', t === 'dark'
+              ? 'Включить светлую тему' : 'Включить тёмную тему');
+          }
+          sync();
+          btn.addEventListener('click', function () {
+            var next = document.documentElement.getAttribute('data-theme') === 'dark'
+              ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            try { localStorage.setItem(KEY, next); } catch (e) {}
+            sync();
+          });
+        });
+      })();
+    </script>
 
     <script type="importmap">
       { "imports": { "node:fs": "./web/fs-shim.js" } }
@@ -470,6 +538,8 @@
   <body>
     <div class="wrap">
       <header>
+        <button id="theme-toggle" type="button" class="theme-toggle"
+                aria-label="Переключить тему оформления">🌙</button>
         <h1>Калькулятор процессуальных сроков по АПК РФ</h1>
         <p>
           Калькулятор считает по производственному календарю, отличает рабочие дни
