@@ -13,6 +13,7 @@
 export const BANKRUPTCY_SITUATION_CATEGORIES = [
   {
     title: 'Наблюдение',
+    collapsed: true,
     ids: [
       'debtor_response',
       'claims_ruling_reasoned_request',
@@ -23,6 +24,7 @@ export const BANKRUPTCY_SITUATION_CATEGORIES = [
   },
   {
     title: 'Конкурсное производство',
+    collapsed: true,
     ids: [
       'enterprise_sale_payment',
       'bankruptcy_property_sale_proposal',
@@ -53,9 +55,8 @@ export const BANKRUPTCY_SITUATION_CATEGORIES = [
   },
   {
     title: 'Финансовое оздоровление и внешнее управление (редкие процедуры)',
-    // Единственная свёрнутая по умолчанию категория: <details> без атрибута
-    // open — остальные шесть остаются обычными <fieldset>, раскрытыми, как и
-    // весь переключатель был раньше.
+    // collapsed: true — как и у всех категорий: аккордеон, раскрыта только
+    // категория с текущей ветвью (renderSituationSwitch в apk/bankruptcy-app.js).
     collapsed: true,
     ids: [
       'external_management_introduction_extension_appeal',
@@ -77,6 +78,7 @@ export const BANKRUPTCY_SITUATION_CATEGORIES = [
   },
   {
     title: 'Мировое соглашение',
+    collapsed: true,
     ids: [
       'settlement_agreement',
       'settlement_agreement_review',
@@ -86,10 +88,12 @@ export const BANKRUPTCY_SITUATION_CATEGORIES = [
   },
   {
     title: 'Субсидиарная ответственность',
+    collapsed: true,
     ids: ['subsidiary_in_case', 'subsidiary_post_conclusion'],
   },
   {
     title: 'Банкротство гражданина',
+    collapsed: true,
     ids: [
       'citizen_bankruptcy',
       'citizen_bankruptcy_filing_duty',
@@ -105,6 +109,7 @@ export const BANKRUPTCY_SITUATION_CATEGORIES = [
   },
   {
     title: 'Общее — применимо на нескольких стадиях',
+    collapsed: true,
     ids: [
       'creditor_claims',
       'appraiser_involvement_request',

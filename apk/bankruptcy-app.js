@@ -775,14 +775,16 @@ function renderSituationSwitch(current) {
     const fs = el('fieldset', 'situations');
     fs.appendChild(el('legend', null, category.title));
     fs.appendChild(row);
-    // Категория «редкие процедуры» свёрнута по умолчанию: <summary> заменяет
-    // текст <legend> (дублировать название в обоих было бы шумом), сам
-    // fieldset со своим legend/row переходит внутрь <details> целиком.
+    // Свёрнутая по умолчанию категория: <summary> заменяет текст <legend>
+    // (дублировать название в обоих было бы шумом), сам fieldset со своим
+    // legend/row переходит внутрь <details> целиком. Аккордеон: свёрнуты все
+    // категории, кроме той, в которой лежит текущая ветвь; <details> независимы.
     if (category.collapsed) {
       fs.firstChild.remove();
       const details = el('details', 'situations-group');
       details.appendChild(el('summary', null, category.title));
       details.appendChild(fs);
+      details.open = category.ids.includes(current.id);
       root.appendChild(details);
     } else {
       root.appendChild(fs);
@@ -793,7 +795,8 @@ function renderSituationSwitch(current) {
 
 // Фильтр переключателя по названию ситуации (текст <span> внутри label),
 // регистронезависимо. Пустой запрос возвращает исходное состояние: все
-// категории видимы, свёрнутые — снова свёрнуты, счётчик пуст.
+// категории видимы, свёрнуты все, кроме категории с выбранной ветвью, счётчик
+// пуст.
 function filterSituations(query) {
   const root = document.getElementById('situation');
   const q = query.trim().toLocaleLowerCase('ru');
@@ -809,12 +812,15 @@ function filterSituations(query) {
   // в DOM её не находит, если категории перед ней скрыты. Класс выставляется и
   // снимается явно на каждой категории при каждом вызове; при пустом запросе
   // снимается со всех — исходный отступ даёт то же CSS-правило, что и до ввода.
+  const checkedId = root.querySelector('input[type=radio]:checked')?.value;
   let firstVisibleSeen = false;
   for (const group of root.querySelectorAll('fieldset.situations, details.situations-group')) {
     const isDetails = group.matches('details.situations-group');
     if (q === '') {
       group.hidden = false;
-      if (isDetails) group.open = false;
+      if (isDetails) {
+        group.open = [...group.querySelectorAll('input[type=radio]')].some((i) => i.value === checkedId);
+      }
       group.classList.remove('situations-first-visible');
       continue;
     }

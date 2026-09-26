@@ -565,9 +565,18 @@ check(
   searchInitial.shown.length === 35 && searchInitial.hiddenGroups === 0,
   'поиск: до ввода часть ветвей или категорий уже скрыта',
 );
+// Аккордеон: до ввода раскрыта ровно одна категория — та, в которой лежит
+// ветвь по умолчанию (DEFAULT_SITUATION_APK).
+const { DEFAULT_SITUATION_APK } = await import('../apk/situations.js');
+const defaultDetailsIndex = await page
+  .locator(`#situation input[value="${DEFAULT_SITUATION_APK}"]`)
+  .locator('xpath=ancestor::details[1]')
+  .evaluate((d) => [...document.querySelectorAll('#situation details.situations-group')].indexOf(d));
 check(
-  searchInitial.detailsOpen.every((open) => !open),
-  'поиск: свёрнутая категория раскрыта до ввода',
+  defaultDetailsIndex >= 0 &&
+    searchInitial.detailsOpen.filter((open) => open).length === 1 &&
+    searchInitial.detailsOpen[defaultDetailsIndex] === true,
+  `поиск: до ввода раскрыта не ровно категория с ветвью по умолчанию: ${JSON.stringify(searchInitial.detailsOpen)}`,
 );
 check(searchInitial.count === '' && searchInitial.emptyHidden, 'поиск: счётчик или «ничего не найдено» видны до ввода');
 check(
@@ -605,7 +614,11 @@ check(
   st.shown.length === 1 && st.shown[0] === 'court_fine_appeal',
   `поиск «судебный штраф»: ждали одну ветвь court_fine_appeal, видны ${JSON.stringify(st.shown)}`,
 );
-check(st.detailsOpen.every((open) => open), 'поиск в свёрнутой категории: <details> не раскрылся');
+check(
+  await page.locator('#situation input[value="court_fine_appeal"]')
+    .locator('xpath=ancestor::details[1]').evaluate((d) => d.open),
+  'поиск в свёрнутой категории: <details> не раскрылся',
+);
 check(
   (await page.locator('#situation input[value="court_fine_appeal"]').isVisible()) && (await renderedLabels()) === 1,
   'поиск в свёрнутой категории: найденная ветвь не видна на экране или видны лишние',
