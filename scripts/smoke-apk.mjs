@@ -361,6 +361,166 @@ for (const [situationId, fieldId] of PRIMARY_FIELD_BRANCHES) {
   );
 }
 
+// --- 9. Ветви без живого прогона: полный расчёт, а не только присутствие поля -
+//
+// PRIMARY_FIELD_BRANCHES выше проверяет только наличие/сохранение поля — этого
+// достаточно для регрессии БАГ.1, но не показывает, что карточка РЕЗУЛЬТАТА
+// вообще появляется на экране и дата в ней не NaN/undefined/Invalid Date.
+// Ниже — 12 ветвей с одним term-узлом каждая (общий срок обжалования ч. 3
+// ст. 188 АПК РФ или иная своя норма без восстановления), которые до этой
+// правки не выбирались в браузере вообще ни одним smoke-тестом.
+const isValidDeadlineText = (t) => /^\d{2}\.\d{2}\.\d{4}$/.test(t.trim());
+
+const SINGLE_NODE_BRANCHES = [
+  ['injunction_refusal_appeal', 'injunction_refusal_ruling_date_apk'],
+  ['counter_security_ruling_appeal', 'counter_security_ruling_date_apk'],
+  ['injunction_cancellation_ruling_appeal', 'injunction_cancellation_ruling_date_apk'],
+  ['claim_refusal_appeal', 'claim_refusal_ruling_date_apk'],
+  ['deadline_restoration_refusal_appeal', 'deadline_restoration_refusal_ruling_date_apk'],
+  ['deadline_extension_refusal_appeal', 'deadline_extension_refusal_ruling_date_apk'],
+  ['decision_clarification_ruling_appeal', 'decision_clarification_ruling_date_apk'],
+  ['enforcement_restoration_ruling_appeal', 'enforcement_restoration_ruling_date_apk'],
+  ['evidence_unavailability_notice', 'evidence_request_copy_received_date_apk'],
+  ['enforcement_writ_duplicate_request', 'enforcement_writ_loss_known_date_apk'],
+  ['court_fine_appeal', 'court_fine_ruling_copy_received_date_apk'],
+  ['additional_decision_refusal_appeal', 'additional_decision_refusal_ruling_date_apk'],
+];
+for (const [situationId, fieldId] of SINGLE_NODE_BRANCHES) {
+  await chooseSituation(situationId);
+  check(
+    (await page.locator(`#in-${fieldId}`).count()) === 1,
+    `ветвь "${situationId}": основное поле #in-${fieldId} не найдено в DOM`,
+  );
+  await page.fill(`#in-${fieldId}`, '11.03.2025');
+  await settle();
+  const cards = page.locator('#results .card');
+  check((await cards.count()) === 1, `ветвь "${situationId}": карточка результата не появилась`);
+  const deadline = (await cards.locator('.deadline').first().innerText()).trim();
+  check(
+    isValidDeadlineText(deadline),
+    `ветвь "${situationId}": дата в карточке невалидна: «${deadline}»`,
+  );
+}
+
+// --- 10. Ветвь "new_circumstances": два узла на одном якоре (общий срок + ---
+// предельный срок восстановления по ч. 2 ст. 312 АПК РФ) -----------------------
+await chooseSituation('new_circumstances');
+check(
+  (await page.locator('#in-circumstances_discovered_date').count()) === 1,
+  'ветвь "new_circumstances": основное поле не найдено в DOM',
+);
+await page.fill('#in-circumstances_discovered_date', '11.03.2025');
+await settle();
+check(
+  (await page.locator('#results .card').count()) === 2,
+  'в ветви пересмотра по новым обстоятельствам ожидались две карточки (общий срок и восстановление)',
+);
+const reviewDeadline = (
+  await page.locator('#results .card').filter({ hasText: 'Пересмотр по новым' }).locator('.deadline').innerText()
+).trim();
+check(reviewDeadline === '11.06.2025', `срок подачи заявления о пересмотре посчитан неверно: ${reviewDeadline}`);
+const reviewRestorationDeadline = (
+  await page
+    .locator('#results .card')
+    .filter({ hasText: 'Восстановление срока пересмотра' })
+    .locator('.deadline')
+    .innerText()
+).trim();
+check(
+  reviewRestorationDeadline === '11.09.2025',
+  `предельный срок восстановления пересмотра посчитан неверно: ${reviewRestorationDeadline}`,
+);
+
+// --- 11. Ветвь "execution_compensation": ЕДИНСТВЕННЫЙ kind:'window' узел -------
+// в АПК-домене (ч. 3 ст. 222.1 АПК РФ) — до этой правки ни разу не выбирался в
+// браузере. Проверяются все три состояния окна: 'open' (верхняя граница ещё не
+// наступила — на карточке плейсхолдер «—» и пояснение), 'closed' (обе границы
+// определены) и 'empty' (окно схлопнулось, подать нельзя ни в один день).
+await chooseSituation('execution_compensation');
+check(
+  (await page.locator('#in-execution_deadline_date').count()) === 1,
+  'ветвь "execution_compensation": основное поле execution_deadline_date не найдено в DOM',
+);
+check(
+  (await page.locator('#in-enforcement_proceeding_ended').count()) === 1,
+  'ветвь "execution_compensation": дискриминатор enforcement_proceeding_ended не найден в DOM',
+);
+await page.fill('#in-execution_deadline_date', '11.03.2025');
+await settle();
+
+const windowCardApk = page
+  .locator('#results .card')
+  .filter({ hasText: 'исполнение судебного акта в разумный срок' });
+
+// Состояние 'open': производство не окончено — верхняя граница не определена.
+await page.selectOption('#in-enforcement_proceeding_ended', 'no');
+await settle();
+check((await windowCardApk.count()) === 1, 'execution_compensation[open]: карточка-окно не появилась');
+const openCaptions = await windowCardApk.locator('.deadline-caption').allInnerTexts();
+const openDates = await windowCardApk.locator('.deadline').allInnerTexts();
+check(
+  JSON.stringify(openCaptions.map((t) => t.trim().toLowerCase())) ===
+    JSON.stringify(['не ранее', 'не позднее']),
+  `execution_compensation[open]: подписи границ неверны: ${JSON.stringify(openCaptions)}`,
+);
+check(
+  isValidDeadlineText(openDates[0]),
+  `execution_compensation[open]: нижняя граница невалидна: ${JSON.stringify(openDates)}`,
+);
+check(
+  openDates[1]?.trim() === '—',
+  `execution_compensation[open]: верхняя граница должна быть плейсхолдером «—», пока производство не окончено: ${JSON.stringify(openDates)}`,
+);
+check(
+  (await windowCardApk.locator('.na-reason').count()) === 1,
+  'execution_compensation[open]: пояснение состояния (na-reason) не показано',
+);
+
+// Состояние 'closed': производство окончено ПОЗЖЕ истечения срока исполнения —
+// обе границы окна определены и раскрыты на карточке.
+await page.selectOption('#in-enforcement_proceeding_ended', 'yes');
+await settle();
+check(
+  (await page.locator('#in-enforcement_proceeding_ended_date').count()) === 1,
+  'execution_compensation: поле enforcement_proceeding_ended_date не появилось при enforcement_proceeding_ended=yes',
+);
+await page.fill('#in-enforcement_proceeding_ended_date', '01.10.2025');
+await settle();
+check((await windowCardApk.count()) === 1, 'execution_compensation[closed]: карточка-окно не появилась');
+const closedDates = await windowCardApk.locator('.deadline').allInnerTexts();
+check(
+  closedDates.length === 2 && closedDates.every(isValidDeadlineText),
+  `execution_compensation[closed]: обе границы должны быть определены и валидны: ${JSON.stringify(closedDates)}`,
+);
+check(
+  closedDates[0].trim() === '11.09.2025' && closedDates[1].trim() === '01.04.2026',
+  `execution_compensation[closed]: границы окна посчитаны неверно: ${JSON.stringify(closedDates)}`,
+);
+check(
+  (await windowCardApk.locator('.na-reason').count()) === 0,
+  'execution_compensation[closed]: пояснение состояния показано там, где обе границы определены штатно',
+);
+
+// Состояние 'empty': производство окончено РАНЬШЕ истечения срока исполнения —
+// верхняя граница получается раньше нижней, окно схлопывается.
+await page.fill('#in-enforcement_proceeding_ended_date', '01.02.2025');
+await settle();
+check((await windowCardApk.count()) === 1, 'execution_compensation[empty]: карточка-окно не появилась');
+check(
+  (await windowCardApk.evaluate((el) => el.classList.contains('not-applicable'))) === true,
+  'execution_compensation[empty]: карточка должна получать класс not-applicable',
+);
+const emptyDates = await windowCardApk.locator('.deadline').allInnerTexts();
+check(
+  emptyDates.length === 2 && emptyDates.every(isValidDeadlineText),
+  `execution_compensation[empty]: обе даты границ должны остаться валидными (хоть окно и схлопнулось): ${JSON.stringify(emptyDates)}`,
+);
+const emptyNote = await windowCardApk.locator('.na-reason').innerText();
+check(
+  emptyNote.includes('Окно закрыто'),
+  `execution_compensation[empty]: пояснение о закрытом окне не показано: «${emptyNote}»`,
+);
+
 await browser.close();
 server.close();
 
