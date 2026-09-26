@@ -145,6 +145,14 @@ import {
   KFH_REHABILITATION_PLAN_SUBMISSION_APK,
   computeKfhRehabilitationIntroductionAppealApk,
   KFH_REHABILITATION_INTRODUCTION_APPEAL_APK,
+  computeDeveloperParticipantsInfoTransferApk,
+  DEVELOPER_PARTICIPANTS_INFO_TRANSFER_APK,
+  computeDeveloperParticipantsNotificationApk,
+  DEVELOPER_PARTICIPANTS_NOTIFICATION_APK,
+  computeParticipantClaimExclusionRulingAppealApk,
+  PARTICIPANT_CLAIM_EXCLUSION_RULING_APPEAL_APK,
+  computeParticipantClaimObjectionApk,
+  PARTICIPANT_CLAIM_OBJECTION_APK,
 } from '../apk/bankruptcy.js';
 import { isWorkingDay } from '../core/calendar/calendar.js';
 // Нужен ровно для одной проверки: карточка kind: 'capped_term' должна
@@ -3534,4 +3542,215 @@ test('КФХ: представление плана и обжалование в
   assert.notEqual(KFH_REHABILITATION_PLAN_SUBMISSION_APK.id, KFH_REHABILITATION_INTRODUCTION_APPEAL_APK.id);
   assert.match(KFH_REHABILITATION_PLAN_SUBMISSION_APK.title, /КФХ/);
   assert.match(KFH_REHABILITATION_INTRODUCTION_APPEAL_APK.title, /крестьянского \(фермерского\) хозяйства/);
+});
+
+// --- § 7 главы IX ФЗ № 127-ФЗ — банкротство застройщиков (ст. 201.4) -----------
+//
+// Четыре самостоятельные нормы, не вложенные в условные цепочки. Первая
+// задача по этому разделу — раздел сложный, много взаимосвязанных сценариев,
+// остальное отдельными задачами.
+
+// 1) П. 2 ст. 201.4, первое предложение — передача руководителем застройщика
+// сведений об участниках строительства конкурсному управляющему.
+
+test('передача сведений об участниках строительства: десять календарных дней с даты утверждения конкурсного управляющего, нерабочие дни внутри периода не растягивают срок', () => {
+  const term = computeDeveloperParticipantsInfoTransferApk({
+    developer_bankruptcy_manager_approved_date_apk: '2025-03-03',
+  });
+  assert.equal(term.anchor, '2025-03-03');
+  assert.equal(term.raw_deadline, '2025-03-13');
+  assert.equal(term.deadline, '2025-03-13'); // четверг, рабочий день, несмотря на выходные 08-09.03 внутри периода
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 10, unit: 'calendar_day' });
+  assert.equal(term.norm.primary, 'п. 2 ст. 201.4 ФЗ № 127-ФЗ');
+  // Дни календарные — в отличие от working_day-узлов, first_working_day не считается.
+  assert.equal(term.first_working_day, undefined);
+});
+
+test('передача сведений об участниках строительства: итоговая дата на нерабочий день переносится (ч. 4 ст. 114 АПК РФ)', () => {
+  // 21.04.2025 + 10 календарных дней = 01.05.2025 (Праздник Весны и Труда,
+  // нерабочий) → ближайший рабочий 05.05.2025 (понедельник).
+  const term = computeDeveloperParticipantsInfoTransferApk({
+    developer_bankruptcy_manager_approved_date_apk: '2025-04-21',
+  });
+  assert.equal(term.raw_deadline, '2025-05-01');
+  assert.ok(!isWorkingDay('2025-05-01'));
+  assert.equal(term.deadline, '2025-05-05');
+  assert.equal(term.shifted, true);
+});
+
+test('передача сведений об участниках строительства: без developer_bankruptcy_manager_approved_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeDeveloperParticipantsInfoTransferApk({}),
+    /developer_bankruptcy_manager_approved_date_apk/,
+  );
+});
+
+test('передача сведений об участниках строительства: primary — п. 2 ст. 201.4 (единица прямо названа календарной в норме), без restoration', () => {
+  assert.equal(
+    DEVELOPER_PARTICIPANTS_INFO_TRANSFER_APK.norm_versions[0].norm.primary,
+    'п. 2 ст. 201.4 ФЗ № 127-ФЗ',
+  );
+  assert.deepEqual(DEVELOPER_PARTICIPANTS_INFO_TRANSFER_APK.norm_versions[0].norm.calculation, [
+    'ч. 4 ст. 114 АПК РФ',
+    'ст. 223 АПК РФ',
+  ]);
+  assert.equal(DEVELOPER_PARTICIPANTS_INFO_TRANSFER_APK.restoration_norm, undefined);
+});
+
+// 2) П. 2 ст. 201.4, второе предложение — уведомление конкурсным управляющим
+// выявленных участников строительства об открытии конкурсного производства.
+// ОТДЕЛЬНЫЙ узел от DEVELOPER_PARTICIPANTS_INFO_TRANSFER_APK выше — разные
+// субъекты обязанности и разные якоря при общей теме (см. комментарий к узлу
+// в apk/bankruptcy.js).
+
+test('уведомление участников строительства: пять рабочих дней с даты получения сведений от руководителя застройщика', () => {
+  const term = computeDeveloperParticipantsNotificationApk({
+    developer_participants_info_received_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-03-18');
+  assert.equal(term.deadline, '2025-03-18');
+  assert.deepEqual(term.duration, { value: 5, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'п. 2 ст. 201.4 ФЗ № 127-ФЗ');
+});
+
+test('уведомление участников строительства: рабочие дни, а не календарные — перенос через новогодние каникулы', () => {
+  const term = computeDeveloperParticipantsNotificationApk({
+    developer_participants_info_received_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-14');
+  assert.notEqual(term.deadline, '2026-01-05'); // наивные "+5 календарных дней" от 26.12 не подходят даже как ориентир
+});
+
+test('уведомление участников строительства: без developer_participants_info_received_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeDeveloperParticipantsNotificationApk({}),
+    /developer_participants_info_received_date_apk/,
+  );
+});
+
+test('уведомление участников строительства: primary — п. 2 ст. 201.4 (единица по умолчанию working_day — норма не называет её явно), без restoration', () => {
+  assert.equal(
+    DEVELOPER_PARTICIPANTS_NOTIFICATION_APK.norm_versions[0].norm.primary,
+    'п. 2 ст. 201.4 ФЗ № 127-ФЗ',
+  );
+  assert.deepEqual(DEVELOPER_PARTICIPANTS_NOTIFICATION_APK.norm_versions[0].norm.calculation, [
+    'ч. 3 ст. 113 АПК РФ',
+    'ст. 223 АПК РФ',
+  ]);
+  assert.equal(DEVELOPER_PARTICIPANTS_NOTIFICATION_APK.restoration_norm, undefined);
+});
+
+test('передача сведений участникам и уведомление участников строительства — общая тема п. 2 ст. 201.4, но разные узлы: разные id, разные единицы измерения, разные поля ввода', () => {
+  assert.notEqual(
+    DEVELOPER_PARTICIPANTS_INFO_TRANSFER_APK.id,
+    DEVELOPER_PARTICIPANTS_NOTIFICATION_APK.id,
+  );
+  // Разные субъекты обязанности — разный якорь у каждого узла, не общая ветвь.
+  assert.throws(
+    () => computeDeveloperParticipantsInfoTransferApk({
+      developer_participants_info_received_date_apk: '2025-03-11',
+    }),
+    /developer_bankruptcy_manager_approved_date_apk/,
+  );
+  assert.throws(
+    () => computeDeveloperParticipantsNotificationApk({
+      developer_bankruptcy_manager_approved_date_apk: '2025-03-11',
+    }),
+    /developer_participants_info_received_date_apk/,
+  );
+  // Разные единицы измерения — десять КАЛЕНДАРНЫХ у первого предложения,
+  // пять РАБОЧИХ у второго (норма прямо называет только первую единицу).
+  assert.deepEqual(DEVELOPER_PARTICIPANTS_INFO_TRANSFER_APK.duration, {
+    value: 10,
+    unit: 'calendar_day',
+  });
+  assert.deepEqual(DEVELOPER_PARTICIPANTS_NOTIFICATION_APK.duration, {
+    value: 5,
+    unit: 'working_day',
+  });
+});
+
+// 3) Абз. 3 п. 7 ст. 201.4 — обжалование определения об исключении требования
+// участника строительства из реестра. Тот же образец, что у уже реализованных
+// appeal-узлов домена: primary — ч. 1 ст. 61 (число срока даёт эта статья, не
+// абз. 3 п. 7 ст. 201.4, которая говорит только о самом факте обжалуемости).
+
+test('обжалование определения об исключении требования участника строительства из реестра: один месяц со дня изготовления определения в полном объёме', () => {
+  const term = computeParticipantClaimExclusionRulingAppealApk({
+    participant_claim_exclusion_ruling_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-04-11');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false);
+  assert.deepEqual(term.duration, { value: 1, unit: 'month' });
+});
+
+test('обжалование определения об исключении требования участника строительства из реестра: без participant_claim_exclusion_ruling_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeParticipantClaimExclusionRulingAppealApk({}),
+    /participant_claim_exclusion_ruling_date_apk/,
+  );
+});
+
+test('обжалование определения об исключении требования участника строительства из реестра: primary — ч. 1 ст. 61, не абз. 3 п. 7 ст. 201.4; calculation тот же набор, что у остальных appeal-узлов, без restoration, без поля о круге лиц', () => {
+  assert.equal(
+    PARTICIPANT_CLAIM_EXCLUSION_RULING_APPEAL_APK.norm_versions[0].norm.primary,
+    'ч. 1 ст. 61 ФЗ № 127-ФЗ',
+  );
+  assert.doesNotMatch(
+    PARTICIPANT_CLAIM_EXCLUSION_RULING_APPEAL_APK.norm_versions[0].norm.primary,
+    /201\.4/,
+  );
+  assert.deepEqual(
+    PARTICIPANT_CLAIM_EXCLUSION_RULING_APPEAL_APK.norm_versions[0].norm.calculation,
+    KFH_REHABILITATION_INTRODUCTION_APPEAL_APK.norm_versions[0].norm.calculation,
+  );
+  assert.equal(PARTICIPANT_CLAIM_EXCLUSION_RULING_APPEAL_APK.restoration_norm, undefined);
+});
+
+// 4) П. 8 ст. 201.4 — возражения участника строительства по результатам
+// рассмотрения конкурсным управляющим его требования.
+
+test('возражения участника строительства: пятнадцать рабочих дней со дня получения уведомления о результатах рассмотрения требования', () => {
+  const term = computeParticipantClaimObjectionApk({
+    participant_claim_review_notification_received_date_apk: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-04-01');
+  assert.equal(term.deadline, '2025-04-01');
+  assert.deepEqual(term.duration, { value: 15, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'п. 8 ст. 201.4 ФЗ № 127-ФЗ');
+});
+
+test('возражения участника строительства: рабочие дни — перенос через новогодние каникулы', () => {
+  const term = computeParticipantClaimObjectionApk({
+    participant_claim_review_notification_received_date_apk: '2025-12-26',
+  });
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-28');
+});
+
+test('возражения участника строительства: без participant_claim_review_notification_received_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeParticipantClaimObjectionApk({}),
+    /participant_claim_review_notification_received_date_apk/,
+  );
+});
+
+test('возражения участника строительства: primary — п. 8 ст. 201.4 (единица прямо названа рабочей в норме), без restoration', () => {
+  assert.equal(
+    PARTICIPANT_CLAIM_OBJECTION_APK.norm_versions[0].norm.primary,
+    'п. 8 ст. 201.4 ФЗ № 127-ФЗ',
+  );
+  assert.deepEqual(PARTICIPANT_CLAIM_OBJECTION_APK.norm_versions[0].norm.calculation, [
+    'ч. 3 ст. 113 АПК РФ',
+    'ст. 223 АПК РФ',
+  ]);
+  assert.equal(PARTICIPANT_CLAIM_OBJECTION_APK.restoration_norm, undefined);
 });
