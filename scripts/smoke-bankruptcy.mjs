@@ -2208,9 +2208,18 @@ check(
   searchInitial.shown.length === 58 && searchInitial.hiddenGroups === 0,
   'поиск: до ввода часть ветвей или категорий уже скрыта',
 );
+// Аккордеон: до ввода раскрыта ровно одна категория — та, в которой лежит
+// ветвь по умолчанию (DEFAULT_SITUATION_BANKRUPTCY).
+const { DEFAULT_SITUATION_BANKRUPTCY } = await import('../apk/bankruptcy-situations.js');
+const defaultDetailsIndex = await page
+  .locator(`#situation input[value="${DEFAULT_SITUATION_BANKRUPTCY}"]`)
+  .locator('xpath=ancestor::details[1]')
+  .evaluate((d) => [...document.querySelectorAll('#situation details.situations-group')].indexOf(d));
 check(
-  searchInitial.detailsOpen.every((open) => !open),
-  'поиск: свёрнутая категория раскрыта до ввода',
+  defaultDetailsIndex >= 0 &&
+    searchInitial.detailsOpen.filter((open) => open).length === 1 &&
+    searchInitial.detailsOpen[defaultDetailsIndex] === true,
+  `поиск: до ввода раскрыта не ровно категория с ветвью по умолчанию: ${JSON.stringify(searchInitial.detailsOpen)}`,
 );
 check(searchInitial.count === '' && searchInitial.emptyHidden, 'поиск: счётчик или «ничего не найдено» видны до ввода');
 check(
@@ -2248,7 +2257,11 @@ check(
   st.shown.length === 1 && st.shown[0] === 'kfh_rehabilitation_plan_submission',
   `поиск «представление плана финансового»: ждали одну ветвь kfh_rehabilitation_plan_submission, видны ${JSON.stringify(st.shown)}`,
 );
-check(st.detailsOpen.every((open) => open), 'поиск в свёрнутой категории: <details> не раскрылся');
+check(
+  await page.locator('#situation input[value="kfh_rehabilitation_plan_submission"]')
+    .locator('xpath=ancestor::details[1]').evaluate((d) => d.open),
+  'поиск в свёрнутой категории: <details> не раскрылся',
+);
 check(
   (await page.locator('#situation input[value="kfh_rehabilitation_plan_submission"]').isVisible()) && (await renderedLabels()) === 1,
   'поиск в свёрнутой категории: найденная ветвь не видна на экране или видны лишние',
@@ -2685,6 +2698,8 @@ async function calendarBadgeScenario({ tag, input, deadline, summary }) {
   p.on('pageerror', (e) => problems.push(`${tag}: pageerror: ${e.message}`));
   await p.goto(`http://localhost:${port}/bankruptcy.html`, { waitUntil: 'networkidle' });
   const branch = p.locator('#situation input[value="creditor_claims"]');
+  const branchDetails = branch.locator('xpath=ancestor::details[1]');
+  if (await branchDetails.count()) await branchDetails.evaluate((node) => { node.open = true; });
   await branch.check();
   await p.waitForTimeout(200);
   await p.fill('#in-observation_introduction_notice_published_date_apk', input);

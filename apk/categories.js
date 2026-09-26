@@ -12,6 +12,7 @@
 export const SITUATION_CATEGORIES_APK = [
   {
     title: 'Решение и его обжалование',
+    collapsed: true,
     // evidence_unavailability_notice и enforcement_writ_duplicate_request —
     // размещены в этой, самой широкой по темам категории за неимением более
     // точного существующего варианта (ни одна из остальных категорий не
@@ -32,10 +33,12 @@ export const SITUATION_CATEGORIES_APK = [
   },
   {
     title: 'Приказное и упрощённое производство',
+    collapsed: true,
     ids: ['court_order', 'simplified_proceedings'],
   },
   {
     title: 'Оспаривание актов и привлечения к ответственности',
+    collapsed: true,
     ids: [
       'nonnormative_act_challenge',
       'administrative_liability_challenge',
@@ -44,18 +47,17 @@ export const SITUATION_CATEGORIES_APK = [
   },
   {
     title: 'Компенсации за нарушение сроков',
+    collapsed: true,
     ids: ['reasonable_term_compensation', 'execution_compensation'],
   },
   {
     title: 'Надзор и пересмотр по новым обстоятельствам',
+    collapsed: true,
     ids: ['nadzor', 'new_circumstances'],
   },
   {
-    // Свёрнута по умолчанию — но не потому, что сам институт редкий (как у
-    // bankruptcy-категории «внешнее управление»): здесь десять узкоситуативных
-    // развилок, по одной ветке на конкретное частное обжалование, каждая из
-    // которых нужна небольшой доле пользователей. Формулировка отражает именно
-    // это — не «редкие процедуры».
+    // collapsed: true — как и у всех категорий: аккордеон, раскрыта только
+    // категория с текущей ветвью (renderSituationSwitch в apk/app.js).
     title:
       'Обжалование отдельных процессуальных определений ' +
       '(частные случаи — актуально не всем)',
