@@ -443,6 +443,11 @@
       .chain-step.chain-first::before { top: var(--chain-marker-y); }
       .chain-step.chain-last::before { bottom: auto; height: var(--chain-marker-y); }
       .chain-step.chain-last ~ .chain-aside::before { content: none; }
+      /* Восстановление — не следующий шаг, а подчинённая альтернатива на случай
+         пропуска: карточка вынесена вправо из колонки шагов. Именно padding, а
+         не margin: ::before отсчитывается от края слота, поэтому линия остаётся
+         на своей вертикали и стыкуется с соседними сегментами. */
+      .chain-aside { padding-left: 24px; }
       .chain-step::after {
         content: ''; position: absolute; left: -24px; top: calc(var(--chain-marker-y) - 6px);
         width: 12px; height: 12px; box-sizing: border-box; border-radius: 50%;
