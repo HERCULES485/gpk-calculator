@@ -3282,3 +3282,90 @@ test('additional_decision_refusal_appeal_apk: без restoration_norm и без 
   assert.equal(ADDITIONAL_DECISION_REFUSAL_APPEAL_APK.restoration_norm, undefined);
   assert.equal(ADDITIONAL_DECISION_REFUSAL_APPEAL_APK.ics, undefined);
 });
+
+// --- Исход апелляции «отменено или изменено» (ч. 1 ст. 180, ч. 5 ст. 271) ----
+
+test('вступление в силу АПК: решение отменено или изменено — not_applicable с объяснением, без даты', () => {
+  const entry = computeEntryIntoForceApk({
+    appeal_filed: true,
+    appeal_outcome: 'reversed_or_changed',
+    appellate_ruling_date: '2025-08-20',
+  });
+  assert.equal(entry.id, 'entry_into_force_apk');
+  assert.equal(entry.not_applicable, true);
+  assert.equal(typeof entry.reason, 'string');
+  assert.ok(entry.reason.length > 0);
+  // Само решение в силу не вступает — ни даты, ни основания у узла нет.
+  assert.ok(!('date' in entry), 'у not_applicable-результата не должно быть date');
+  assert.ok(!('based_on' in entry), 'у not_applicable-результата не должно быть based_on');
+});
+
+test('вступление в силу АПК: решение отменено или изменено, но без appellate_ruling_date — ошибка', () => {
+  // Ветка reversed_or_changed не освобождает от проверки даты постановления:
+  // дальше по цепочке от неё считается кассация.
+  assert.throws(
+    () => computeEntryIntoForceApk({ appeal_filed: true, appeal_outcome: 'reversed_or_changed' }),
+    /appellate_ruling_date/,
+  );
+});
+
+test('кассация АПК: решение отменено или изменено — тот же дедлайн, что при оставлении без изменения', () => {
+  // Якорь кассации в обеих ветках — дата постановления апелляции: от исхода он
+  // не зависит. Эталон — тест affirmed выше на том же appellate_ruling_date.
+  const reversed = computeCassationGeneralApk({
+    appeal_filed: true,
+    appeal_outcome: 'reversed_or_changed',
+    appellate_ruling_date: '2025-08-20',
+  });
+  const affirmed = computeCassationGeneralApk({
+    appeal_filed: true,
+    appeal_outcome: 'affirmed',
+    appellate_ruling_date: '2025-08-20',
+  });
+  assert.equal(reversed.anchor, '2025-08-20');
+  assert.equal(reversed.raw_deadline, '2025-10-20');
+  assert.equal(reversed.deadline, '2025-10-20');
+  assert.equal(reversed.shifted, false);
+  assert.equal(reversed.anchor, affirmed.anchor);
+  assert.equal(reversed.deadline, affirmed.deadline);
+});
+
+test('восстановление кассации АПК: participating_duly_notified, решение отменено или изменено — тот же якорь, что при оставлении без изменения', () => {
+  // «Обжалуемый судебный акт» ч. 2 ст. 276 в этой ветке — постановление
+  // апелляции: якорь — его дата, как и в ветке affirmed.
+  const reversed = computeCassationGeneralApkRestoration({
+    subject_category: 'participating_duly_notified',
+    appeal_filed: true,
+    appeal_outcome: 'reversed_or_changed',
+    appellate_ruling_date: '2025-08-20',
+  });
+  const affirmed = computeCassationGeneralApkRestoration({
+    subject_category: 'participating_duly_notified',
+    appeal_filed: true,
+    appeal_outcome: 'affirmed',
+    appellate_ruling_date: '2025-08-20',
+  });
+  assert.equal(reversed.anchor, '2025-08-20');
+  assert.equal(reversed.raw_deadline, '2026-02-20');
+  assert.equal(reversed.deadline, '2026-02-20');
+  assert.equal(reversed.subject_category, 'participating_duly_notified');
+  assert.equal(reversed.anchor, affirmed.anchor);
+  assert.equal(reversed.deadline, affirmed.deadline);
+});
+
+test('вступление в силу после кассации АПК: решение отменено или изменено, окружная кассация не подавалась — реальная дата', () => {
+  // computeEntryIntoForceAfterCassationApk не менялся: исход апелляции доходит
+  // до него только через computeCassationGeneralApk.
+  const inputs = {
+    cassation_filed: false,
+    appeal_filed: true,
+    appeal_outcome: 'reversed_or_changed',
+    appellate_ruling_date: '2025-08-20',
+  };
+  const entry = computeEntryIntoForceAfterCassationApk(inputs);
+  // Кассация: 20.08.2025 + 2 месяца = 20.10.2025 (понедельник) -> вступление 21.10.2025.
+  assert.equal(entry.date, '2025-10-21');
+  assert.equal(entry.based_on, 'cassation_general_apk');
+  const affirmed = computeEntryIntoForceAfterCassationApk({ ...inputs, appeal_outcome: 'affirmed' });
+  assert.equal(entry.date, affirmed.date);
+});

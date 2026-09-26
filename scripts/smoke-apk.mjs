@@ -1373,22 +1373,40 @@ async function expandChainCards(p, tag) {
   await p.close();
 }
 
-// п. 4 — ошибка расчёта на шаге вступления в силу: отмена/изменение решения
-// апелляцией моделью намеренно не поддерживается (apk/chain.js).
+// п. 4 — решение отменено или изменено апелляцией: отказа расчёта больше нет.
+// Шаг вступления в силу — карточка not_applicable (само решение в силу не
+// вступает, ч. 1 ст. 180 АПК РФ), а кассационные шаги дальше считаются от даты
+// постановления апелляции (ч. 5 ст. 271 АПК РФ) — обычные посчитанные
+// карточки, без error и без invite.
 {
-  const tag = 'цепочка decision_chain, error-карточка';
+  const tag = 'цепочка decision_chain, решение отменено/изменено — not_applicable';
   const p = await openChainPage(tag);
-  await p.selectOption('#in-appeal_filed', 'yes');
-  await p.waitForTimeout(200);
-  await p.selectOption('#in-appeal_outcome', 'reversed_or_changed');
-  await p.waitForTimeout(200);
-  await p.fill('#in-appellate_ruling_date', '20.12.2026');
-  await p.waitForTimeout(200);
+  const steps = [
+    ['select', 'appeal_filed', 'yes'],
+    ['select', 'appeal_outcome', 'reversed_or_changed'],
+    ['fill', 'appellate_ruling_date', '20.12.2026'],
+    ['select', 'cassation_filed', 'no'],
+    ['select', 'subject_category', 'participating_duly_notified'],
+  ];
+  for (const [action, id, value] of steps) {
+    if (action === 'select') await p.selectOption(`#in-${id}`, value);
+    else await p.fill(`#in-${id}`, value);
+    await p.waitForTimeout(200);
+  }
   const m = await measureChain(p);
   problems.push(...chainProblems(tag, m));
   if (m) {
-    check(stepKinds(m)[1] === 'card calc-error', `${tag}: шаг вступления в силу — «${stepKinds(m)[1]}», ждали error`);
+    check(
+      JSON.stringify(stepKinds(m)) ===
+        JSON.stringify(['card', 'card not-applicable', 'card', 'event-line', 'card']),
+      `${tag}: виды карточек шагов ${JSON.stringify(stepKinds(m))}`,
+    );
+    check(m.slots.filter((s) => !s.isStep).length === 3, `${tag}: узлов восстановления в контейнере не три`);
   }
+  const errors = await p.locator('#results .calc-error').count();
+  check(errors === 0, `${tag}: на странице ${errors} error-карточек`);
+  const invites = await p.locator('#results .chain .invite').count();
+  check(invites === 0, `${tag}: в цепочке ${invites} invite-карточек`);
   await p.close();
 }
 

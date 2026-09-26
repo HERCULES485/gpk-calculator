@@ -629,3 +629,32 @@ test('АПК ситуации: цепочка шагов есть только �
   // Восстановления в цепочку не входят — они остаются узлами ветви без маркера.
   assert.ok(situation.chain.every((id) => !id.endsWith('_restoration')));
 });
+
+test('АПК buildView: решение отменено или изменено — вступление в силу not_applicable, кассация посчитана', () => {
+  const view = buildView(
+    {
+      ...ALL_NODES_INPUTS_APK,
+      appeal_filed: true,
+      appeal_outcome: 'reversed_or_changed',
+      appellate_ruling_date: '2025-06-02',
+      cassation_filed: false,
+    },
+    { today: TODAY_APK },
+  );
+  const entry = view.cards.find((c) => c.id === 'entry_into_force_apk');
+  assert.equal(entry.kind, 'not_applicable');
+  assert.equal(typeof entry.reason, 'string');
+  assert.ok(entry.reason.length > 0);
+  assert.equal(entry.title, 'Вступление решения в законную силу (АПК)');
+  assert.ok(!('date' in entry));
+
+  const cassation = view.cards.find((c) => c.id === 'cassation_general_apk');
+  assert.equal(cassation.kind, 'term');
+  assert.equal(cassation.status, 'computed');
+  // 02.06.2025 + 2 месяца = 02.08.2025 (суббота) -> перенос на 04.08.2025.
+  assert.equal(cassation.deadline, '2025-08-04');
+
+  // Ни одной карточки-ошибки: ни на вступлении в силу, ни дальше по цепочке.
+  assert.equal(view.cards.filter((c) => c.kind === 'error').length, 0);
+  assert.equal(view.cards.length, 50);
+});
