@@ -563,7 +563,6 @@ function renderErrorCard(card) {
 function renderIncompleteNode(node) {
   const box = el('div', 'invite');
   box.appendChild(el('h2', null, node.title));
-  box.appendChild(el('p', 'reason', node.reason));
   for (const m of node.missing_inputs) box.appendChild(fieldOrPointer(m.id));
   return box;
 }

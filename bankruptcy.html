@@ -96,7 +96,7 @@
         background: var(--input-bg);
         color: var(--ink);
       }
-      input[type="text"]:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+      input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
       input.invalid { border-color: var(--miss-line); background: var(--miss-bg); }
       .hint { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
       .field-error { color: var(--miss-ink); font-size: 13px; margin: 6px 0 0; min-height: 1px; }
@@ -154,7 +154,7 @@
         list-style-position: outside;
       }
       .situations-group > summary::marker { color: var(--muted); }
-      .situations-group[open] > summary { border-color: var(--accent); color: var(--accent-text); }
+      .situations-group[open] > summary { border-color: var(--accent); color: var(--accent-text); margin-bottom: 10px; }
       .situation-row { display: flex; flex-wrap: wrap; gap: 8px; }
       label.situation {
         display: inline-flex; align-items: center; gap: 8px;
@@ -262,11 +262,12 @@
         margin-bottom: 14px;
       }
       .invite h2 { font-size: 16px; margin: 0 0 4px; }
-      .invite p.reason { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
       .invite .field { margin-top: 10px; }
+      .fields > .field + .field { margin-top: 14px; }
       .field.needed {
         box-shadow: -3px 0 0 var(--accent);
         padding-left: 10px;
+        margin-left: -10px;
         border-radius: 2px;
       }
       .field.needed > label { color: var(--accent-text); }
