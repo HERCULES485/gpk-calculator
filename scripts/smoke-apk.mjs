@@ -1500,6 +1500,168 @@ await chooseSituation('decision_chain');
   }
 }
 
+// --- Отклик под полями уточнений: «Посчитано по вашим ответам» ---------------
+//
+// У decision_chain уточняющие поля стоят в #other-terms под всеми карточками,
+// и новая карточка, посчитанная по ответу там, появляется выше видимой
+// области. Отклик .fresh-terms сразу под полем, на которое ответили,
+// перечисляет такие сроки; кнопка «Показать» прокручивает к карточке
+// [data-node-id] и подсвечивает её классом flash на 1600 мс. Отклик даёт
+// только ответ в #other-terms, давший новую рассчитанную карточку в той же
+// ситуации.
+{
+  const originalViewport = page.viewportSize();
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.reload({ waitUntil: 'networkidle' });
+  const freshCount = () => page.locator('.fresh-terms').count();
+  // Следующий соседний элемент после .field с данным полем — класс или null.
+  const nextAfterField = (inputId) =>
+    page.evaluate(
+      (id) => document.getElementById(id)?.closest('.field')?.nextElementSibling?.className ?? null,
+      inputId,
+    );
+  const computedIds = () =>
+    page.$$eval('#results [data-node-id]', (nodes) => nodes.map((n) => n.dataset.nodeId));
+
+  // 1. Основная дата — изменение не из блока полей, отклика нет.
+  await page.fill('#in-decision_full_text_date', '15.09.2026');
+  await settle();
+  check((await computedIds()).length > 0, 'отклик[1]: после основной даты нет ни одной карточки [data-node-id]');
+  check((await freshCount()) === 0, 'отклик[1]: .fresh-terms появился после ввода основной даты');
+
+  // 2. Ответы в #other-terms: апелляция подана, исход — первый вариант, дата
+  // постановления апелляции → кассационная жалоба посчитана.
+  await page.selectOption('#other-terms #in-appeal_filed', 'yes');
+  await settle();
+  const firstOutcome = await page.$eval('#other-terms #in-appeal_outcome', (s) =>
+    [...s.options].find((o) => o.value).value,
+  );
+  await page.selectOption('#other-terms #in-appeal_outcome', firstOutcome);
+  await settle();
+  const beforeRuling = await computedIds();
+  await page.fill('#other-terms #in-appellate_ruling_date', '20.11.2026');
+  await settle();
+  const afterRuling = await computedIds();
+  const appeared = afterRuling.filter((id) => !beforeRuling.includes(id));
+  // Видимость — сразу после ответа, без прокрутки со стороны теста (кроме той,
+  // что Playwright делает сам при заполнении поля).
+  const freshInView = await page.evaluate(() => {
+    const node = document.querySelector('.fresh-terms');
+    if (!node) return null;
+    const r = node.getBoundingClientRect();
+    return r.bottom > 0 && r.top < window.innerHeight;
+  });
+  check(
+    (await page.locator('#other-terms .fresh-terms').count()) === 1,
+    'отклик[2]: нет .fresh-terms в #other-terms после ответа appellate_ruling_date',
+  );
+  check(
+    (await nextAfterField('in-appellate_ruling_date')) === 'fresh-terms',
+    'отклик[2]: .fresh-terms не следующий соседний элемент после .field с #in-appellate_ruling_date',
+  );
+  check(
+    freshInView === true,
+    'отклик[2]: при 375×812 сразу после ответа appellate_ruling_date .fresh-terms вне видимой области',
+  );
+  const live = await page.evaluate(() => {
+    const node = document.querySelector('#other-terms .fresh-terms');
+    return node && { role: node.getAttribute('role'), live: node.getAttribute('aria-live') };
+  });
+  check(
+    live == null || (live.role === 'status' && live.live === 'polite'),
+    'отклик[2]: у .fresh-terms нет role="status" / aria-live="polite"',
+  );
+  const items = await page.$$eval('.fresh-terms li span', (nodes) => nodes.map((n) => n.textContent));
+  check(
+    items.length === appeared.length && appeared.length > 0,
+    `отклик[2]: пунктов ${items.length}, новых карточек [data-node-id] ${appeared.length} (${appeared.join(', ')})`,
+  );
+  const cassationItem = items.find((t) => t.startsWith('Кассационная жалоба (общая, АПК)'));
+  check(
+    cassationItem != null && /^Кассационная жалоба \(общая, АПК\) — \d{2}\.\d{2}\.\d{4}$/.test(cassationItem),
+    `отклик[2]: нет пункта «Кассационная жалоба (общая, АПК) — ДД.ММ.ГГГГ»: ${JSON.stringify(items)}`,
+  );
+
+  // 3. «Показать» — карточка в видимой области и подсвечена; подсветка снимается.
+  if (cassationItem != null) {
+    const scrollBefore = await page.evaluate(() => window.scrollY);
+    await page
+      .locator('.fresh-terms li')
+      .filter({ hasText: 'Кассационная жалоба (общая, АПК)' })
+      .getByRole('button', { name: 'Показать' })
+      .click();
+    await page.waitForTimeout(800);
+    const target = await page.evaluate(() => {
+      const card = document.querySelector('#results [data-node-id="cassation_general_apk"]');
+      if (!card) return null;
+      const r = card.getBoundingClientRect();
+      return {
+        inView: r.bottom > 0 && r.top < window.innerHeight,
+        flash: card.classList.contains('flash'),
+        scrollY: window.scrollY,
+        active: document.activeElement?.textContent,
+      };
+    });
+    check(target != null, 'отклик[3]: нет карточки [data-node-id="cassation_general_apk"]');
+    if (target) {
+      check(target.inView, 'отклик[3]: через 800 мс после «Показать» карточка вне видимой области');
+      check(target.flash, 'отклик[3]: через 800 мс после «Показать» у карточки нет класса flash');
+      check(target.scrollY < scrollBefore, `отклик[3]: прокрутки вверх не было (${scrollBefore} → ${target.scrollY})`);
+      check(target.active === 'Показать', 'отклик[3]: фокус ушёл с кнопки «Показать»');
+    }
+    await page.waitForTimeout(1200);
+    check(
+      (await page.locator('#results [data-node-id="cassation_general_apk"].flash').count()) === 0,
+      'отклик[3]: через 2000 мс после «Показать» класс flash не снят',
+    );
+  }
+
+  // 3а. Следующий ответ, давший новые сроки, — отклик переезжает под это поле;
+  // под appellate_ruling_date его больше нет.
+  const firstCategory = await page.$eval('#other-terms #in-subject_category', (s) =>
+    [...s.options].find((o) => o.value).value,
+  );
+  await page.selectOption('#other-terms #in-subject_category', firstCategory);
+  await settle();
+  check(
+    (await nextAfterField('in-subject_category')) === 'fresh-terms',
+    'отклик[3а]: после ответа subject_category .fresh-terms не стоит сразу после его .field',
+  );
+  check(
+    (await nextAfterField('in-appellate_ruling_date')) !== 'fresh-terms',
+    'отклик[3а]: после ответа subject_category отклик остался под appellate_ruling_date',
+  );
+  check(
+    (await freshCount()) === 1,
+    `отклик[3а]: на странице ${await freshCount()} .fresh-terms, ждали ровно один`,
+  );
+
+  // 4. Смена ситуации и возврат — отклика нет.
+  await chooseSituation('rulings');
+  await chooseSituation('decision_chain');
+  check((await freshCount()) === 0, 'отклик[4]: .fresh-terms после смены ситуации и возврата');
+
+  // 5. Ответ без новых сроков — отклик пропадает. Сначала дата постановления
+  // стирается и вводится заново (отклик снова есть — иначе исчезновение ниже
+  // ничего не доказывало бы), затем повторно выбирается тот же исход апелляции.
+  await page.fill('#other-terms #in-appellate_ruling_date', '');
+  await settle();
+  check((await freshCount()) === 0, 'отклик[5]: .fresh-terms после стирания даты (набор сроков сократился)');
+  await page.fill('#other-terms #in-appellate_ruling_date', '20.11.2026');
+  await settle();
+  check((await freshCount()) === 1, 'отклик[5]: после повторного ввода даты постановления нет .fresh-terms');
+  const computedBeforeSame = await computedIds();
+  await page.selectOption('#other-terms #in-appeal_outcome', firstOutcome);
+  await settle();
+  check(
+    JSON.stringify(await computedIds()) === JSON.stringify(computedBeforeSame),
+    'отклик[5]: повторный выбор того же исхода изменил набор рассчитанных карточек',
+  );
+  check((await freshCount()) === 0, 'отклик[5]: .fresh-terms после ответа, не давшего новых сроков');
+
+  await page.setViewportSize(originalViewport);
+}
+
 await browser.close();
 server.close();
 

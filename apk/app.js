@@ -1341,7 +1341,83 @@ function chainSlot(chain, stepIds, id, calculated) {
 
 // --- Рендер -------------------------------------------------------------------
 
+// --- Отклик под полями уточнений ----------------------------------------------
+//
+// У ветвей с основным полем уточняющие поля стоят в #other-terms — под всеми
+// карточками, и новая карточка, посчитанная по ответу, появляется выше
+// видимой области. Отклик сразу под полем, на которое ответили, перечисляет
+// такие сроки и по кнопке «Показать» прокручивает к карточке. Новый — тот, у
+// которого в этой же ситуации на прошлом проходе рассчитанной карточки не
+// было, и только если перерисовку вызвал ответ в #other-terms: ввод основной
+// даты или смена ситуации отклика не дают.
+
+// Ставятся слушателями #other-terms в фазе захвата — раньше обработчиков самих
+// полей, которые и зовут render(); render() читает оба и сразу сбрасывает.
+// changedFieldId — id поля-источника: под ним после перерисовки встаёт отклик.
+let changeFromFields = false;
+let changedFieldId = null;
+
+// Узлы текущей ситуации с рассчитанной карточкой на прошлом проходе render().
+let prevComputed = { situation: null, ids: new Set() };
+
+const FLASH_MS = 1600;
+
+// Метка рассчитанной карточки: по ней «Показать» находит карточку, а render()
+// собирает множество посчитанных узлов.
+function markComputed(node, id, computed) {
+  node.dataset.nodeId = id;
+  computed.add(id);
+  return node;
+}
+
+function showComputedCard(id) {
+  const target = document.querySelector(`#results [data-node-id="${id}"]`);
+  if (!target) return;
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  target.classList.add('flash');
+  setTimeout(() => target.classList.remove('flash'), FLASH_MS);
+}
+
+// Дата в строке отклика: дедлайн у срока, дата у события; у окна двух границ
+// одной даты нет — только заголовок.
+function freshTermDate(card) {
+  if (card.kind === 'term') return card.deadline;
+  if (card.kind === 'event') return card.date;
+  return null;
+}
+
+// id поля, на которое ответили: у самого input/select он есть; если событие
+// пришло от вложенного элемента без id — берётся поле той же обёртки .field.
+function sourceFieldId(target) {
+  if (target.id) return target.id;
+  return target.closest('.field')?.querySelector('input, select')?.id ?? null;
+}
+
+function renderFreshTerms(cards, anchor) {
+  const box = el('div', 'fresh-terms');
+  box.setAttribute('role', 'status');
+  box.setAttribute('aria-live', 'polite');
+  box.appendChild(el('p', 'fresh-terms-title', 'Посчитано по вашим ответам:'));
+  const list = el('ul');
+  for (const card of cards) {
+    const item = el('li');
+    const date = freshTermDate(card);
+    item.appendChild(el('span', null, date ? `${card.title} — ${isoToRu(date)}` : card.title));
+    const btn = el('button', 'link-button', 'Показать');
+    btn.type = 'button';
+    btn.addEventListener('click', () => showComputedCard(card.id));
+    item.appendChild(btn);
+    list.appendChild(item);
+  }
+  box.appendChild(list);
+  anchor.after(box);
+}
+
 function render() {
+  const fromFields = changeFromFields;
+  const fromFieldId = changedFieldId;
+  changeFromFields = false;
+  changedFieldId = null;
   const focus = captureFocus();
   renderedFields.clear();
   const situation = situationById(state.situation, SITUATIONS_APK);
@@ -1376,13 +1452,14 @@ function render() {
   // остальных — прямо в #results, как и раньше.
   const chain = situation.chain ? el('div', 'chain') : null;
   if (chain) root.appendChild(chain);
+  const computedNow = new Set();
 
   for (const id of situation.nodes) {
     const card = cardById(id);
     const parent = chain ? chainSlot(chain, situation.chain, id, Boolean(card)) : root;
     if (card) {
-      if (card.kind === 'event') parent.appendChild(renderEvent(card));
-      else if (card.kind === 'window') parent.appendChild(renderWindow(card));
+      if (card.kind === 'event') parent.appendChild(markComputed(renderEvent(card), id, computedNow));
+      else if (card.kind === 'window') parent.appendChild(markComputed(renderWindow(card), id, computedNow));
       else if (card.kind === 'error') {
         const errorEl = renderErrorCard(card);
         // Списки остаются на экране и при отказе расчёта: пересечение периодов
@@ -1402,7 +1479,7 @@ function render() {
         // в chain.js незачем.
         if (card.interruptible) termEl.appendChild(renderInterruptions());
         if (id === 'enforcement_presentation_apk') termEl.appendChild(renderPeriods());
-        parent.appendChild(termEl);
+        parent.appendChild(markComputed(termEl, id, computedNow));
       }
       continue;
     }
@@ -1416,6 +1493,17 @@ function render() {
     const first = situation.primary_field ?? situation.fields[0];
     root.appendChild(el('p', 'empty', `Укажите ${askFor(first)} — появятся сроки.`));
   }
+
+  if (fromFields && prevComputed.situation === situation.id) {
+    const fresh = situation.nodes.filter((id) => computedNow.has(id) && !prevComputed.ids.has(id));
+    // Поле пересоздано перерисовкой — ищем новое по тому же id. Не нашлось в
+    // #other-terms — отклика нет: ставить его в другое место значило бы снова
+    // показывать его вдали от ответа.
+    const field = fromFieldId ? document.getElementById(fromFieldId)?.closest('.field') : null;
+    const anchor = field && field.closest('#other-terms') ? field : null;
+    if (fresh.length && anchor) renderFreshTerms(fresh.map(cardById), anchor);
+  }
+  prevComputed = { situation: situation.id, ids: computedNow };
 
   restoreFocus(focus);
 }
@@ -1436,6 +1524,19 @@ function init() {
   document.getElementById('situation-toggle').addEventListener('click', () => {
     setSituationPanelOpen(document.getElementById('situation').hidden);
   });
+  // Ответ в блоке уточнений: флаг и поле-источник ставятся до обработчика поля
+  // (фаза захвата), сами обработчики полей об отклике не знают.
+  const otherTerms = document.getElementById('other-terms');
+  for (const type of ['input', 'change']) {
+    otherTerms.addEventListener(
+      type,
+      (event) => {
+        changeFromFields = true;
+        changedFieldId = sourceFieldId(event.target);
+      },
+      { capture: true },
+    );
+  }
 
   render();
 }
