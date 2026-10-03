@@ -54,6 +54,22 @@ export const SITUATION_CATEGORIES_APK = [
     ids: ['corporate_ruling_appeal', 'meeting_convening_appeal'],
   },
   {
+    // Новая категория — решение архитектора (по задаче про третейские суды:
+    // ч. 4, 5 ст. 230, ч. 5 ст. 234, ч. 2 ст. 235 АПК РФ). Ветвь
+    // arbitral_enforcement_writ_cassation (ч. 5 ст. 240) перенесена сюда из
+    // категории «Обжалование отдельных процессуальных определений…» — тоже
+    // решение архитектора.
+    title: 'Третейские суды',
+    collapsed: true,
+    ids: [
+      'arbitral_competence_challenge',
+      'arbitral_award_challenge_party',
+      'arbitral_award_challenge_nonparty',
+      'arbitral_award_challenge_ruling_cassation',
+      'arbitral_enforcement_writ_cassation',
+    ],
+  },
+  {
     title: 'Оспаривание актов и привлечения к ответственности',
     collapsed: true,
     ids: [
@@ -81,7 +97,6 @@ export const SITUATION_CATEGORIES_APK = [
     collapsed: true,
     ids: [
       'settlement_approval_cassation',
-      'arbitral_enforcement_writ_cassation',
       'foreign_judgment_enforcement_cassation',
       'foreign_judgment_recognition_cassation',
       'case_transfer_jurisdiction_appeal',

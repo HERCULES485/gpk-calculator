@@ -97,7 +97,7 @@ check(
   'нет основного поля даты решения',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 41,
+  (await page.locator('#situation input[type=radio]').count()) === 45,
   'переключатель ситуаций отрисован не на сорок одну ветвь',
 );
 
@@ -568,9 +568,9 @@ check(
 );
 const searchInitial = await searchState();
 const renderedInitial = await renderedLabels();
-check(searchInitial.total === 41, `поиск: ждали 41 label.situation, получили ${searchInitial.total}`);
+check(searchInitial.total === 45, `поиск: ждали 45 label.situation, получили ${searchInitial.total}`);
 check(
-  searchInitial.shown.length === 41 && searchInitial.hiddenGroups === 0,
+  searchInitial.shown.length === 45 && searchInitial.hiddenGroups === 0,
   'поиск: до ввода часть ветвей или категорий уже скрыта',
 );
 // Аккордеон: до ввода раскрыта ровно одна категория — та, в которой лежит
@@ -596,7 +596,7 @@ check(
   `поиск «судебные расходы»: ждали одну ветвь court_costs, видны ${JSON.stringify(st.shown)}`,
 );
 check((await renderedLabels()) === 1, `поиск «судебные расходы»: на экране видно ${await renderedLabels()} label, ждали 1`);
-check(st.count === 'Показано 1 из 41', `поиск «судебные расходы»: счётчик «${st.count}»`);
+check(st.count === 'Показано 1 из 45', `поиск «судебные расходы»: счётчик «${st.count}»`);
 check(st.emptyHidden, 'поиск: «ничего не найдено» показано при совпадении');
 const groupsWithMatch = await page.locator('#situation > fieldset.situations:not([hidden]), #situation > details.situations-group:not([hidden])').count();
 check(
@@ -609,7 +609,7 @@ await search('zzzqqq');
 st = await searchState();
 check(st.shown.length === 0 && (await renderedLabels()) === 0, 'поиск без совпадений: label остались видны');
 check(!st.emptyHidden && (await page.locator('#situation-search-empty').isVisible()), 'поиск без совпадений: «Ничего не найдено.» не показано');
-check(st.count === 'Показано 0 из 41', `поиск без совпадений: счётчик «${st.count}»`);
+check(st.count === 'Показано 0 из 45', `поиск без совпадений: счётчик «${st.count}»`);
 
 // 3. Совпадение внутри изначально свёрнутой категории раскрывает её <details>.
 await search('судебный штраф');
@@ -632,7 +632,7 @@ check(
 await search('СУДЕБНЫЕ РАСХОДЫ');
 st = await searchState();
 check(
-  st.shown.length === 1 && st.shown[0] === 'court_costs' && st.count === 'Показано 1 из 41',
+  st.shown.length === 1 && st.shown[0] === 'court_costs' && st.count === 'Показано 1 из 45',
   `поиск «СУДЕБНЫЕ РАСХОДЫ»: регистр влияет на результат — ${JSON.stringify(st.shown)}`,
 );
 

@@ -77,6 +77,10 @@ import {
   computePretrialClaimApk,
   computeIndexationApplicationApk,
   computeEnforcementResumptionApplicationApk,
+  computeArbitralAwardChallengePartyApk,
+  computeArbitralAwardChallengeNonpartyApk,
+  computeArbitralAwardChallengeRulingCassationApk,
+  computeArbitralCompetenceChallengeApk,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -134,6 +138,10 @@ import {
   PRETRIAL_CLAIM_APK,
   INDEXATION_APPLICATION_APK,
   ENFORCEMENT_RESUMPTION_APPLICATION_APK,
+  ARBITRAL_AWARD_CHALLENGE_PARTY_APK,
+  ARBITRAL_AWARD_CHALLENGE_NONPARTY_APK,
+  ARBITRAL_AWARD_CHALLENGE_RULING_CASSATION_APK,
+  ARBITRAL_COMPETENCE_CHALLENGE_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -790,6 +798,28 @@ const NODE_REQUIREMENTS = {
     node: ENFORCEMENT_RESUMPTION_APPLICATION_APK,
     deps: () => ['enforcement_suspension_grounds_eliminated_date_apk'],
     compute: (i) => computeEnforcementResumptionApplicationApk(i),
+  },
+  // Четыре обычных term-узла третейских судов (ст. 230, 234, 235), без
+  // restoration-узлов: числового потолка восстановления в этих статьях нет.
+  arbitral_award_challenge_party_apk: {
+    node: ARBITRAL_AWARD_CHALLENGE_PARTY_APK,
+    deps: () => ['arbitral_award_received_date_apk'],
+    compute: (i) => computeArbitralAwardChallengePartyApk(i),
+  },
+  arbitral_award_challenge_nonparty_apk: {
+    node: ARBITRAL_AWARD_CHALLENGE_NONPARTY_APK,
+    deps: () => ['arbitral_award_learned_date_apk'],
+    compute: (i) => computeArbitralAwardChallengeNonpartyApk(i),
+  },
+  arbitral_award_challenge_ruling_cassation_apk: {
+    node: ARBITRAL_AWARD_CHALLENGE_RULING_CASSATION_APK,
+    deps: () => ['arbitral_award_challenge_ruling_date_apk'],
+    compute: (i) => computeArbitralAwardChallengeRulingCassationApk(i),
+  },
+  arbitral_competence_challenge_apk: {
+    node: ARBITRAL_COMPETENCE_CHALLENGE_APK,
+    deps: () => ['arbitral_competence_ruling_received_date_apk'],
+    compute: (i) => computeArbitralCompetenceChallengeApk(i),
   },
 };
 
