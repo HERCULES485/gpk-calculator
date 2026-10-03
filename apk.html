@@ -393,6 +393,14 @@
       .other-terms h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin-bottom: 4px; }
       .other-terms > p { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
 
+      .fresh-terms { margin-top: 10px; padding: 12px 14px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent-soft); }
+      .fresh-terms-title { margin: 0 0 6px; font-size: 13px; color: var(--accent-text); font-weight: 600; }
+      .fresh-terms ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+      .fresh-terms li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 14px; }
+      .fresh-terms li .link-button { margin-left: auto; }
+      [data-node-id].flash { outline: 3px solid var(--accent); outline-offset: 3px; transition: outline-color 1.2s ease; }
+      @media (prefers-reduced-motion: reduce) { [data-node-id].flash { transition: none; } }
+
       .stubs { margin-top: 30px; }
       .stubs h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
       .stub { border-top: 1px solid var(--line); padding: 12px 0; }
@@ -423,6 +431,7 @@
         .toolbar-secondary,
         #situation-inputs,
         #other-terms,
+        .fresh-terms,
         #results,
         .disclaimer,
         #stubs { display: none !important; }
