@@ -154,6 +154,8 @@ import {
   MEETING_CONVENING_APPEAL_APK,
   computeProtocolRemarksApk,
   PROTOCOL_REMARKS_APK,
+  computePretrialClaimApk,
+  PRETRIAL_CLAIM_APK,
 } from '../apk/chain.js';
 // Нужен ровно для одной проверки: узел-окно не должен попасть в реестр .ics
 // (см. последний тест файла) — граница решения по экспорту.
@@ -3538,4 +3540,54 @@ test('protocol_remarks_apk: без protocol_signed_date_apk — ошибка, у
 test('protocol_remarks_apk: без restoration_norm и без ics — restoration-узла нет', () => {
   assert.equal(PROTOCOL_REMARKS_APK.restoration_norm, undefined);
   assert.equal(PROTOCOL_REMARKS_APK.ics, undefined);
+});
+
+// --- Подача иска после досудебной претензии (абз. 1 ч. 5 ст. 4 АПК РФ) ---
+//
+// Узел-событие: тридцать календарных дней со дня, следующего за днём
+// направления претензии; последний день, если нерабочий, переносится;
+// дата события — день, следующий за (перенесённым) последним днём, сама
+// она не переносится.
+
+test('pretrial_claim_apk: 01.09.2026 — 30-й день 01.10.2026 (чт), иск можно подать с 02.10.2026', () => {
+  const result = computePretrialClaimApk({ pretrial_claim_sent_date_apk: '2026-09-01' });
+  assert.deepEqual(result, { id: 'pretrial_claim_apk', date: '2026-10-02' });
+});
+
+test('pretrial_claim_apk: 02.09.2026 — дата события 03.10.2026 (суббота) не переносится', () => {
+  const result = computePretrialClaimApk({ pretrial_claim_sent_date_apk: '2026-09-02' });
+  assert.equal(result.date, '2026-10-03');
+});
+
+test('pretrial_claim_apk: 03.09.2026 — 30-й день 03.10.2026 (сб) переносится на 05.10, событие 06.10.2026', () => {
+  const result = computePretrialClaimApk({ pretrial_claim_sent_date_apk: '2026-09-03' });
+  assert.equal(result.date, '2026-10-06');
+});
+
+test('pretrial_claim_apk: 01.12.2026 — 30-й день 31.12.2026 (выходной, перенос с 04.01 по ПП РФ № 1466), окончание 11.01.2027, событие 12.01.2027', () => {
+  const result = computePretrialClaimApk({ pretrial_claim_sent_date_apk: '2026-12-01' });
+  assert.equal(result.date, '2027-01-12');
+});
+
+test('pretrial_claim_apk: без pretrial_claim_sent_date_apk — ошибка, упоминающая именно это поле', () => {
+  assert.throws(() => computePretrialClaimApk({}), /pretrial_claim_sent_date_apk/);
+  assert.throws(() => computePretrialClaimApk(), /pretrial_claim_sent_date_apk/);
+});
+
+test('pretrial_claim_apk: узел-событие — без duration, midnight_rule, restoration_norm и based_on', () => {
+  // top-level duration завёл бы узел в TERM_REGISTRY_APK и в экспорт .ics.
+  assert.equal(PRETRIAL_CLAIM_APK.duration, undefined);
+  assert.equal(PRETRIAL_CLAIM_APK.midnight_rule, undefined);
+  assert.equal(PRETRIAL_CLAIM_APK.restoration_norm, undefined);
+  assert.equal(TERM_REGISTRY_APK.pretrial_claim_apk, undefined);
+  const result = computePretrialClaimApk({ pretrial_claim_sent_date_apk: '2026-09-03' });
+  assert.equal('based_on' in result, false);
+  assert.equal(PRETRIAL_CLAIM_APK.norm.primary, 'абз. 1 ч. 5 ст. 4 АПК РФ');
+  assert.deepEqual(PRETRIAL_CLAIM_APK.norm.calculation, [
+    'ст. 191 ГК РФ',
+    'ст. 193 ГК РФ',
+    'ч. 4 ст. 114 АПК РФ',
+    'п. 22 Постановления Пленума ВС РФ от 22.06.2021 № 18',
+  ]);
+  assert.equal(PRETRIAL_CLAIM_APK.event_text_template, 'Иск можно подать с {date}');
 });

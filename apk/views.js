@@ -74,6 +74,7 @@ import {
   computeCorporateRulingAppealApk,
   computeMeetingConveningAppealApk,
   computeProtocolRemarksApk,
+  computePretrialClaimApk,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -128,6 +129,7 @@ import {
   CORPORATE_RULING_APPEAL_APK,
   MEETING_CONVENING_APPEAL_APK,
   PROTOCOL_REMARKS_APK,
+  PRETRIAL_CLAIM_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -258,7 +260,12 @@ function eventCard(node, entry) {
     // От чего посчитана дата: от дедлайна соседнего узла или от введённой даты
     // акта вышестоящей инстанции. Без этого строка события не читается.
     based_on: entry.based_on,
-    details: { collapsed: true, calculation: node.norm.calculation },
+    // Текст строки события и пояснение — из узла как есть: смысл события у
+    // каждого узла свой (вступление акта в силу vs момент, с которого можно
+    // подать иск), билдер его не формулирует, только переносит.
+    eventTextTemplate: node.event_text_template,
+    hint: node.event_hint,
+    details: { collapsed: true, logic: node.logic, calculation: node.norm.calculation },
   };
   attachCalendarWarning(card, card.date);
   return card;
@@ -757,6 +764,14 @@ const NODE_REQUIREMENTS = {
     node: PROTOCOL_REMARKS_APK,
     deps: () => ['protocol_signed_date_apk'],
     compute: (i) => computeProtocolRemarksApk(i),
+  },
+  // Узел-событие без restoration-узла: не срок на действие, а дата, с которой
+  // можно подать иск (абз. 1 ч. 5 ст. 4 АПК РФ).
+  pretrial_claim_apk: {
+    node: PRETRIAL_CLAIM_APK,
+    kind: 'event',
+    deps: () => ['pretrial_claim_sent_date_apk'],
+    compute: (i) => computePretrialClaimApk(i),
   },
 };
 

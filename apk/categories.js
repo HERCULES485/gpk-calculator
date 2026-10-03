@@ -11,6 +11,13 @@
 
 export const SITUATION_CATEGORIES_APK = [
   {
+    // Новая категория, первая в списке — решение архитектора (по задаче про
+    // досудебную претензию: абз. 1 ч. 5 ст. 4 АПК РФ).
+    title: 'До обращения в суд',
+    collapsed: true,
+    ids: ['pretrial_claim'],
+  },
+  {
     title: 'Решение и его обжалование',
     collapsed: true,
     // evidence_unavailability_notice и enforcement_writ_duplicate_request —
