@@ -1413,7 +1413,6 @@ function renderFreshTerms(cards, anchor) {
   anchor.after(box);
 }
 
-
 function render() {
   const fromFields = changeFromFields;
   const fromFieldId = changedFieldId;
