@@ -156,10 +156,14 @@ import {
   PROTOCOL_REMARKS_APK,
   computePretrialClaimApk,
   PRETRIAL_CLAIM_APK,
+  computeIndexationApplicationApk,
+  INDEXATION_APPLICATION_APK,
+  computeEnforcementResumptionApplicationApk,
+  ENFORCEMENT_RESUMPTION_APPLICATION_APK,
 } from '../apk/chain.js';
 // Нужен ровно для одной проверки: узел-окно не должен попасть в реестр .ics
 // (см. последний тест файла) — граница решения по экспорту.
-import { TERM_REGISTRY_APK } from '../apk/term-registry.js';
+import { TERM_REGISTRY_APK, reminderOffsets } from '../apk/term-registry.js';
 
 test('appeal_general_apk считается от decision_full_text_date (обычная дата, без переноса)', () => {
   const term = computeAppealGeneralApk({ decision_full_text_date: '2025-03-11' });
@@ -3590,4 +3594,102 @@ test('pretrial_claim_apk: узел-событие — без duration, midnight_
     'п. 22 Постановления Пленума ВС РФ от 22.06.2021 № 18',
   ]);
   assert.equal(PRETRIAL_CLAIM_APK.event_text_template, 'Иск можно подать с {date}');
+});
+
+// --- Заявление об индексации присуждённых сумм (абз. 4 ч. 1 ст. 183 АПК РФ) ---
+//
+// Один год со дня исполнения должником судебного акта (ч. 1 ст. 114 АПК РФ:
+// истекает в соответствующие месяц и число последнего года); нерабочий
+// последний день переносится. Без restoration-узла: числового потолка
+// восстановления в норме нет.
+
+test('indexation_application_apk: 15.10.2025 — срок истекает 15.10.2026 (чт), без переноса', () => {
+  const term = computeIndexationApplicationApk({ debtor_execution_date_apk: '2025-10-15' });
+  assert.equal(term.raw_deadline, '2026-10-15');
+  assert.equal(term.deadline, '2026-10-15');
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'абз. 4 ч. 1 ст. 183 АПК РФ');
+  assert.deepEqual(term.norm.calculation, [
+    'ч. 4 ст. 113',
+    'ч. 1, 4 ст. 114 АПК РФ',
+    'ст. 4 ФЗ от 01.04.2025 № 54-ФЗ',
+  ]);
+});
+
+test('indexation_application_apk: 17.10.2025 — 17.10.2026 суббота, перенос на 19.10.2026', () => {
+  const term = computeIndexationApplicationApk({ debtor_execution_date_apk: '2025-10-17' });
+  assert.equal(term.raw_deadline, '2026-10-17');
+  assert.equal(term.deadline, '2026-10-19');
+  assert.equal(term.shifted, true);
+});
+
+test('indexation_application_apk: 09.01.2026 — 09.01.2027 суббота (каникулы до 10.01), перенос на 11.01.2027', () => {
+  const term = computeIndexationApplicationApk({ debtor_execution_date_apk: '2026-01-09' });
+  assert.equal(term.raw_deadline, '2027-01-09');
+  assert.equal(term.deadline, '2027-01-11');
+});
+
+test('indexation_application_apk: без debtor_execution_date_apk — ошибка, упоминающая именно это поле', () => {
+  assert.throws(() => computeIndexationApplicationApk({}), /debtor_execution_date_apk/);
+  assert.throws(() => computeIndexationApplicationApk(), /debtor_execution_date_apk/);
+});
+
+test('indexation_application_apk: без restoration_norm, в реестре сроков, напоминания для года — 7 дней и 1 месяц', () => {
+  assert.equal(INDEXATION_APPLICATION_APK.restoration_norm, undefined);
+  assert.ok(TERM_REGISTRY_APK.indexation_application_apk);
+  assert.deepEqual(reminderOffsets({ value: 1, unit: 'year' }), [
+    { unit: 'day', value: 7 },
+    { unit: 'month', value: 1 },
+  ]);
+});
+
+// --- Заявление о возобновлении исполнительного производства (абз. 2 ч. 1 ст. 327 АПК РФ) ---
+//
+// Три года с момента устранения обстоятельств, послуживших основанием для
+// приостановления (ч. 1 ст. 114 АПК РФ — истекает в соответствующие месяц и
+// число последнего года); нерабочий последний день переносится. Без
+// restoration-узла: числового потолка восстановления в норме нет.
+
+test('enforcement_resumption_application_apk: 12.10.2023 — срок истекает 12.10.2026 (пн), без переноса', () => {
+  const term = computeEnforcementResumptionApplicationApk({
+    enforcement_suspension_grounds_eliminated_date_apk: '2023-10-12',
+  });
+  assert.equal(term.raw_deadline, '2026-10-12');
+  assert.equal(term.deadline, '2026-10-12');
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'абз. 2 ч. 1 ст. 327 АПК РФ');
+  assert.deepEqual(term.norm.calculation, ['ч. 4 ст. 113', 'ч. 1, 4 ст. 114 АПК РФ']);
+});
+
+test('enforcement_resumption_application_apk: 10.10.2023 — 10.10.2026 суббота, перенос на 12.10.2026', () => {
+  const term = computeEnforcementResumptionApplicationApk({
+    enforcement_suspension_grounds_eliminated_date_apk: '2023-10-10',
+  });
+  assert.equal(term.raw_deadline, '2026-10-10');
+  assert.equal(term.deadline, '2026-10-12');
+  assert.equal(term.shifted, true);
+});
+
+test('enforcement_resumption_application_apk: 03.05.2024 — 03.05.2027 выходной (1–3 мая 2027), перенос на 04.05.2027', () => {
+  const term = computeEnforcementResumptionApplicationApk({
+    enforcement_suspension_grounds_eliminated_date_apk: '2024-05-03',
+  });
+  assert.equal(term.raw_deadline, '2027-05-03');
+  assert.equal(term.deadline, '2027-05-04');
+});
+
+test('enforcement_resumption_application_apk: без enforcement_suspension_grounds_eliminated_date_apk — ошибка, упоминающая именно это поле', () => {
+  assert.throws(
+    () => computeEnforcementResumptionApplicationApk({}),
+    /enforcement_suspension_grounds_eliminated_date_apk/,
+  );
+  assert.throws(
+    () => computeEnforcementResumptionApplicationApk(),
+    /enforcement_suspension_grounds_eliminated_date_apk/,
+  );
+});
+
+test('enforcement_resumption_application_apk: без restoration_norm и в реестре сроков', () => {
+  assert.equal(ENFORCEMENT_RESUMPTION_APPLICATION_APK.restoration_norm, undefined);
+  assert.ok(TERM_REGISTRY_APK.enforcement_resumption_application_apk);
 });

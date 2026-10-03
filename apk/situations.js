@@ -512,6 +512,27 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['pretrial_claim_apk'],
   },
+  {
+    id: 'indexation',
+    label: 'Индексация присуждённых денежных сумм',
+    // Абз. 4 ч. 1 ст. 183 АПК РФ (введён ФЗ от 01.04.2025 № 54-ФЗ). Единственное
+    // поле — дата исполнения должником судебного акта. Год со дня исполнения,
+    // числового потолка восстановления в норме нет — restoration-узла нет.
+    primary_field: 'debtor_execution_date_apk',
+    fields: [],
+    nodes: ['indexation_application_apk'],
+  },
+  {
+    id: 'enforcement_resumption',
+    label: 'Возобновление приостановленного исполнительного производства',
+    // Абз. 2 ч. 1 ст. 327 АПК РФ (ред. ФЗ от 06.04.2024 № 74-ФЗ). Единственное
+    // поле — дата устранения обстоятельств, послуживших основанием для
+    // приостановления. Три года, числового потолка восстановления в норме нет —
+    // restoration-узла нет.
+    primary_field: 'enforcement_suspension_grounds_eliminated_date_apk',
+    fields: [],
+    nodes: ['enforcement_resumption_application_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';
