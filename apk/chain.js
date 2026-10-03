@@ -4691,3 +4691,216 @@ export function computeEnforcementResumptionApplicationApk(inputs) {
   }
   return computeSimpleTerm(ENFORCEMENT_RESUMPTION_APPLICATION_APK, anchor);
 }
+
+// --- Третейские суды: оспаривание решения и постановления о компетенции (ч. 4, 5 ст. 230, ч. 5 ст. 234, ч. 2 ст. 235 АПК РФ) ---
+//
+// Четыре обычных срочных узла по образцу
+// ARBITRAL_ENFORCEMENT_WRIT_CASSATION_APK (ч. 5 ст. 240): computeSimpleTerm,
+// offset_start 1, без restoration-узлов — числового потолка восстановления
+// ни в ст. 230, ни в ст. 234, ни в ст. 235 нет (ст. 117 ч. 2 их не называет).
+// Узлы 1 и 2 (ч. 4 и ч. 5 ст. 230) — два разных якоря одного срока: получение
+// решения стороной разбирательства и момент, когда посторонний (или прокурор)
+// узнал о решении; общего факта нет, поэтому отдельные ветви.
+
+export const ARBITRAL_AWARD_CHALLENGE_PARTY_APK = {
+  id: 'arbitral_award_challenge_party_apk',
+  title:
+    'Заявление об отмене решения третейского суда — сторона разбирательства (АПК)',
+  duration: { value: 3, unit: 'month' },
+  anchor: { offset_start: 1 },
+  weekend_shift: true,
+  logic:
+    'Заявление об отмене решения третейского суда подаётся в арбитражный суд ' +
+    'субъекта Российской Федерации, на территории которого принято решение, в ' +
+    'срок, не превышающий трёх месяцев со дня получения оспариваемого решения ' +
+    'стороной третейского разбирательства, обратившейся с заявлением, если ' +
+    'иное не установлено международным договором Российской Федерации или ' +
+    'федеральным законом (ч. 4 ст. 230 АПК РФ). Иной срок из международного ' +
+    'договора или закона калькулятор не учитывает.',
+  midnight_rule:
+    'ч. 5, 6 ст. 114 АПК РФ — процессуальное действие может быть совершено, а ' +
+    'заявление сдано на почту, до 24:00 последнего дня срока.',
+  norm_versions: [
+    {
+      id: 'current',
+      from: null,
+      to: null,
+      anchor: { offset_start: 1 },
+      norm: {
+        primary: 'ч. 4 ст. 230 АПК РФ',
+        calculation: ['ч. 4 ст. 113', 'ч. 2, 4 ст. 114 АПК РФ'],
+      },
+    },
+  ],
+};
+
+/**
+ * Срок подачи заявления об отмене решения третейского суда стороной
+ * разбирательства по ч. 4 ст. 230 АПК РФ — три месяца со дня получения
+ * решения.
+ * @param {{ arbitral_award_received_date_apk: string }} inputs
+ */
+export function computeArbitralAwardChallengePartyApk(inputs) {
+  const anchor = inputs?.arbitral_award_received_date_apk;
+  if (anchor == null) {
+    throw new Error(
+      'Обязательна дата получения решения третейского суда стороной, которая ' +
+        'его оспаривает (arbitral_award_received_date_apk)',
+    );
+  }
+  return computeSimpleTerm(ARBITRAL_AWARD_CHALLENGE_PARTY_APK, anchor);
+}
+
+export const ARBITRAL_AWARD_CHALLENGE_NONPARTY_APK = {
+  id: 'arbitral_award_challenge_nonparty_apk',
+  title:
+    'Заявление об отмене решения третейского суда — лицо, не участвовавшее в ' +
+    'разбирательстве (АПК)',
+  duration: { value: 3, unit: 'month' },
+  anchor: { offset_start: 1 },
+  weekend_shift: true,
+  logic:
+    'Лицо, которое не является стороной третейского разбирательства и в ' +
+    'отношении прав и обязанностей которого вынесено решение третейского суда, ' +
+    'а также прокурор в случаях, установленных ст. 230 АПК РФ, вправе подать ' +
+    'заявление об отмене такого решения в срок, не превышающий трёх месяцев со ' +
+    'дня, когда это лицо узнало или должно было узнать об оспариваемом решении ' +
+    '(ч. 5 ст. 230 АПК РФ).',
+  midnight_rule:
+    'ч. 5, 6 ст. 114 АПК РФ — процессуальное действие может быть совершено, а ' +
+    'заявление сдано на почту, до 24:00 последнего дня срока.',
+  norm_versions: [
+    {
+      id: 'current',
+      from: null,
+      to: null,
+      anchor: { offset_start: 1 },
+      norm: {
+        primary: 'ч. 5 ст. 230 АПК РФ',
+        calculation: ['ч. 4 ст. 113', 'ч. 2, 4 ст. 114 АПК РФ'],
+      },
+    },
+  ],
+};
+
+/**
+ * Срок подачи заявления об отмене решения третейского суда лицом, не
+ * являющимся стороной разбирательства, и прокурором по ч. 5 ст. 230 АПК РФ —
+ * три месяца со дня, когда лицо узнало или должно было узнать о решении.
+ * @param {{ arbitral_award_learned_date_apk: string }} inputs
+ */
+export function computeArbitralAwardChallengeNonpartyApk(inputs) {
+  const anchor = inputs?.arbitral_award_learned_date_apk;
+  if (anchor == null) {
+    throw new Error(
+      'Обязательна дата, когда лицо узнало или должно было узнать о решении ' +
+        'третейского суда (arbitral_award_learned_date_apk)',
+    );
+  }
+  return computeSimpleTerm(ARBITRAL_AWARD_CHALLENGE_NONPARTY_APK, anchor);
+}
+
+export const ARBITRAL_AWARD_CHALLENGE_RULING_CASSATION_APK = {
+  id: 'arbitral_award_challenge_ruling_cassation_apk',
+  title:
+    'Кассационное обжалование определения по делу об оспаривании решения ' +
+    'третейского суда (АПК)',
+  duration: { value: 1, unit: 'month' },
+  anchor: { offset_start: 1 },
+  weekend_shift: true,
+  logic:
+    'Определение арбитражного суда по делу об оспаривании решения третейского ' +
+    'суда может быть обжаловано в кассационном порядке в арбитражный суд ' +
+    'округа в течение одного месяца со дня вынесения определения (ч. 5 ст. 234 ' +
+    'АПК РФ) — сразу в кассацию, минуя апелляцию. Определение выносится по ' +
+    'правилам главы 20 АПК РФ для принятия решения (ч. 1 ст. 234), поэтому ' +
+    'датой его вынесения считается дата изготовления в полном объёме (абз. 2 ' +
+    'ч. 2 ст. 176 АПК РФ).',
+  midnight_rule:
+    'ч. 5, 6 ст. 114 АПК РФ — процессуальное действие может быть совершено, а ' +
+    'жалоба сдана на почту, до 24:00 последнего дня срока.',
+  norm_versions: [
+    {
+      id: 'current',
+      from: null,
+      to: null,
+      anchor: { offset_start: 1 },
+      norm: {
+        primary: 'ч. 5 ст. 234 АПК РФ',
+        calculation: [
+          'ч. 1 ст. 234',
+          'абз. 2 ч. 2 ст. 176',
+          'ч. 4 ст. 113',
+          'ч. 2, 4 ст. 114 АПК РФ',
+        ],
+      },
+    },
+  ],
+};
+
+/**
+ * Срок кассационного обжалования определения по делу об оспаривании решения
+ * третейского суда по ч. 5 ст. 234 АПК РФ — один месяц со дня вынесения
+ * определения (даты изготовления в полном объёме), минуя апелляцию.
+ * @param {{ arbitral_award_challenge_ruling_date_apk: string }} inputs
+ */
+export function computeArbitralAwardChallengeRulingCassationApk(inputs) {
+  const anchor = inputs?.arbitral_award_challenge_ruling_date_apk;
+  if (anchor == null) {
+    throw new Error(
+      'Обязательна дата вынесения определения по делу об оспаривании решения ' +
+        'третейского суда (arbitral_award_challenge_ruling_date_apk)',
+    );
+  }
+  return computeSimpleTerm(ARBITRAL_AWARD_CHALLENGE_RULING_CASSATION_APK, anchor);
+}
+
+export const ARBITRAL_COMPETENCE_CHALLENGE_APK = {
+  id: 'arbitral_competence_challenge_apk',
+  title: 'Заявление по вопросу компетенции третейского суда (АПК)',
+  duration: { value: 1, unit: 'month' },
+  anchor: { offset_start: 1 },
+  weekend_shift: true,
+  logic:
+    'В случаях, предусмотренных федеральным законом, сторона третейского ' +
+    'разбирательства может обратиться в арбитражный суд с заявлением об отмене ' +
+    'постановления третейского суда предварительного характера о наличии у ' +
+    'него компетенции (ч. 1 ст. 235 АПК РФ). Заявление может быть подано в ' +
+    'течение одного месяца после получения стороной этого постановления (ч. 2 ' +
+    'ст. 235). Если к моменту рассмотрения заявления третейский суд уже вынес ' +
+    'решение по тому же спору, заявление оставляется без рассмотрения (ч. 4 ст. ' +
+    '235); определение арбитражного суда по такому заявлению обжалованию не ' +
+    'подлежит (ч. 6 ст. 235).',
+  midnight_rule:
+    'ч. 5, 6 ст. 114 АПК РФ — процессуальное действие может быть совершено, а ' +
+    'заявление сдано на почту, до 24:00 последнего дня срока.',
+  norm_versions: [
+    {
+      id: 'current',
+      from: null,
+      to: null,
+      anchor: { offset_start: 1 },
+      norm: {
+        primary: 'ч. 2 ст. 235 АПК РФ',
+        calculation: ['ч. 4 ст. 113', 'ч. 2, 4 ст. 114 АПК РФ'],
+      },
+    },
+  ],
+};
+
+/**
+ * Срок подачи заявления по вопросу компетенции третейского суда по ч. 2
+ * ст. 235 АПК РФ — один месяц после получения стороной постановления
+ * третейского суда о наличии у него компетенции.
+ * @param {{ arbitral_competence_ruling_received_date_apk: string }} inputs
+ */
+export function computeArbitralCompetenceChallengeApk(inputs) {
+  const anchor = inputs?.arbitral_competence_ruling_received_date_apk;
+  if (anchor == null) {
+    throw new Error(
+      'Обязательна дата получения постановления третейского суда о наличии ' +
+        'у него компетенции (arbitral_competence_ruling_received_date_apk)',
+    );
+  }
+  return computeSimpleTerm(ARBITRAL_COMPETENCE_CHALLENGE_APK, anchor);
+}

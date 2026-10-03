@@ -160,6 +160,14 @@ import {
   INDEXATION_APPLICATION_APK,
   computeEnforcementResumptionApplicationApk,
   ENFORCEMENT_RESUMPTION_APPLICATION_APK,
+  computeArbitralAwardChallengePartyApk,
+  ARBITRAL_AWARD_CHALLENGE_PARTY_APK,
+  computeArbitralAwardChallengeNonpartyApk,
+  ARBITRAL_AWARD_CHALLENGE_NONPARTY_APK,
+  computeArbitralAwardChallengeRulingCassationApk,
+  ARBITRAL_AWARD_CHALLENGE_RULING_CASSATION_APK,
+  computeArbitralCompetenceChallengeApk,
+  ARBITRAL_COMPETENCE_CHALLENGE_APK,
 } from '../apk/chain.js';
 // Нужен ровно для одной проверки: узел-окно не должен попасть в реестр .ics
 // (см. последний тест файла) — граница решения по экспорту.
@@ -3692,4 +3700,101 @@ test('enforcement_resumption_application_apk: без enforcement_suspension_grou
 test('enforcement_resumption_application_apk: без restoration_norm и в реестре сроков', () => {
   assert.equal(ENFORCEMENT_RESUMPTION_APPLICATION_APK.restoration_norm, undefined);
   assert.ok(TERM_REGISTRY_APK.enforcement_resumption_application_apk);
+});
+
+// --- Третейские суды (ч. 4, 5 ст. 230, ч. 5 ст. 234, ч. 2 ст. 235 АПК РФ) ---
+
+test('arbitral_award_challenge_party_apk: 15.06.2026 — три месяца, 15.09.2026 (вт), без переноса', () => {
+  const term = computeArbitralAwardChallengePartyApk({
+    arbitral_award_received_date_apk: '2026-06-15',
+  });
+  assert.equal(term.raw_deadline, '2026-09-15');
+  assert.equal(term.deadline, '2026-09-15');
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'ч. 4 ст. 230 АПК РФ');
+});
+
+test('arbitral_award_challenge_party_apk: 03.07.2026 — 03.10.2026 суббота, перенос на 05.10.2026', () => {
+  const term = computeArbitralAwardChallengePartyApk({
+    arbitral_award_received_date_apk: '2026-07-03',
+  });
+  assert.equal(term.raw_deadline, '2026-10-03');
+  assert.equal(term.deadline, '2026-10-05');
+  assert.equal(term.shifted, true);
+});
+
+test('arbitral_award_challenge_nonparty_apk: 04.08.2026 — 04.11.2026 праздник, перенос на 05.11.2026', () => {
+  const term = computeArbitralAwardChallengeNonpartyApk({
+    arbitral_award_learned_date_apk: '2026-08-04',
+  });
+  assert.equal(term.raw_deadline, '2026-11-04');
+  assert.equal(term.deadline, '2026-11-05');
+  assert.equal(term.shifted, true);
+  assert.equal(term.norm.primary, 'ч. 5 ст. 230 АПК РФ');
+});
+
+test('arbitral_award_challenge_ruling_cassation_apk: 04.09.2026 — 04.10.2026 воскресенье, перенос на 05.10.2026', () => {
+  const term = computeArbitralAwardChallengeRulingCassationApk({
+    arbitral_award_challenge_ruling_date_apk: '2026-09-04',
+  });
+  assert.equal(term.raw_deadline, '2026-10-04');
+  assert.equal(term.deadline, '2026-10-05');
+  assert.equal(term.shifted, true);
+  assert.equal(term.norm.primary, 'ч. 5 ст. 234 АПК РФ');
+});
+
+test('arbitral_award_challenge_ruling_cassation_apk: 31.01.2026 — 28.02.2026 (31-го в феврале нет, суббота), перенос на 02.03.2026', () => {
+  const term = computeArbitralAwardChallengeRulingCassationApk({
+    arbitral_award_challenge_ruling_date_apk: '2026-01-31',
+  });
+  assert.equal(term.raw_deadline, '2026-02-28');
+  assert.equal(term.deadline, '2026-03-02');
+  assert.equal(term.shifted, true);
+});
+
+test('arbitral_competence_challenge_apk: 12.10.2026 — один месяц, 12.11.2026 (чт), без переноса', () => {
+  const term = computeArbitralCompetenceChallengeApk({
+    arbitral_competence_ruling_received_date_apk: '2026-10-12',
+  });
+  assert.equal(term.raw_deadline, '2026-11-12');
+  assert.equal(term.deadline, '2026-11-12');
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'ч. 2 ст. 235 АПК РФ');
+});
+
+test('arbitral_competence_challenge_apk: 31.12.2026 — 31.01.2027 воскресенье, перенос на 01.02.2027', () => {
+  const term = computeArbitralCompetenceChallengeApk({
+    arbitral_competence_ruling_received_date_apk: '2026-12-31',
+  });
+  assert.equal(term.raw_deadline, '2027-01-31');
+  assert.equal(term.deadline, '2027-02-01');
+  assert.equal(term.shifted, true);
+});
+
+test('узлы третейских судов: без якоря — ошибка, упоминающая именно своё поле', () => {
+  for (const [compute, field] of [
+    [computeArbitralAwardChallengePartyApk, 'arbitral_award_received_date_apk'],
+    [computeArbitralAwardChallengeNonpartyApk, 'arbitral_award_learned_date_apk'],
+    [
+      computeArbitralAwardChallengeRulingCassationApk,
+      'arbitral_award_challenge_ruling_date_apk',
+    ],
+    [computeArbitralCompetenceChallengeApk, 'arbitral_competence_ruling_received_date_apk'],
+  ]) {
+    assert.throws(() => compute({}), new RegExp(field));
+    assert.throws(() => compute(), new RegExp(field));
+  }
+});
+
+test('узлы третейских судов: без restoration_norm, в реестре сроков, у каждого есть напоминания', () => {
+  for (const node of [
+    ARBITRAL_AWARD_CHALLENGE_PARTY_APK,
+    ARBITRAL_AWARD_CHALLENGE_NONPARTY_APK,
+    ARBITRAL_AWARD_CHALLENGE_RULING_CASSATION_APK,
+    ARBITRAL_COMPETENCE_CHALLENGE_APK,
+  ]) {
+    assert.equal(node.restoration_norm, undefined);
+    assert.ok(TERM_REGISTRY_APK[node.id], `узел "${node.id}" не попал в TERM_REGISTRY_APK`);
+    assert.ok(reminderOffsets(node.duration).length > 0, `у узла "${node.id}" нет напоминаний`);
+  }
 });

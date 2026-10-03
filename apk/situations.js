@@ -533,6 +533,45 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['enforcement_resumption_application_apk'],
   },
+  {
+    id: 'arbitral_competence_challenge',
+    label: 'Третейский суд признал себя компетентным — оспорить его постановление',
+    // Ч. 2 ст. 235 АПК РФ. Единственное поле — дата получения постановления
+    // третейского суда о наличии у него компетенции. Один месяц, числового
+    // потолка восстановления в норме нет — restoration-узла нет.
+    primary_field: 'arbitral_competence_ruling_received_date_apk',
+    fields: [],
+    nodes: ['arbitral_competence_challenge_apk'],
+  },
+  {
+    id: 'arbitral_award_challenge_party',
+    label: 'Отмена решения третейского суда: я сторона разбирательства',
+    // Ч. 4 ст. 230 АПК РФ. Единственное поле — дата получения решения
+    // стороной, которая его оспаривает. Три месяца, restoration-узла нет.
+    primary_field: 'arbitral_award_received_date_apk',
+    fields: [],
+    nodes: ['arbitral_award_challenge_party_apk'],
+  },
+  {
+    id: 'arbitral_award_challenge_nonparty',
+    label:
+      'Отмена решения третейского суда: я не участвовал в разбирательстве (или прокурор)',
+    // Ч. 5 ст. 230 АПК РФ. Единственное поле — дата, когда лицо узнало или
+    // должно было узнать о решении. Три месяца, restoration-узла нет.
+    primary_field: 'arbitral_award_learned_date_apk',
+    fields: [],
+    nodes: ['arbitral_award_challenge_nonparty_apk'],
+  },
+  {
+    id: 'arbitral_award_challenge_ruling_cassation',
+    label:
+      'Суд рассмотрел заявление об отмене решения третейского суда — хочу обжаловать',
+    // Ч. 5 ст. 234 АПК РФ. Единственное поле — дата вынесения определения
+    // (изготовления в полном объёме). Прямая кассация, restoration-узла нет.
+    primary_field: 'arbitral_award_challenge_ruling_date_apk',
+    fields: [],
+    nodes: ['arbitral_award_challenge_ruling_cassation_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';

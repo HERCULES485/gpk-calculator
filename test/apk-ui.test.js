@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs';
 
 import { SITUATIONS_APK, DEFAULT_SITUATION_APK } from '../apk/situations.js';
 import { INPUT_LABELS_APK } from '../apk/labels.js';
+import { SITUATION_CATEGORIES_APK } from '../apk/categories.js';
 import {
   TERM_REGISTRY_APK,
   ICS_PRODID,
@@ -116,13 +117,17 @@ test('АПК ситуации: ветви ожидаемого состава, �
       'pretrial_claim',
       'indexation',
       'enforcement_resumption',
+      'arbitral_competence_challenge',
+      'arbitral_award_challenge_party',
+      'arbitral_award_challenge_nonparty',
+      'arbitral_award_challenge_ruling_cassation',
     ],
   );
   assert.deepEqual(
     SITUATIONS_APK.map((s) => s.nodes.length),
     [
       8, 4, 2, 2, 2, 1, 1, 1, 3, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-      1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+      1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     ],
   );
   assert.equal(situationById(DEFAULT_SITUATION_APK, SITUATIONS_APK).id, 'decision_chain');
@@ -180,6 +185,10 @@ test('АПК ситуации: ветви ожидаемого состава, �
       'pretrial_claim',
       'indexation',
       'enforcement_resumption',
+      'arbitral_competence_challenge',
+      'arbitral_award_challenge_party',
+      'arbitral_award_challenge_nonparty',
+      'arbitral_award_challenge_ruling_cassation',
     ],
   );
 });
@@ -236,8 +245,8 @@ test('АПК подписи: словарь покрывает все входы
   }
 });
 
-test('АПК реестр сроков: 52 узла из 57 — без четырёх узлов-событий и узла-окна', () => {
-  assert.equal(CHAIN_NODE_IDS.length, 57);
+test('АПК реестр сроков: 56 узлов из 61 — без четырёх узлов-событий и узла-окна', () => {
+  assert.equal(CHAIN_NODE_IDS.length, 61);
   // Счётчики узлов и реестра растут НЕ синхронно: узел-окно ч. 3 ст. 222.1
   // добавился в chain.js, но в реестр сроков не попал — у него нет top-level
   // duration, и это намеренно (экспорт окна в .ics вне объёма задачи). Узел
@@ -257,7 +266,7 @@ test('АПК реестр сроков: 52 узла из 57 — без четы�
       'simplified_proceedings_entry_into_force_apk',
     ],
   );
-  assert.equal(Object.keys(TERM_REGISTRY_APK).length, 52);
+  assert.equal(Object.keys(TERM_REGISTRY_APK).length, 56);
   for (const id of NON_REGISTRY_NODE_IDS) {
     assert.equal(TERM_REGISTRY_APK[id], undefined, `узел без duration "${id}" попал в реестр`);
   }
@@ -281,7 +290,7 @@ test('АПК реестр сроков: идентификаторы проду�
 
 // --- buildView (задача UI.3) --------------------------------------------------
 
-// Данные, поднимающие все 57 узлов разом. Ветви дискриминаторов выбраны так,
+// Данные, поднимающие все 61 узлов разом. Ветви дискриминаторов выбраны так,
 // чтобы цепочка считалась целиком: жалоба не подана → вступление в силу от
 // срока апелляции, окружная кассация не подавалась → якорь кассации в ВС РФ от
 // срока окружной кассации.
@@ -339,13 +348,17 @@ const ALL_NODES_INPUTS_APK = {
   pretrial_claim_sent_date_apk: '2025-03-11',
   debtor_execution_date_apk: '2025-03-11',
   enforcement_suspension_grounds_eliminated_date_apk: '2025-03-11',
+  arbitral_award_received_date_apk: '2025-03-11',
+  arbitral_award_learned_date_apk: '2025-03-11',
+  arbitral_award_challenge_ruling_date_apk: '2025-03-11',
+  arbitral_competence_ruling_received_date_apk: '2025-03-11',
 };
 
 const TODAY_APK = '2025-01-01'; // раньше всех дедлайнов — ничего не истекло
 
-test('АПК buildView: на полном наборе данных считаются все 57 узлов, incomplete пуст', () => {
+test('АПК buildView: на полном наборе данных считаются все 61 узлов, incomplete пуст', () => {
   const view = buildView(ALL_NODES_INPUTS_APK, { today: TODAY_APK });
-  assert.equal(view.cards.length, 57);
+  assert.equal(view.cards.length, 61);
   assert.equal(view.incomplete.length, 0);
   assert.deepEqual(view.stubs, []);
   // Форма возврата совпадает с ГПК-шной: cards/incomplete/stubs.
@@ -381,7 +394,7 @@ test('АПК buildView: пересечение периодов даёт кар�
     { today: TODAY_APK },
   );
   // Расчёт не падает целиком: 16 карточек на месте, ошибочная — ровно одна.
-  assert.equal(view.cards.length, 57);
+  assert.equal(view.cards.length, 61);
   const errors = view.cards.filter((c) => c.kind === 'error');
   assert.equal(errors.length, 1);
   assert.equal(errors[0].id, 'enforcement_presentation_apk');
@@ -507,9 +520,9 @@ test('АПК buildView: узлы-события дают карточку kind="
   assert.equal(entry.based_on, 'appellate_ruling_date');
 });
 
-test('АПК buildView: без данных все 57 узлов уходят в incomplete, расчёт не вызывается', () => {
+test('АПК buildView: без данных все 61 узлов уходят в incomplete, расчёт не вызывается', () => {
   const view = buildView({}, { today: TODAY_APK });
-  assert.equal(view.incomplete.length, 57);
+  assert.equal(view.incomplete.length, 61);
   // Ни одной карточки вообще: если бы compute-функции вызывались на пустых
   // данных, они бросили бы, и мы увидели бы карточки kind="error".
   assert.equal(view.cards.length, 0);
@@ -685,7 +698,7 @@ test('АПК buildView: решение отменено или изменено 
 
   // Ни одной карточки-ошибки: ни на вступлении в силу, ни дальше по цепочке.
   assert.equal(view.cards.filter((c) => c.kind === 'error').length, 0);
-  assert.equal(view.cards.length, 57);
+  assert.equal(view.cards.length, 61);
 });
 
 // --- Подача иска после досудебной претензии (абз. 1 ч. 5 ст. 4 АПК РФ) ---
@@ -809,4 +822,98 @@ test('АПК reminderDates: возражения на судебный прик�
     '2026-11-03',
     '2026-10-29',
   ]);
+});
+
+// --- Третейские суды (ч. 4, 5 ст. 230, ч. 5 ст. 234, ч. 2 ст. 235 АПК РФ) ---
+
+const ARBITRAL_NODE_IDS_APK = [
+  'arbitral_award_challenge_party_apk',
+  'arbitral_award_challenge_nonparty_apk',
+  'arbitral_award_challenge_ruling_cassation_apk',
+  'arbitral_competence_challenge_apk',
+];
+
+test('АПК buildView: четыре узла третейских судов — обычные срочные карточки', () => {
+  const view = buildView(
+    {
+      arbitral_award_received_date_apk: '2026-07-03',
+      arbitral_award_learned_date_apk: '2026-08-04',
+      arbitral_award_challenge_ruling_date_apk: '2026-09-04',
+      arbitral_competence_ruling_received_date_apk: '2026-10-12',
+    },
+    { today: TODAY_APK },
+  );
+  const expected = {
+    arbitral_award_challenge_party_apk: ['2026-10-05', 'ч. 4 ст. 230 АПК РФ'],
+    arbitral_award_challenge_nonparty_apk: ['2026-11-05', 'ч. 5 ст. 230 АПК РФ'],
+    arbitral_award_challenge_ruling_cassation_apk: ['2026-10-05', 'ч. 5 ст. 234 АПК РФ'],
+    arbitral_competence_challenge_apk: ['2026-11-12', 'ч. 2 ст. 235 АПК РФ'],
+  };
+  for (const [id, [deadline, norm]] of Object.entries(expected)) {
+    const card = view.cards.find((c) => c.id === id);
+    assert.ok(card, `нет карточки "${id}"`);
+    assert.equal(card.kind, 'term');
+    assert.equal(card.deadline, deadline);
+    assert.equal(card.norm, norm);
+  }
+  assert.equal(view.cards.filter((c) => c.kind === 'error').length, 0);
+});
+
+test('АПК buildView: без дат третейских судов все четыре узла уходят в incomplete с нужным полем', () => {
+  const view = buildView({}, { today: TODAY_APK });
+  for (const [id, field] of [
+    ['arbitral_award_challenge_party_apk', 'arbitral_award_received_date_apk'],
+    ['arbitral_award_challenge_nonparty_apk', 'arbitral_award_learned_date_apk'],
+    [
+      'arbitral_award_challenge_ruling_cassation_apk',
+      'arbitral_award_challenge_ruling_date_apk',
+    ],
+    ['arbitral_competence_challenge_apk', 'arbitral_competence_ruling_received_date_apk'],
+  ]) {
+    assert.equal(view.cards.find((c) => c.id === id), undefined);
+    const node = view.incomplete.find((n) => n.id === id);
+    assert.ok(node, `узел "${id}" не попал в incomplete`);
+    assert.deepEqual(
+      node.missing_inputs.map((f) => f.id),
+      [field],
+    );
+  }
+});
+
+test('АПК реестр сроков: четыре узла третейских судов в реестре, у каждого есть напоминания', () => {
+  for (const id of ARBITRAL_NODE_IDS_APK) {
+    const meta = TERM_REGISTRY_APK[id];
+    assert.ok(meta, `узел "${id}" не попал в TERM_REGISTRY_APK`);
+    assert.ok(reminderOffsets(meta.duration).length > 0, `у узла "${id}" нет напоминаний`);
+  }
+});
+
+test('АПК категории: «Третейские суды» — ровно пять ветвей в указанном порядке', () => {
+  const category = SITUATION_CATEGORIES_APK.find((c) => c.title === 'Третейские суды');
+  assert.ok(category);
+  assert.equal(category.collapsed, true);
+  assert.deepEqual(category.ids, [
+    'arbitral_competence_challenge',
+    'arbitral_award_challenge_party',
+    'arbitral_award_challenge_nonparty',
+    'arbitral_award_challenge_ruling_cassation',
+    'arbitral_enforcement_writ_cassation',
+  ]);
+  // Категория идёт сразу после «Корпоративные споры».
+  const titles = SITUATION_CATEGORIES_APK.map((c) => c.title);
+  assert.equal(titles.indexOf('Третейские суды'), titles.indexOf('Корпоративные споры') + 1);
+});
+
+test('АПК категории: arbitral_enforcement_writ_cassation перенесена из «Обжалование отдельных процессуальных определений…»', () => {
+  const particular = SITUATION_CATEGORIES_APK.find((c) =>
+    c.title.startsWith('Обжалование отдельных процессуальных определений'),
+  );
+  assert.ok(particular);
+  assert.ok(!particular.ids.includes('arbitral_enforcement_writ_cassation'));
+});
+
+test('АПК категории: каждая ветвь ровно в одной категории', () => {
+  const all = SITUATION_CATEGORIES_APK.flatMap((c) => c.ids);
+  assert.equal(new Set(all).size, all.length, 'ветвь встречается в нескольких категориях');
+  assert.deepEqual([...all].sort(), SITUATIONS_APK.map((s) => s.id).sort());
 });
