@@ -97,8 +97,8 @@ check(
   'нет основного поля даты решения',
 );
 check(
-  (await page.locator('#situation input[type=radio]').count()) === 38,
-  'переключатель ситуаций отрисован не на тридцать восемь ветвей',
+  (await page.locator('#situation input[type=radio]').count()) === 39,
+  'переключатель ситуаций отрисован не на тридцать девять ветвей',
 );
 
 // --- 1. Полный цикл: дата решения → карточка апелляционной жалобы --------------
@@ -568,9 +568,9 @@ check(
 );
 const searchInitial = await searchState();
 const renderedInitial = await renderedLabels();
-check(searchInitial.total === 38, `поиск: ждали 38 label.situation, получили ${searchInitial.total}`);
+check(searchInitial.total === 39, `поиск: ждали 39 label.situation, получили ${searchInitial.total}`);
 check(
-  searchInitial.shown.length === 38 && searchInitial.hiddenGroups === 0,
+  searchInitial.shown.length === 39 && searchInitial.hiddenGroups === 0,
   'поиск: до ввода часть ветвей или категорий уже скрыта',
 );
 // Аккордеон: до ввода раскрыта ровно одна категория — та, в которой лежит
@@ -596,7 +596,7 @@ check(
   `поиск «судебные расходы»: ждали одну ветвь court_costs, видны ${JSON.stringify(st.shown)}`,
 );
 check((await renderedLabels()) === 1, `поиск «судебные расходы»: на экране видно ${await renderedLabels()} label, ждали 1`);
-check(st.count === 'Показано 1 из 38', `поиск «судебные расходы»: счётчик «${st.count}»`);
+check(st.count === 'Показано 1 из 39', `поиск «судебные расходы»: счётчик «${st.count}»`);
 check(st.emptyHidden, 'поиск: «ничего не найдено» показано при совпадении');
 const groupsWithMatch = await page.locator('#situation > fieldset.situations:not([hidden]), #situation > details.situations-group:not([hidden])').count();
 check(
@@ -609,7 +609,7 @@ await search('zzzqqq');
 st = await searchState();
 check(st.shown.length === 0 && (await renderedLabels()) === 0, 'поиск без совпадений: label остались видны');
 check(!st.emptyHidden && (await page.locator('#situation-search-empty').isVisible()), 'поиск без совпадений: «Ничего не найдено.» не показано');
-check(st.count === 'Показано 0 из 38', `поиск без совпадений: счётчик «${st.count}»`);
+check(st.count === 'Показано 0 из 39', `поиск без совпадений: счётчик «${st.count}»`);
 
 // 3. Совпадение внутри изначально свёрнутой категории раскрывает её <details>.
 await search('судебный штраф');
@@ -632,7 +632,7 @@ check(
 await search('СУДЕБНЫЕ РАСХОДЫ');
 st = await searchState();
 check(
-  st.shown.length === 1 && st.shown[0] === 'court_costs' && st.count === 'Показано 1 из 38',
+  st.shown.length === 1 && st.shown[0] === 'court_costs' && st.count === 'Показано 1 из 39',
   `поиск «СУДЕБНЫЕ РАСХОДЫ»: регистр влияет на результат — ${JSON.stringify(st.shown)}`,
 );
 
@@ -1660,6 +1660,56 @@ await chooseSituation('decision_chain');
   check((await freshCount()) === 0, 'отклик[5]: .fresh-terms после ответа, не давшего новых сроков');
 
   await page.setViewportSize(originalViewport);
+}
+
+// --- Узел-событие «Подача иска после досудебной претензии» (абз. 1 ч. 5 ст. 4) ---
+//
+// Текст строки события и подсказка теперь берутся из узла (card.eventTextTemplate,
+// card.hint), а строка «Основание расчёта» выводится только при card.based_on.
+// (а) У досудебной претензии основания нет — строки нет; (б) у вступления в
+// силу по делу упрощённого производства текст прежний и основание на месте.
+await page.goto(`http://localhost:${port}/apk.html`, { waitUntil: 'networkidle' });
+
+await chooseSituation('pretrial_claim');
+check(
+  (await page.locator('#in-pretrial_claim_sent_date_apk').count()) === 1,
+  'ветвь "pretrial_claim": основное поле #in-pretrial_claim_sent_date_apk не найдено в DOM',
+);
+await page.fill('#in-pretrial_claim_sent_date_apk', '03.09.2026');
+await settle();
+{
+  const box = page.locator('#results .event-line');
+  check((await box.count()) === 1, `ветвь "pretrial_claim": строк события ${await box.count()}, ждали одну`);
+  if (await box.count()) {
+    const text = (await box.locator('.event-text').innerText()).trim();
+    check(
+      text === 'Иск можно подать с 06.10.2026',
+      `ветвь "pretrial_claim": текст события «${text}», ждали «Иск можно подать с 06.10.2026»`,
+    );
+    check(
+      !(await box.innerText()).includes('Основание расчёта'),
+      'ветвь "pretrial_claim": строка «Основание расчёта» есть, хотя based_on у события нет',
+    );
+  }
+}
+
+await chooseSituation('simplified_proceedings');
+await page.fill('#in-simplified_proceedings_decision_date', '11.03.2025');
+await settle();
+{
+  const box = page.locator('#results .event-line');
+  check((await box.count()) === 1, `ветвь "simplified_proceedings": строк события ${await box.count()}, ждали одну`);
+  if (await box.count()) {
+    const text = (await box.locator('.event-text').innerText()).trim();
+    check(
+      /^Акт вступил в законную силу \d{2}\.\d{2}\.\d{4}$/.test(text),
+      `ветвь "simplified_proceedings": текст события «${text}» не «Акт вступил в законную силу ДД.ММ.ГГГГ»`,
+    );
+    check(
+      (await box.innerText()).includes('Основание расчёта:'),
+      'ветвь "simplified_proceedings": строка «Основание расчёта:» пропала',
+    );
+  }
 }
 
 await browser.close();

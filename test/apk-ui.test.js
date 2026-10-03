@@ -106,13 +106,14 @@ test('АПК ситуации: тридцать семь ветвей ожида
       'corporate_ruling_appeal',
       'meeting_convening_appeal',
       'protocol_remarks',
+      'pretrial_claim',
     ],
   );
   assert.deepEqual(
     SITUATIONS_APK.map((s) => s.nodes.length),
     [
       8, 4, 2, 2, 2, 1, 1, 1, 3, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-      1, 1, 1, 1, 1, 1, 1,
+      1, 1, 1, 1, 1, 1, 1, 1,
     ],
   );
   assert.equal(situationById(DEFAULT_SITUATION_APK, SITUATIONS_APK).id, 'decision_chain');
@@ -167,6 +168,7 @@ test('АПК ситуации: тридцать семь ветвей ожида
       'corporate_ruling_appeal',
       'meeting_convening_appeal',
       'protocol_remarks',
+      'pretrial_claim',
     ],
   );
 });
@@ -223,8 +225,8 @@ test('АПК подписи: словарь покрывает все входы
   }
 });
 
-test('АПК реестр сроков: 50 узлов из 54 — без трёх узлов-событий и узла-окна', () => {
-  assert.equal(CHAIN_NODE_IDS.length, 54);
+test('АПК реестр сроков: 50 узлов из 55 — без четырёх узлов-событий и узла-окна', () => {
+  assert.equal(CHAIN_NODE_IDS.length, 55);
   // Счётчики узлов и реестра растут НЕ синхронно: узел-окно ч. 3 ст. 222.1
   // добавился в chain.js, но в реестр сроков не попал — у него нет top-level
   // duration, и это намеренно (экспорт окна в .ics вне объёма задачи). Узел
@@ -232,11 +234,14 @@ test('АПК реестр сроков: 50 узлов из 54 — без трё�
   // счётчики снова растут синхронно на этом узле. Узел-событие ч. 3 ст. 229
   // (вступление в силу по делам упрощённого производства) — тот же случай, что
   // и у ENTRY_INTO_FORCE_APK: top-level duration нет, в реестр не попадает.
+  // Узел-событие абз. 1 ч. 5 ст. 4 (досудебная претензия) — так же: его
+  // тридцатидневный период вынесен в неэкспортируемую константу.
   assert.deepEqual(
     [...NON_REGISTRY_NODE_IDS].sort(),
     [
       'entry_into_force_after_cassation_apk',
       'entry_into_force_apk',
+      'pretrial_claim_apk',
       'reasonable_term_execution_compensation_apk',
       'simplified_proceedings_entry_into_force_apk',
     ],
@@ -265,7 +270,7 @@ test('АПК реестр сроков: идентификаторы проду�
 
 // --- buildView (задача UI.3) --------------------------------------------------
 
-// Данные, поднимающие все 54 узла разом. Ветви дискриминаторов выбраны так,
+// Данные, поднимающие все 55 узлов разом. Ветви дискриминаторов выбраны так,
 // чтобы цепочка считалась целиком: жалоба не подана → вступление в силу от
 // срока апелляции, окружная кассация не подавалась → якорь кассации в ВС РФ от
 // срока окружной кассации.
@@ -320,13 +325,14 @@ const ALL_NODES_INPUTS_APK = {
   corporate_ruling_date_apk: '2025-03-11',
   meeting_convening_decision_date_apk: '2025-03-11',
   protocol_signed_date_apk: '2025-03-11',
+  pretrial_claim_sent_date_apk: '2025-03-11',
 };
 
 const TODAY_APK = '2025-01-01'; // раньше всех дедлайнов — ничего не истекло
 
-test('АПК buildView: на полном наборе данных считаются все 54 узла, incomplete пуст', () => {
+test('АПК buildView: на полном наборе данных считаются все 55 узлов, incomplete пуст', () => {
   const view = buildView(ALL_NODES_INPUTS_APK, { today: TODAY_APK });
-  assert.equal(view.cards.length, 54);
+  assert.equal(view.cards.length, 55);
   assert.equal(view.incomplete.length, 0);
   assert.deepEqual(view.stubs, []);
   // Форма возврата совпадает с ГПК-шной: cards/incomplete/stubs.
@@ -362,7 +368,7 @@ test('АПК buildView: пересечение периодов даёт кар�
     { today: TODAY_APK },
   );
   // Расчёт не падает целиком: 16 карточек на месте, ошибочная — ровно одна.
-  assert.equal(view.cards.length, 54);
+  assert.equal(view.cards.length, 55);
   const errors = view.cards.filter((c) => c.kind === 'error');
   assert.equal(errors.length, 1);
   assert.equal(errors[0].id, 'enforcement_presentation_apk');
@@ -488,9 +494,9 @@ test('АПК buildView: узлы-события дают карточку kind="
   assert.equal(entry.based_on, 'appellate_ruling_date');
 });
 
-test('АПК buildView: без данных все 54 узла уходят в incomplete, расчёт не вызывается', () => {
+test('АПК buildView: без данных все 55 узлов уходят в incomplete, расчёт не вызывается', () => {
   const view = buildView({}, { today: TODAY_APK });
-  assert.equal(view.incomplete.length, 54);
+  assert.equal(view.incomplete.length, 55);
   // Ни одной карточки вообще: если бы compute-функции вызывались на пустых
   // данных, они бросили бы, и мы увидели бы карточки kind="error".
   assert.equal(view.cards.length, 0);
@@ -666,5 +672,58 @@ test('АПК buildView: решение отменено или изменено 
 
   // Ни одной карточки-ошибки: ни на вступлении в силу, ни дальше по цепочке.
   assert.equal(view.cards.filter((c) => c.kind === 'error').length, 0);
-  assert.equal(view.cards.length, 54);
+  assert.equal(view.cards.length, 55);
+});
+
+// --- Подача иска после досудебной претензии (абз. 1 ч. 5 ст. 4 АПК РФ) ---
+
+test('АПК buildView: pretrial_claim_apk — карточка kind="event" со своим текстом, без основания', () => {
+  const view = buildView({ pretrial_claim_sent_date_apk: '2026-09-03' }, { today: TODAY_APK });
+  const card = view.cards.find((c) => c.id === 'pretrial_claim_apk');
+  assert.equal(card.kind, 'event');
+  assert.equal(card.date, '2026-10-06');
+  assert.equal(card.norm, 'абз. 1 ч. 5 ст. 4 АПК РФ');
+  assert.equal(card.eventTextTemplate, 'Иск можно подать с {date}');
+  assert.equal(
+    card.hint,
+    'К этой дате тридцатидневный срок досудебного урегулирования истёк, если ' +
+      'иной срок не установлен законом или договором.',
+  );
+  assert.equal(card.based_on, undefined);
+  assert.match(card.details.logic, /^Споры о взыскании денежных средств/);
+  assert.equal(card.details.calculation.length, 4);
+  assert.equal(card.deadline, undefined);
+  assert.equal(card.days_left, undefined);
+});
+
+test('АПК buildView: pretrial_claim_apk без даты направления претензии уходит в incomplete', () => {
+  const view = buildView({}, { today: TODAY_APK });
+  assert.equal(view.cards.find((c) => c.id === 'pretrial_claim_apk'), undefined);
+  const node = view.incomplete.find((n) => n.id === 'pretrial_claim_apk');
+  assert.ok(node);
+  assert.equal(node.kind, 'event');
+  assert.deepEqual(
+    node.missing_inputs.map((f) => f.id),
+    ['pretrial_claim_sent_date_apk'],
+  );
+});
+
+test('АПК buildView: узлы-события вступления в силу получают прежние текст и подсказку', () => {
+  const view = buildView(ALL_NODES_INPUTS_APK, { today: TODAY_APK });
+  for (const id of [
+    'entry_into_force_apk',
+    'entry_into_force_after_cassation_apk',
+    'simplified_proceedings_entry_into_force_apk',
+  ]) {
+    const card = view.cards.find((c) => c.id === id);
+    assert.equal(card.eventTextTemplate, 'Акт вступил в законную силу {date}');
+    assert.equal(card.hint, 'С этой даты акт считается вступившим в законную силу.');
+    assert.ok(card.based_on, `у события "${id}" пропал based_on`);
+  }
+});
+
+test('АПК pretrial_claim: событие не попадает в экспорт .ics', async () => {
+  const { icsTermsFromView } = await import('../apk/ics.js');
+  const view = buildView({ pretrial_claim_sent_date_apk: '2026-09-03' }, { today: TODAY_APK });
+  assert.deepEqual(icsTermsFromView(view), []);
 });

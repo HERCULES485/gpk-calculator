@@ -483,17 +483,25 @@ function renderTermCard(card) {
 function renderEvent(card) {
   const box = el('div', 'event-line');
   const head = el('div', 'event-head');
+  // Текст строки и пояснение — из карточки (а та берёт их из узла): смысл
+  // события у каждого узла свой. Образец — renderEvent в apk/bankruptcy-app.js.
   head.appendChild(
-    el('span', 'event-text done', `Акт вступил в законную силу ${isoToRu(card.date)}`),
+    el(
+      'span',
+      'event-text done',
+      card.eventTextTemplate.replace('{date}', isoToRu(card.date)),
+    ),
   );
   head.appendChild(el('span', 'norm', card.norm));
   box.appendChild(head);
-  box.appendChild(
-    el('div', 'hint', 'С этой даты акт считается вступившим в законную силу.'),
-  );
+  box.appendChild(el('div', 'hint', card.hint));
   // От чего посчитана дата: от дедлайна соседнего срока или от введённой даты
-  // акта вышестоящей инстанции. Без этого непонятно, откуда она взялась.
-  box.appendChild(el('div', 'hint', `Основание расчёта: ${basedOnText(card.based_on)}`));
+  // акта вышестоящей инстанции. Без этого непонятно, откуда она взялась. У
+  // события с единственным явным якорем (досудебная претензия) основания нет —
+  // строки тоже нет.
+  if (card.based_on) {
+    box.appendChild(el('div', 'hint', `Основание расчёта: ${basedOnText(card.based_on)}`));
+  }
   if (card.calendar_warning) box.appendChild(calendarWarning(card));
   if (card.details) box.appendChild(renderDetails(card.details));
   return box;

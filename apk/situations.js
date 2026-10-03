@@ -502,6 +502,16 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['protocol_remarks_apk'],
   },
+  {
+    id: 'pretrial_claim',
+    label: 'Досудебная претензия: когда можно подать иск',
+    // Абз. 1 ч. 5 ст. 4 АПК РФ. Единственное поле — дата направления
+    // претензии (требования). Узел-событие: тридцать календарных дней, дата —
+    // день, следующий за (перенесённым) последним днём. Restoration-узла нет.
+    primary_field: 'pretrial_claim_sent_date_apk',
+    fields: [],
+    nodes: ['pretrial_claim_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';
