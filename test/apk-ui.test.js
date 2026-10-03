@@ -64,7 +64,7 @@ test('АПК ситуации: каждый узел chain.js закреплён
   assert.deepEqual([...inSituations].sort(), [...CHAIN_NODE_IDS].sort());
 });
 
-test('АПК ситуации: тридцать семь ветвей ожидаемого состава, ситуация по умолчанию существует', () => {
+test('АПК ситуации: ветви ожидаемого состава, ситуация по умолчанию существует', () => {
   assert.deepEqual(
     SITUATIONS_APK.map((s) => s.id),
     [
@@ -107,13 +107,15 @@ test('АПК ситуации: тридцать семь ветвей ожида
       'meeting_convening_appeal',
       'protocol_remarks',
       'pretrial_claim',
+      'indexation',
+      'enforcement_resumption',
     ],
   );
   assert.deepEqual(
     SITUATIONS_APK.map((s) => s.nodes.length),
     [
       8, 4, 2, 2, 2, 1, 1, 1, 3, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-      1, 1, 1, 1, 1, 1, 1, 1,
+      1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     ],
   );
   assert.equal(situationById(DEFAULT_SITUATION_APK, SITUATIONS_APK).id, 'decision_chain');
@@ -169,6 +171,8 @@ test('АПК ситуации: тридцать семь ветвей ожида
       'meeting_convening_appeal',
       'protocol_remarks',
       'pretrial_claim',
+      'indexation',
+      'enforcement_resumption',
     ],
   );
 });
@@ -225,8 +229,8 @@ test('АПК подписи: словарь покрывает все входы
   }
 });
 
-test('АПК реестр сроков: 50 узлов из 55 — без четырёх узлов-событий и узла-окна', () => {
-  assert.equal(CHAIN_NODE_IDS.length, 55);
+test('АПК реестр сроков: 52 узла из 57 — без четырёх узлов-событий и узла-окна', () => {
+  assert.equal(CHAIN_NODE_IDS.length, 57);
   // Счётчики узлов и реестра растут НЕ синхронно: узел-окно ч. 3 ст. 222.1
   // добавился в chain.js, но в реестр сроков не попал — у него нет top-level
   // duration, и это намеренно (экспорт окна в .ics вне объёма задачи). Узел
@@ -246,7 +250,7 @@ test('АПК реестр сроков: 50 узлов из 55 — без чет�
       'simplified_proceedings_entry_into_force_apk',
     ],
   );
-  assert.equal(Object.keys(TERM_REGISTRY_APK).length, 50);
+  assert.equal(Object.keys(TERM_REGISTRY_APK).length, 52);
   for (const id of NON_REGISTRY_NODE_IDS) {
     assert.equal(TERM_REGISTRY_APK[id], undefined, `узел без duration "${id}" попал в реестр`);
   }
@@ -270,7 +274,7 @@ test('АПК реестр сроков: идентификаторы проду�
 
 // --- buildView (задача UI.3) --------------------------------------------------
 
-// Данные, поднимающие все 55 узлов разом. Ветви дискриминаторов выбраны так,
+// Данные, поднимающие все 57 узлов разом. Ветви дискриминаторов выбраны так,
 // чтобы цепочка считалась целиком: жалоба не подана → вступление в силу от
 // срока апелляции, окружная кассация не подавалась → якорь кассации в ВС РФ от
 // срока окружной кассации.
@@ -326,13 +330,15 @@ const ALL_NODES_INPUTS_APK = {
   meeting_convening_decision_date_apk: '2025-03-11',
   protocol_signed_date_apk: '2025-03-11',
   pretrial_claim_sent_date_apk: '2025-03-11',
+  debtor_execution_date_apk: '2025-03-11',
+  enforcement_suspension_grounds_eliminated_date_apk: '2025-03-11',
 };
 
 const TODAY_APK = '2025-01-01'; // раньше всех дедлайнов — ничего не истекло
 
-test('АПК buildView: на полном наборе данных считаются все 55 узлов, incomplete пуст', () => {
+test('АПК buildView: на полном наборе данных считаются все 57 узлов, incomplete пуст', () => {
   const view = buildView(ALL_NODES_INPUTS_APK, { today: TODAY_APK });
-  assert.equal(view.cards.length, 55);
+  assert.equal(view.cards.length, 57);
   assert.equal(view.incomplete.length, 0);
   assert.deepEqual(view.stubs, []);
   // Форма возврата совпадает с ГПК-шной: cards/incomplete/stubs.
@@ -368,7 +374,7 @@ test('АПК buildView: пересечение периодов даёт кар�
     { today: TODAY_APK },
   );
   // Расчёт не падает целиком: 16 карточек на месте, ошибочная — ровно одна.
-  assert.equal(view.cards.length, 55);
+  assert.equal(view.cards.length, 57);
   const errors = view.cards.filter((c) => c.kind === 'error');
   assert.equal(errors.length, 1);
   assert.equal(errors[0].id, 'enforcement_presentation_apk');
@@ -494,9 +500,9 @@ test('АПК buildView: узлы-события дают карточку kind="
   assert.equal(entry.based_on, 'appellate_ruling_date');
 });
 
-test('АПК buildView: без данных все 55 узлов уходят в incomplete, расчёт не вызывается', () => {
+test('АПК buildView: без данных все 57 узлов уходят в incomplete, расчёт не вызывается', () => {
   const view = buildView({}, { today: TODAY_APK });
-  assert.equal(view.incomplete.length, 55);
+  assert.equal(view.incomplete.length, 57);
   // Ни одной карточки вообще: если бы compute-функции вызывались на пустых
   // данных, они бросили бы, и мы увидели бы карточки kind="error".
   assert.equal(view.cards.length, 0);
@@ -672,7 +678,7 @@ test('АПК buildView: решение отменено или изменено 
 
   // Ни одной карточки-ошибки: ни на вступлении в силу, ни дальше по цепочке.
   assert.equal(view.cards.filter((c) => c.kind === 'error').length, 0);
-  assert.equal(view.cards.length, 55);
+  assert.equal(view.cards.length, 57);
 });
 
 // --- Подача иска после досудебной претензии (абз. 1 ч. 5 ст. 4 АПК РФ) ---
@@ -726,4 +732,44 @@ test('АПК pretrial_claim: событие не попадает в экспо�
   const { icsTermsFromView } = await import('../apk/ics.js');
   const view = buildView({ pretrial_claim_sent_date_apk: '2026-09-03' }, { today: TODAY_APK });
   assert.deepEqual(icsTermsFromView(view), []);
+});
+
+// --- Индексация и возобновление исполнительного производства (абз. 4 ч. 1 ст. 183, абз. 2 ч. 1 ст. 327 АПК РФ) ---
+
+test('АПК buildView: indexation_application_apk и enforcement_resumption_application_apk — обычные срочные карточки', () => {
+  const view = buildView(
+    {
+      debtor_execution_date_apk: '2025-10-17',
+      enforcement_suspension_grounds_eliminated_date_apk: '2023-10-10',
+    },
+    { today: TODAY_APK },
+  );
+  const indexation = view.cards.find((c) => c.id === 'indexation_application_apk');
+  assert.equal(indexation.kind, 'term');
+  assert.equal(indexation.deadline, '2026-10-19');
+  assert.equal(indexation.norm, 'абз. 4 ч. 1 ст. 183 АПК РФ');
+  const resumption = view.cards.find((c) => c.id === 'enforcement_resumption_application_apk');
+  assert.equal(resumption.kind, 'term');
+  assert.equal(resumption.deadline, '2026-10-12');
+  assert.equal(resumption.norm, 'абз. 2 ч. 1 ст. 327 АПК РФ');
+  assert.equal(view.cards.filter((c) => c.kind === 'error').length, 0);
+});
+
+test('АПК buildView: без дат индексации и возобновления оба узла уходят в incomplete с нужным полем', () => {
+  const view = buildView({}, { today: TODAY_APK });
+  for (const [id, field] of [
+    ['indexation_application_apk', 'debtor_execution_date_apk'],
+    [
+      'enforcement_resumption_application_apk',
+      'enforcement_suspension_grounds_eliminated_date_apk',
+    ],
+  ]) {
+    assert.equal(view.cards.find((c) => c.id === id), undefined);
+    const node = view.incomplete.find((n) => n.id === id);
+    assert.ok(node, `узел "${id}" не попал в incomplete`);
+    assert.deepEqual(
+      node.missing_inputs.map((f) => f.id),
+      [field],
+    );
+  }
 });

@@ -37,6 +37,8 @@ export const SITUATION_CATEGORIES_APK = [
       'evidence_unavailability_notice',
       'enforcement_writ_duplicate_request',
       'protocol_remarks',
+      'indexation',
+      'enforcement_resumption',
     ],
   },
   {

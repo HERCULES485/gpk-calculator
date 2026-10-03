@@ -75,6 +75,8 @@ import {
   computeMeetingConveningAppealApk,
   computeProtocolRemarksApk,
   computePretrialClaimApk,
+  computeIndexationApplicationApk,
+  computeEnforcementResumptionApplicationApk,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -130,6 +132,8 @@ import {
   MEETING_CONVENING_APPEAL_APK,
   PROTOCOL_REMARKS_APK,
   PRETRIAL_CLAIM_APK,
+  INDEXATION_APPLICATION_APK,
+  ENFORCEMENT_RESUMPTION_APPLICATION_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -772,6 +776,20 @@ const NODE_REQUIREMENTS = {
     kind: 'event',
     deps: () => ['pretrial_claim_sent_date_apk'],
     compute: (i) => computePretrialClaimApk(i),
+  },
+  // Без restoration-узла: абз. 4 ч. 1 ст. 183 отсылает к ст. 117, но числового
+  // потолка восстановления не даёт (ст. 183 нет в перечне ч. 2 ст. 117).
+  indexation_application_apk: {
+    node: INDEXATION_APPLICATION_APK,
+    deps: () => ['debtor_execution_date_apk'],
+    compute: (i) => computeIndexationApplicationApk(i),
+  },
+  // Без restoration-узла: ч. 2 ст. 327 отсылает к ст. 117, но числового
+  // потолка восстановления не даёт (ст. 327 нет в перечне ч. 2 ст. 117).
+  enforcement_resumption_application_apk: {
+    node: ENFORCEMENT_RESUMPTION_APPLICATION_APK,
+    deps: () => ['enforcement_suspension_grounds_eliminated_date_apk'],
+    compute: (i) => computeEnforcementResumptionApplicationApk(i),
   },
 };
 
