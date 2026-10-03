@@ -979,10 +979,15 @@ function updateExportButtons() {
     if (btn) btn.disabled = currentSummary.length === 0;
   }
   // Пока экспортировать нечего, неактивные кнопки не показываем вовсе.
+  // #toolbar скрыт, только когда нечего ни копировать, ни выгружать; «Скачать
+  // .ics» и подпись про напоминания — когда нет календарных сроков, независимо
+  // от сводки.
   const nothing = currentSummary.length === 0 && currentIcsTerms.length === 0;
-  for (const selector of ['#toolbar', '.toolbar-secondary', '.toolbar-note']) {
+  const toolbar = document.querySelector('#toolbar');
+  if (toolbar) toolbar.hidden = nothing;
+  for (const selector of ['.toolbar-secondary', '.toolbar-note']) {
     const node = document.querySelector(selector);
-    if (node) node.hidden = nothing;
+    if (node) node.hidden = currentIcsTerms.length === 0;
   }
 }
 

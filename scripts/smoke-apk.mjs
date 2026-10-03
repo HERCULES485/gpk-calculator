@@ -1712,6 +1712,44 @@ await settle();
   }
 }
 
+// --- Панель экспорта: «Скачать .ics» и подпись про напоминания ---------------
+//
+// Скрываются, когда нет календарных сроков (currentIcsTerms пуст), независимо от
+// сводки: у события досудебной претензии сводка есть, а срока для календаря нет.
+// (а) pretrial_claim: #toolbar виден, .toolbar-secondary и .toolbar-note скрыты.
+// (б) protocol_remarks: обе части видны, #download-ics активна, в карточке —
+// фраза про напоминания в рабочих днях.
+await page.goto(`http://localhost:${port}/apk.html`, { waitUntil: 'networkidle' });
+
+await chooseSituation('pretrial_claim');
+await page.fill('#in-pretrial_claim_sent_date_apk', '03.09.2026');
+await settle();
+check(await page.locator('#toolbar').isVisible(), 'экспорт[pretrial_claim]: #toolbar не виден');
+check(await page.locator('.toolbar-secondary').isHidden(), 'экспорт[pretrial_claim]: .toolbar-secondary виден без календарных сроков');
+check(await page.locator('.toolbar-note').isHidden(), 'экспорт[pretrial_claim]: .toolbar-note виден без календарных сроков');
+
+await chooseSituation('protocol_remarks');
+// Дата подписания протокола — сегодняшняя: срок тогда не истёк, а истёкшие
+// сроки в экспорт не попадают (exportableCards), и проверка не зависела бы от
+// того, когда её запускают.
+const nowLocal = new Date();
+const todayRu = [nowLocal.getDate(), nowLocal.getMonth() + 1]
+  .map((n) => String(n).padStart(2, '0'))
+  .concat(String(nowLocal.getFullYear()))
+  .join('.');
+await page.fill('#in-protocol_signed_date_apk', todayRu);
+await settle();
+check(await page.locator('.toolbar-secondary').isVisible(), 'экспорт[protocol_remarks]: .toolbar-secondary не виден');
+check(await page.locator('.toolbar-note').isVisible(), 'экспорт[protocol_remarks]: .toolbar-note не виден');
+check(await page.locator('#download-ics').isEnabled(), 'экспорт[protocol_remarks]: #download-ics неактивна');
+{
+  const note = (await page.locator('#results .to-calendar-note').first().innerText()).trim();
+  check(
+    note === 'Напоминания за 1 и 2 рабочих дня ссылка не ставит — добавьте их в событии вручную.',
+    `экспорт[protocol_remarks]: фраза в карточке «${note}»`,
+  );
+}
+
 await browser.close();
 server.close();
 

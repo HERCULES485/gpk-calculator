@@ -65,10 +65,25 @@ export const ICS_UID_DOMAIN = 'apk-calculator';
 // числа 7/14/30 не формула, а подобранные значения. 10 дней здесь — решение по
 // месту в этом коридоре, а не расчёт.
 //
-// Сроков, исчисляемых рабочими днями, в модуле АПК нет ни одного — ветки для
-// working_day в таблице нет; для длительности, которой в таблице нет,
-// возвращается пустой список (срок остаётся без напоминаний, само событие в
-// файле при этом есть).
+// Сроки в рабочих днях: смещения тоже в рабочих днях — календарное смещение на
+// каникулах увело бы напоминание за границу срока. Значения совпадают с ГПК
+// (src/term-registry.js, ветка working_day) для тех же длительностей:
+//   5 рабочих дней  — evidence_unavailability_notice_apk, protocol_remarks_apk,
+//                     simplified_proceedings_reasoned_decision_request_apk;
+//   10 рабочих дней — administrative_liability_challenge_apk,
+//                     admin_liability_challenge_appeal_apk,
+//                     admin_liability_imposition_appeal_apk,
+//                     case_consolidation_severance_refusal_appeal_apk,
+//                     case_transfer_jurisdiction_appeal_apk,
+//                     coplaintiff_codefendant_refusal_appeal_apk,
+//                     corporate_ruling_appeal_apk, court_fine_appeal_apk,
+//                     court_order_objection_apk, meeting_convening_appeal_apk,
+//                     special_ruling_appeal_apk,
+//                     third_party_claim_refusal_appeal_apk,
+//                     third_party_no_claim_refusal_appeal_apk;
+//   15 рабочих дней — simplified_proceedings_appeal_apk.
+// Для длительности, которой в таблице нет, возвращается пустой список (срок
+// остаётся без напоминаний, само событие в файле при этом есть).
 export function reminderOffsets(duration) {
   if (duration && duration.unit === 'month' && duration.value === 1) {
     return [
@@ -104,6 +119,24 @@ export function reminderOffsets(duration) {
     return [
       { unit: 'day', value: 7 },
       { unit: 'month', value: 1 },
+    ];
+  }
+  if (duration && duration.unit === 'working_day' && duration.value === 5) {
+    return [
+      { unit: 'working_day', value: 1 },
+      { unit: 'working_day', value: 2 },
+    ];
+  }
+  if (duration && duration.unit === 'working_day' && duration.value === 10) {
+    return [
+      { unit: 'working_day', value: 2 },
+      { unit: 'working_day', value: 5 },
+    ];
+  }
+  if (duration && duration.unit === 'working_day' && duration.value === 15) {
+    return [
+      { unit: 'working_day', value: 3 },
+      { unit: 'working_day', value: 7 },
     ];
   }
   return [];

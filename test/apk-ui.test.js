@@ -11,7 +11,12 @@ import { readFileSync } from 'node:fs';
 
 import { SITUATIONS_APK, DEFAULT_SITUATION_APK } from '../apk/situations.js';
 import { INPUT_LABELS_APK } from '../apk/labels.js';
-import { TERM_REGISTRY_APK, ICS_PRODID, ICS_UID_DOMAIN } from '../apk/term-registry.js';
+import {
+  TERM_REGISTRY_APK,
+  ICS_PRODID,
+  ICS_UID_DOMAIN,
+  reminderOffsets,
+} from '../apk/term-registry.js';
 import { buildView, RESTORATION_SUBJECT_CATEGORIES_APK } from '../apk/views.js';
 import {
   RESTORATION_SUBJECT_CATEGORIES,
@@ -25,6 +30,8 @@ import {
   checkSituationCoverage,
 } from '../core/view/situations.js';
 import * as chainModule from '../apk/chain.js';
+import { computeCourtOrderObjectionApk } from '../apk/chain.js';
+import { reminderDates } from '../core/export/ics.js';
 
 // Узлы-определения из экспортов chain.js: объект со строковым id. Каталоги
 // оснований (массивы) и Set-ы идентификаторов узлами не являются.
@@ -772,4 +779,34 @@ test('АПК buildView: без дат индексации и возобновл
       [field],
     );
   }
+});
+
+// --- Напоминания для сроков в рабочих днях (reminderOffsets) ---
+
+test('АПК reminderOffsets: сроки в рабочих днях 5/10/15 — смещения в рабочих днях, как в ГПК', () => {
+  const wd = (value) => ({ unit: 'working_day', value });
+  assert.deepEqual(reminderOffsets(wd(5)), [wd(1), wd(2)]);
+  assert.deepEqual(reminderOffsets(wd(10)), [wd(2), wd(5)]);
+  assert.deepEqual(reminderOffsets(wd(15)), [wd(3), wd(7)]);
+  assert.deepEqual(reminderOffsets(wd(7)), []);
+});
+
+test('АПК reminderOffsets: у каждого срока реестра есть напоминания', () => {
+  for (const [id, term] of Object.entries(TERM_REGISTRY_APK)) {
+    assert.ok(
+      reminderOffsets(term.duration).length > 0,
+      `узел "${id}" (${JSON.stringify(term.duration)}) остался без напоминаний`,
+    );
+  }
+});
+
+test('АПК reminderDates: возражения на судебный приказ — напоминания в рабочих днях, праздник пропускается', () => {
+  const result = computeCourtOrderObjectionApk({
+    court_order_copy_received_date_apk: '2026-10-22',
+  });
+  assert.equal(result.deadline, '2026-11-06');
+  assert.deepEqual(reminderDates(result, '2026-10-01', reminderOffsets), [
+    '2026-11-03',
+    '2026-10-29',
+  ]);
 });
