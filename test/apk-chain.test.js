@@ -152,6 +152,8 @@ import {
   CORPORATE_RULING_APPEAL_APK,
   computeMeetingConveningAppealApk,
   MEETING_CONVENING_APPEAL_APK,
+  computeProtocolRemarksApk,
+  PROTOCOL_REMARKS_APK,
 } from '../apk/chain.js';
 // Нужен ровно для одной проверки: узел-окно не должен попасть в реестр .ics
 // (см. последний тест файла) — граница решения по экспорту.
@@ -3496,4 +3498,44 @@ test('meeting_convening_appeal_apk: без meeting_convening_decision_date_apk �
 test('meeting_convening_appeal_apk: без restoration_norm и без ics — restoration-узла нет', () => {
   assert.equal(MEETING_CONVENING_APPEAL_APK.restoration_norm, undefined);
   assert.equal(MEETING_CONVENING_APPEAL_APK.ics, undefined);
+});
+
+// Замечания на протокол судебного заседания (ч. 7 ст. 155 АПК РФ). Пять
+// рабочих дней после подписания протокола, течение — со следующего дня
+// (ч. 4 ст. 113). Ожидаемые даты сверены с производственным календарём.
+
+test('protocol_remarks_apk: пять рабочих дней, без праздников рядом', () => {
+  const term = computeProtocolRemarksApk({ protocol_signed_date_apk: '2025-10-14' });
+  assert.equal(term.deadline, '2025-10-21');
+  assert.deepEqual(term.duration, { value: 5, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 7 ст. 155 АПК РФ');
+  assert.deepEqual(term.norm.calculation, [
+    'ч. 3 ст. 113 АПК РФ',
+    'ч. 4 ст. 113 АПК РФ',
+    'ч. 5 ст. 155 АПК РФ',
+  ]);
+});
+
+test('protocol_remarks_apk: рабочая суббота 01.11.2025, выходной 03.11 и праздник 04.11 внутри периода', () => {
+  const term = computeProtocolRemarksApk({ protocol_signed_date_apk: '2025-10-29' });
+  assert.equal(term.deadline, '2025-11-06');
+});
+
+test('protocol_remarks_apk: перенос через новогодние каникулы', () => {
+  const term = computeProtocolRemarksApk({ protocol_signed_date_apk: '2025-12-26' });
+  assert.equal(term.deadline, '2026-01-14');
+});
+
+test('protocol_remarks_apk: майские праздники 2026', () => {
+  const term = computeProtocolRemarksApk({ protocol_signed_date_apk: '2026-04-30' });
+  assert.equal(term.deadline, '2026-05-08');
+});
+
+test('protocol_remarks_apk: без protocol_signed_date_apk — ошибка, упоминающая именно это поле', () => {
+  assert.throws(() => computeProtocolRemarksApk({}), /protocol_signed_date_apk/);
+});
+
+test('protocol_remarks_apk: без restoration_norm и без ics — restoration-узла нет', () => {
+  assert.equal(PROTOCOL_REMARKS_APK.restoration_norm, undefined);
+  assert.equal(PROTOCOL_REMARKS_APK.ics, undefined);
 });

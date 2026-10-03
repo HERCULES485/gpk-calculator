@@ -492,6 +492,16 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['meeting_convening_appeal_apk'],
   },
+  {
+    id: 'protocol_remarks',
+    label: 'Замечания на протокол судебного заседания',
+    // Ч. 7 ст. 155 АПК РФ. Единственное поле — дата подписания протокола
+    // (судебного заседания или отдельного процессуального действия).
+    // Числового потолка восстановления в норме нет — restoration-узла нет.
+    primary_field: 'protocol_signed_date_apk',
+    fields: [],
+    nodes: ['protocol_remarks_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';
