@@ -1152,6 +1152,9 @@ function renderSituationSwitch(current) {
         setSituationPanelOpen(false);
         search.value = '';
         filterSituations('');
+        // Радиокнопка, на которой был фокус, скрыта вместе с панелью —
+        // возвращаем его на кнопку «Сменить», а не на body.
+        document.getElementById('situation-toggle').focus();
       });
       label.appendChild(input);
       label.appendChild(el('span', null, s.label));

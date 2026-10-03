@@ -1457,6 +1457,10 @@ check(
   'переключатель: после выбора ситуации aria-expanded не «false»',
 );
 check(
+  (await page.evaluate(() => document.activeElement?.id)) === 'situation-toggle',
+  `переключатель: после выбора ситуации фокус на «${await page.evaluate(() => document.activeElement?.id)}», ждали situation-toggle`,
+);
+check(
   (await page.textContent('#situation-current-name')) === situationLabel('court_costs'),
   `переключатель: после выбора в строке «${await page.textContent('#situation-current-name')}», ждали court_costs`,
 );
