@@ -68,6 +68,12 @@ const check = (ok, message) => {
   if (!ok) problems.push(message);
 };
 
+// Панель переключателя ситуаций свёрнута по умолчанию (#situation hidden) —
+// перед обращением к её элементам раскрываем её кнопкой #situation-toggle.
+async function openSituationPanel(p = page) {
+  if (await p.locator('#situation').isHidden()) await p.click('#situation-toggle');
+}
+
 async function chooseSituation(id) {
   // Категория «обжалование отдельных процессуальных определений» свёрнута по
   // умолчанию (<details> без open) — радиокнопки внутри невидимы для
@@ -76,6 +82,7 @@ async function chooseSituation(id) {
   const input = page.locator(`#situation input[value="${id}"]`);
   const details = input.locator('xpath=ancestor::details[1]');
   if (await details.count()) await details.evaluate((node) => { node.open = true; });
+  await openSituationPanel();
   await input.check();
   await settle();
 }
@@ -531,6 +538,7 @@ check(
 // атрибуту: display у label.situation иначе перебивает [hidden].
 
 await page.goto(`http://localhost:${port}/apk.html`, { waitUntil: 'networkidle' });
+await openSituationPanel();
 
 const searchState = () =>
   page.evaluate(() => {
@@ -549,6 +557,7 @@ const searchState = () =>
   });
 const renderedLabels = () => page.locator('#situation label.situation:visible').count();
 const search = async (text) => {
+  await openSituationPanel();
   await page.fill('#situation-search-input', text);
   await settle();
 };
@@ -1390,6 +1399,101 @@ async function expandChainCards(p, tag) {
   check((await page.locator('#results .chain').count()) === 1, 'у ветви decision_chain нет контейнера цепочки');
   await chooseSituation('rulings');
   check((await page.locator('#results .chain, #results .chain-step').count()) === 0, 'контейнер цепочки у ветви rulings');
+}
+
+// --- Свёрнутый переключатель ситуаций, первый экран, панель экспорта ---------
+//
+// Панель #situation при загрузке свёрнута на любой ширине: над ней строка
+// текущей ситуации с кнопкой «Сменить», поэтому основное поле даты попадает
+// на первый экран телефона. Выбор ситуации сворачивает панель и сбрасывает
+// поиск. Пока экспортировать нечего, #toolbar не показывается.
+
+const { SITUATIONS_APK } = await import('../apk/situations.js');
+const situationLabel = (id) => SITUATIONS_APK.find((s) => s.id === id).label;
+
+// 1. После загрузки панель свёрнута, в строке — ситуация по умолчанию.
+await page.goto(`http://localhost:${port}/apk.html`, { waitUntil: 'networkidle' });
+check(await page.locator('#situation').isHidden(), 'переключатель: после загрузки #situation не скрыт');
+check(
+  (await page.getAttribute('#situation-toggle', 'aria-expanded')) === 'false',
+  'переключатель: после загрузки aria-expanded у #situation-toggle не «false»',
+);
+check(
+  (await page.textContent('#situation-current-name')) === situationLabel(DEFAULT_SITUATION_APK),
+  `переключатель: в строке ситуации «${await page.textContent('#situation-current-name')}», ждали ситуацию по умолчанию`,
+);
+
+// 2. Первый экран телефона 375×812: основное поле видно без прокрутки.
+{
+  const originalViewport = page.viewportSize();
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.reload({ waitUntil: 'networkidle' });
+  const pos = await page.evaluate(() => {
+    const r = document.querySelector('section.primary input').getBoundingClientRect();
+    return { bottom: r.bottom, scrollY: window.scrollY };
+  });
+  check(
+    pos.scrollY === 0 && pos.bottom <= 812,
+    `первый экран 375×812: низ основного поля ${pos.bottom}px (scrollY ${pos.scrollY}), ждали ≤ 812`,
+  );
+  await page.setViewportSize(originalViewport);
+}
+
+// 3. Открытие панели, выбор другой ситуации кликом по label, сброс поиска.
+await page.goto(`http://localhost:${port}/apk.html`, { waitUntil: 'networkidle' });
+await page.click('#situation-toggle');
+check(await page.locator('#situation').isVisible(), 'переключатель: после клика «Сменить» #situation не виден');
+check(
+  (await page.getAttribute('#situation-toggle', 'aria-expanded')) === 'true',
+  'переключатель: у открытой панели aria-expanded не «true»',
+);
+await page.fill('#situation-search-input', 'судебные расходы');
+await settle();
+await page.locator('#situation input[value="court_costs"]').locator('xpath=ancestor::label[1]').click();
+await settle();
+check(await page.locator('#situation').isHidden(), 'переключатель: после выбора ситуации панель не свернулась');
+check(
+  (await page.getAttribute('#situation-toggle', 'aria-expanded')) === 'false',
+  'переключатель: после выбора ситуации aria-expanded не «false»',
+);
+check(
+  (await page.textContent('#situation-current-name')) === situationLabel('court_costs'),
+  `переключатель: после выбора в строке «${await page.textContent('#situation-current-name')}», ждали court_costs`,
+);
+await page.click('#situation-toggle');
+check(
+  (await page.inputValue('#situation-search-input')) === '',
+  `переключатель: после повторного открытия в поиске «${await page.inputValue('#situation-search-input')}»`,
+);
+
+// 4. Пустое состояние: #toolbar скрыт; с результатами — виден, кнопки активны.
+await page.goto(`http://localhost:${port}/apk.html`, { waitUntil: 'networkidle' });
+check(await page.locator('#toolbar').isHidden(), 'экспорт: в пустом состоянии #toolbar виден');
+await page.fill('#in-decision_full_text_date', '11.03.2025');
+await settle();
+check((await page.locator('#results .card').count()) > 0, 'экспорт: после ввода основной даты результатов нет');
+check(await page.locator('#toolbar').isVisible(), 'экспорт: с результатами #toolbar не виден');
+for (const id of ['copy-terms', 'print-terms']) {
+  check(await page.locator(`#${id}`).isEnabled(), `экспорт: с результатами кнопка #${id} неактивна`);
+}
+
+// 5. Пустое состояние decision_chain: у каждой заглушки — поле или кнопка
+// «Перейти к полю», тупиковой фразы «уже есть в этой форме» нет.
+await page.goto(`http://localhost:${port}/apk.html`, { waitUntil: 'networkidle' });
+await chooseSituation('decision_chain');
+{
+  const empty = await page.evaluate(() => ({
+    dead: document.getElementById('results').textContent.includes('уже есть в этой форме'),
+    invites: [...document.querySelectorAll('#results .invite')].map((i) => ({
+      title: i.querySelector('h2')?.textContent ?? '',
+      ok: Boolean(i.querySelector('input, select, button.link-button')),
+    })),
+  }));
+  check(!empty.dead, 'decision_chain[empty]: в #results есть «уже есть в этой форме»');
+  check(empty.invites.length > 0, 'decision_chain[empty]: нет ни одной заглушки .invite');
+  for (const { title, ok } of empty.invites) {
+    check(ok, `decision_chain[empty]: у заглушки «${title}» нет ни поля, ни кнопки «Перейти к полю»`);
+  }
 }
 
 await browser.close();
