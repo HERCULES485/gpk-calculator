@@ -89,7 +89,9 @@ import {
   computeReasonableTermExecutionCompensationApk,
   REASONABLE_TERM_EXECUTION_COMPENSATION_APK,
   computeSimplifiedProceedingsAppealApk,
+  computeSimplifiedProceedingsReasonedDecisionRequestApk,
   SIMPLIFIED_PROCEEDINGS_APPEAL_APK,
+  SIMPLIFIED_PROCEEDINGS_REASONED_DECISION_REQUEST_APK,
   computeSimplifiedProceedingsEntryIntoForceApk,
   SIMPLIFIED_PROCEEDINGS_ENTRY_INTO_FORCE_APK,
   computeCourtOrderObjectionApk,
@@ -3368,4 +3370,62 @@ test('вступление в силу после кассации АПК: ре�
   assert.equal(entry.based_on, 'cassation_general_apk');
   const affirmed = computeEntryIntoForceAfterCassationApk({ ...inputs, appeal_outcome: 'affirmed' });
   assert.equal(entry.date, affirmed.date);
+});
+
+// Заявление о составлении мотивированного решения по делу упрощённого
+// производства (ч. 2 ст. 229 АПК РФ). Пять рабочих дней со дня РАЗМЕЩЕНИЯ
+// решения в сети «Интернет» (отдельное поле simplified_decision_published_date_apk),
+// течение — со следующего дня (ч. 4 ст. 113). Ожидаемые даты сверены с
+// производственным календарём.
+
+test('мотивированное решение (упрощённое производство): пять рабочих дней, без праздников рядом', () => {
+  const term = computeSimplifiedProceedingsReasonedDecisionRequestApk({
+    simplified_decision_published_date_apk: '2025-10-14',
+  });
+  assert.equal(term.deadline, '2025-10-21');
+  assert.deepEqual(term.duration, { value: 5, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 2 ст. 229 АПК РФ');
+});
+
+test('мотивированное решение (упрощённое производство): рабочая суббота 01.11.2025, выходной 03.11 и праздник 04.11 внутри периода', () => {
+  // 1 ноября 2025 — рабочая суббота; 3 ноября — выходной по переносу;
+  // 4 ноября — праздник.
+  const term = computeSimplifiedProceedingsReasonedDecisionRequestApk({
+    simplified_decision_published_date_apk: '2025-10-29',
+  });
+  assert.equal(term.deadline, '2025-11-06');
+});
+
+test('мотивированное решение (упрощённое производство): перенос через новогодние каникулы', () => {
+  // 31.12.2025 выходной по переносу; 01–09.01.2026 нерабочие.
+  const term = computeSimplifiedProceedingsReasonedDecisionRequestApk({
+    simplified_decision_published_date_apk: '2025-12-26',
+  });
+  assert.equal(term.deadline, '2026-01-14');
+});
+
+test('мотивированное решение (упрощённое производство): майские праздники 2026', () => {
+  const term = computeSimplifiedProceedingsReasonedDecisionRequestApk({
+    simplified_decision_published_date_apk: '2026-04-30',
+  });
+  assert.equal(term.deadline, '2026-05-08');
+});
+
+test('мотивированное решение (упрощённое производство): без simplified_decision_published_date_apk — понятная ошибка', () => {
+  assert.throws(
+    () => computeSimplifiedProceedingsReasonedDecisionRequestApk({}),
+    /simplified_decision_published_date_apk/,
+  );
+});
+
+test('мотивированное решение (упрощённое производство): без restoration-узла, якорь — не simplified_proceedings_decision_date', () => {
+  assert.equal(SIMPLIFIED_PROCEEDINGS_REASONED_DECISION_REQUEST_APK.restoration_norm, undefined);
+  // Дата принятия решения узлу не подходит: якорь — только дата размещения.
+  assert.throws(
+    () =>
+      computeSimplifiedProceedingsReasonedDecisionRequestApk({
+        simplified_proceedings_decision_date: '2025-10-14',
+      }),
+    /simplified_decision_published_date_apk/,
+  );
 });
