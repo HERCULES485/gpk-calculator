@@ -148,6 +148,10 @@ import {
   COURT_FINE_APPEAL_APK,
   computeAdditionalDecisionRefusalAppealApk,
   ADDITIONAL_DECISION_REFUSAL_APPEAL_APK,
+  computeCorporateRulingAppealApk,
+  CORPORATE_RULING_APPEAL_APK,
+  computeMeetingConveningAppealApk,
+  MEETING_CONVENING_APPEAL_APK,
 } from '../apk/chain.js';
 // Нужен ровно для одной проверки: узел-окно не должен попасть в реестр .ics
 // (см. последний тест файла) — граница решения по экспорту.
@@ -3428,4 +3432,68 @@ test('мотивированное решение (упрощённое прои
       }),
     /simplified_decision_published_date_apk/,
   );
+});
+
+// Обжалование определения по корпоративному спору (ч. 1 ст. 225.9 АПК РФ).
+// Десять рабочих дней со дня вынесения определения, течение — со следующего
+// дня (ч. 4 ст. 113). Ожидаемые даты сверены с производственным календарём.
+
+test('corporate_ruling_appeal_apk: десять рабочих дней, без праздников рядом', () => {
+  const term = computeCorporateRulingAppealApk({ corporate_ruling_date_apk: '2025-10-14' });
+  assert.equal(term.deadline, '2025-10-28');
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 1 ст. 225.9 АПК РФ');
+  assert.deepEqual(term.norm.calculation, [
+    'ч. 2 ст. 184 АПК РФ',
+    'ч. 3 ст. 113 АПК РФ',
+    'ч. 4 ст. 113 АПК РФ',
+  ]);
+});
+
+test('corporate_ruling_appeal_apk: рабочая суббота 01.11.2025, выходной 03.11 и праздник 04.11 внутри периода', () => {
+  const term = computeCorporateRulingAppealApk({ corporate_ruling_date_apk: '2025-10-29' });
+  assert.equal(term.deadline, '2025-11-13');
+});
+
+test('corporate_ruling_appeal_apk: без corporate_ruling_date_apk — ошибка, упоминающая именно это поле', () => {
+  assert.throws(() => computeCorporateRulingAppealApk({}), /corporate_ruling_date_apk/);
+});
+
+test('corporate_ruling_appeal_apk: без restoration_norm и без ics — restoration-узла нет', () => {
+  assert.equal(CORPORATE_RULING_APPEAL_APK.restoration_norm, undefined);
+  assert.equal(CORPORATE_RULING_APPEAL_APK.ics, undefined);
+});
+
+// Обжалование решения о понуждении созвать общее собрание участников
+// (ч. 4 ст. 225.7 АПК РФ). Десять рабочих дней со дня принятия решения.
+
+test('meeting_convening_appeal_apk: перенос через новогодние каникулы', () => {
+  // 31.12.2025 выходной по переносу; 01–09.01.2026 нерабочие.
+  const term = computeMeetingConveningAppealApk({
+    meeting_convening_decision_date_apk: '2025-12-26',
+  });
+  assert.equal(term.deadline, '2026-01-21');
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 4 ст. 225.7 АПК РФ');
+  assert.deepEqual(term.norm.calculation, [
+    'ч. 2 ст. 176 АПК РФ',
+    'ч. 3 ст. 113 АПК РФ',
+    'ч. 4 ст. 113 АПК РФ',
+  ]);
+});
+
+test('meeting_convening_appeal_apk: майские праздники 2026', () => {
+  const term = computeMeetingConveningAppealApk({
+    meeting_convening_decision_date_apk: '2026-04-30',
+  });
+  assert.equal(term.deadline, '2026-05-18');
+});
+
+test('meeting_convening_appeal_apk: без meeting_convening_decision_date_apk — ошибка, упоминающая именно это поле', () => {
+  assert.throws(() => computeMeetingConveningAppealApk({}), /meeting_convening_decision_date_apk/);
+});
+
+test('meeting_convening_appeal_apk: без restoration_norm и без ics — restoration-узла нет', () => {
+  assert.equal(MEETING_CONVENING_APPEAL_APK.restoration_norm, undefined);
+  assert.equal(MEETING_CONVENING_APPEAL_APK.ics, undefined);
 });

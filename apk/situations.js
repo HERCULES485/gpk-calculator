@@ -467,6 +467,31 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['additional_decision_refusal_appeal_apk'],
   },
+  {
+    id: 'corporate_ruling_appeal',
+    label:
+      'Корпоративный спор: обжалование определения (кроме прекращения ' +
+      'производства и оставления без рассмотрения)',
+    // Ч. 1 ст. 225.9 АПК РФ. Специальный десятидневный срок вместо общего
+    // месячного (ч. 3 ст. 188); на определения о прекращении производства и
+    // об оставлении заявления без рассмотрения он не распространяется —
+    // это описано текстом в logic узла (apk/chain.js), отдельного поля нет.
+    primary_field: 'corporate_ruling_date_apk',
+    fields: [],
+    nodes: ['corporate_ruling_appeal_apk'],
+  },
+  {
+    id: 'meeting_convening_appeal',
+    label:
+      'Корпоративный спор: суд обязал созвать общее собрание участников — ' +
+      'апелляция',
+    // Ч. 4 ст. 225.7 АПК РФ. Десять дней со дня принятия решения. Кассация
+    // (ч. 5 ст. 225.7) сознательно не включена — см. комментарий к узлу в
+    // apk/chain.js.
+    primary_field: 'meeting_convening_decision_date_apk',
+    fields: [],
+    nodes: ['meeting_convening_appeal_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';

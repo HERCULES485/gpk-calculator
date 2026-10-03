@@ -37,6 +37,13 @@ export const SITUATION_CATEGORIES_APK = [
     ids: ['court_order', 'simplified_proceedings'],
   },
   {
+    // Новая категория — решение архитектора (по задаче про корпоративные
+    // споры: ч. 1 ст. 225.9 и ч. 4 ст. 225.7 АПК РФ).
+    title: 'Корпоративные споры',
+    collapsed: true,
+    ids: ['corporate_ruling_appeal', 'meeting_convening_appeal'],
+  },
+  {
     title: 'Оспаривание актов и привлечения к ответственности',
     collapsed: true,
     ids: [

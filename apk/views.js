@@ -71,6 +71,8 @@ import {
   computeEnforcementWritDuplicateRequestApk,
   computeCourtFineAppealApk,
   computeAdditionalDecisionRefusalAppealApk,
+  computeCorporateRulingAppealApk,
+  computeMeetingConveningAppealApk,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -122,6 +124,8 @@ import {
   ENFORCEMENT_WRIT_DUPLICATE_REQUEST_APK,
   COURT_FINE_APPEAL_APK,
   ADDITIONAL_DECISION_REFUSAL_APPEAL_APK,
+  CORPORATE_RULING_APPEAL_APK,
+  MEETING_CONVENING_APPEAL_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -733,6 +737,18 @@ const NODE_REQUIREMENTS = {
     node: ADDITIONAL_DECISION_REFUSAL_APPEAL_APK,
     deps: () => ['additional_decision_refusal_ruling_date_apk'],
     compute: (i) => computeAdditionalDecisionRefusalAppealApk(i),
+  },
+  // Без restoration-узла: ч. 1 ст. 225.9 восстановление не упоминает.
+  corporate_ruling_appeal_apk: {
+    node: CORPORATE_RULING_APPEAL_APK,
+    deps: () => ['corporate_ruling_date_apk'],
+    compute: (i) => computeCorporateRulingAppealApk(i),
+  },
+  // Без restoration-узла: ч. 4 ст. 225.7 восстановление не упоминает.
+  meeting_convening_appeal_apk: {
+    node: MEETING_CONVENING_APPEAL_APK,
+    deps: () => ['meeting_convening_decision_date_apk'],
+    compute: (i) => computeMeetingConveningAppealApk(i),
   },
 };
 
