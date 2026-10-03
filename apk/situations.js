@@ -572,6 +572,26 @@ export const SITUATIONS_APK = [
     fields: [],
     nodes: ['arbitral_award_challenge_ruling_cassation_apk'],
   },
+  {
+    id: 'foreign_judgment_enforcement_term',
+    label: 'Иностранное судебное или арбитражное решение: срок предъявления к исполнению',
+    // Ч. 2 ст. 246 АПК РФ. Единственное поле — дата вступления в законную
+    // силу иностранного решения. Три года, числового потолка восстановления
+    // в норме нет — restoration-узла нет.
+    primary_field: 'foreign_judgment_entry_into_force_date_apk',
+    fields: [],
+    nodes: ['foreign_judgment_enforcement_term_apk'],
+  },
+  {
+    id: 'antisuit_injunction_cassation',
+    label:
+      'Суд рассмотрел заявление о запрете иностранного разбирательства (ст. 248.2) — хочу обжаловать',
+    // Ч. 9 ст. 248.2 АПК РФ. Единственное поле — дата вынесения определения
+    // (изготовления в полном объёме). Прямая кассация, restoration-узла нет.
+    primary_field: 'antisuit_injunction_ruling_date_apk',
+    fields: [],
+    nodes: ['antisuit_injunction_cassation_apk'],
+  },
 ];
 
 export const DEFAULT_SITUATION_APK = 'decision_chain';

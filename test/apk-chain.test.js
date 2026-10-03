@@ -168,6 +168,10 @@ import {
   ARBITRAL_AWARD_CHALLENGE_RULING_CASSATION_APK,
   computeArbitralCompetenceChallengeApk,
   ARBITRAL_COMPETENCE_CHALLENGE_APK,
+  computeForeignJudgmentEnforcementTermApk,
+  FOREIGN_JUDGMENT_ENFORCEMENT_TERM_APK,
+  computeAntisuitInjunctionCassationApk,
+  ANTISUIT_INJUNCTION_CASSATION_APK,
 } from '../apk/chain.js';
 // Нужен ровно для одной проверки: узел-окно не должен попасть в реестр .ics
 // (см. последний тест файла) — граница решения по экспорту.
@@ -3792,6 +3796,76 @@ test('узлы третейских судов: без restoration_norm, в ре
     ARBITRAL_AWARD_CHALLENGE_NONPARTY_APK,
     ARBITRAL_AWARD_CHALLENGE_RULING_CASSATION_APK,
     ARBITRAL_COMPETENCE_CHALLENGE_APK,
+  ]) {
+    assert.equal(node.restoration_norm, undefined);
+    assert.ok(TERM_REGISTRY_APK[node.id], `узел "${node.id}" не попал в TERM_REGISTRY_APK`);
+    assert.ok(reminderOffsets(node.duration).length > 0, `у узла "${node.id}" нет напоминаний`);
+  }
+});
+
+// --- Иностранные решения и разбирательства (ч. 2 ст. 246, ч. 9 ст. 248.2 АПК РФ) ---
+
+test('foreign_judgment_enforcement_term_apk: 12.10.2023 — три года, 12.10.2026 (пн), без переноса', () => {
+  const term = computeForeignJudgmentEnforcementTermApk({
+    foreign_judgment_entry_into_force_date_apk: '2023-10-12',
+  });
+  assert.equal(term.raw_deadline, '2026-10-12');
+  assert.equal(term.deadline, '2026-10-12');
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'ч. 2 ст. 246 АПК РФ');
+});
+
+test('foreign_judgment_enforcement_term_apk: 10.10.2023 — 10.10.2026 суббота, перенос на 12.10.2026', () => {
+  const term = computeForeignJudgmentEnforcementTermApk({
+    foreign_judgment_entry_into_force_date_apk: '2023-10-10',
+  });
+  assert.equal(term.raw_deadline, '2026-10-10');
+  assert.equal(term.deadline, '2026-10-12');
+  assert.equal(term.shifted, true);
+});
+
+test('foreign_judgment_enforcement_term_apk: 03.05.2024 — 03.05.2027 выходной (1–3 мая 2027), перенос на 04.05.2027', () => {
+  const term = computeForeignJudgmentEnforcementTermApk({
+    foreign_judgment_entry_into_force_date_apk: '2024-05-03',
+  });
+  assert.equal(term.raw_deadline, '2027-05-03');
+  assert.equal(term.deadline, '2027-05-04');
+  assert.equal(term.shifted, true);
+});
+
+test('antisuit_injunction_cassation_apk: 31.03.2026 — один месяц, 30.04.2026 (31-го в апреле нет), без переноса', () => {
+  const term = computeAntisuitInjunctionCassationApk({
+    antisuit_injunction_ruling_date_apk: '2026-03-31',
+  });
+  assert.equal(term.raw_deadline, '2026-04-30');
+  assert.equal(term.deadline, '2026-04-30');
+  assert.equal(term.shifted, false);
+  assert.equal(term.norm.primary, 'ч. 9 ст. 248.2 АПК РФ');
+});
+
+test('antisuit_injunction_cassation_apk: 12.05.2026 — 12.06.2026 праздник, далее сб–вс, перенос на 15.06.2026', () => {
+  const term = computeAntisuitInjunctionCassationApk({
+    antisuit_injunction_ruling_date_apk: '2026-05-12',
+  });
+  assert.equal(term.raw_deadline, '2026-06-12');
+  assert.equal(term.deadline, '2026-06-15');
+  assert.equal(term.shifted, true);
+});
+
+test('узлы иностранных решений и разбирательств: без якоря — ошибка, упоминающая именно своё поле', () => {
+  for (const [compute, field] of [
+    [computeForeignJudgmentEnforcementTermApk, 'foreign_judgment_entry_into_force_date_apk'],
+    [computeAntisuitInjunctionCassationApk, 'antisuit_injunction_ruling_date_apk'],
+  ]) {
+    assert.throws(() => compute({}), new RegExp(field));
+    assert.throws(() => compute(), new RegExp(field));
+  }
+});
+
+test('узлы иностранных решений и разбирательств: без restoration_norm, в реестре сроков, у каждого есть напоминания', () => {
+  for (const node of [
+    FOREIGN_JUDGMENT_ENFORCEMENT_TERM_APK,
+    ANTISUIT_INJUNCTION_CASSATION_APK,
   ]) {
     assert.equal(node.restoration_norm, undefined);
     assert.ok(TERM_REGISTRY_APK[node.id], `узел "${node.id}" не попал в TERM_REGISTRY_APK`);
