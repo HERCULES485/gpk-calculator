@@ -970,6 +970,12 @@ function updateExportButtons() {
     const btn = document.getElementById(id);
     if (btn) btn.disabled = currentSummary.length === 0;
   }
+  // Пока экспортировать нечего, неактивные кнопки не показываем вовсе.
+  const nothing = currentSummary.length === 0 && currentIcsTerms.length === 0;
+  for (const selector of ['#toolbar', '.toolbar-secondary', '.toolbar-note']) {
+    const node = document.querySelector(selector);
+    if (node) node.hidden = nothing;
+  }
 }
 
 function googleCalendarLink(card) {
@@ -1096,6 +1102,9 @@ function renderPrintList(situation) {
 
 function renderSituationSwitch(current) {
   const root = document.getElementById('situation');
+  // Строка текущей ситуации над свёрнутой панелью — обновляется и при первой
+  // отрисовке, и при каждой следующей (ранний return ниже).
+  document.getElementById('situation-current-name').textContent = current.label;
   if (root.dataset.rendered === 'yes') {
     for (const input of root.querySelectorAll('input[type=radio]')) {
       input.checked = input.value === current.id;
@@ -1138,6 +1147,14 @@ function renderSituationSwitch(current) {
         // трогает: скрытая ветвь при возврате показывает те же значения.
         state.situation = input.value;
         render();
+        // Выбор сделан — панель сворачивается, а поиск сбрасывается, чтобы при
+        // следующем открытии был полный список.
+        setSituationPanelOpen(false);
+        search.value = '';
+        filterSituations('');
+        // Радиокнопка, на которой был фокус, скрыта вместе с панелью —
+        // возвращаем его на кнопку «Сменить», а не на body.
+        document.getElementById('situation-toggle').focus();
       });
       label.appendChild(input);
       label.appendChild(el('span', null, s.label));
@@ -1163,6 +1180,16 @@ function renderSituationSwitch(current) {
     }
   }
   root.dataset.rendered = 'yes';
+}
+
+// Панель переключателя ситуаций: по умолчанию свёрнута (атрибут hidden в
+// разметке), на экране — только строка текущей ситуации с кнопкой «Сменить».
+// Фокус не переводится: на телефоне это открыло бы клавиатуру поиска.
+function setSituationPanelOpen(open) {
+  const toggle = document.getElementById('situation-toggle');
+  document.getElementById('situation').hidden = !open;
+  toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  toggle.textContent = open ? 'Свернуть' : 'Сменить';
 }
 
 // Фильтр переключателя по названию ситуации (текст <span> внутри label),
@@ -1348,6 +1375,7 @@ function render() {
   // У ветви с цепочкой узлы кладутся в её контейнер (см. chainSlot), у всех
   // остальных — прямо в #results, как и раньше.
   const chain = situation.chain ? el('div', 'chain') : null;
+  if (chain) root.appendChild(chain);
 
   for (const id of situation.nodes) {
     const card = cardById(id);
@@ -1383,7 +1411,6 @@ function render() {
     const inc = incById(id);
     if (inc) parent.appendChild(renderIncompleteNode(inc));
   }
-  if (chain) root.appendChild(chain);
 
   if (!root.childElementCount) {
     const first = situation.primary_field ?? situation.fields[0];
@@ -1406,6 +1433,9 @@ function init() {
   document.getElementById('download-ics')?.addEventListener('click', downloadICS);
   document.getElementById('copy-terms')?.addEventListener('click', copyTerms);
   document.getElementById('print-terms')?.addEventListener('click', printTerms);
+  document.getElementById('situation-toggle').addEventListener('click', () => {
+    setSituationPanelOpen(document.getElementById('situation').hidden);
+  });
 
   render();
 }

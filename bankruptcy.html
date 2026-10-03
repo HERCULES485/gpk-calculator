@@ -108,6 +108,9 @@
       .empty { color: var(--muted); font-size: 15px; padding: 8px 2px; }
 
       .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+      /* Пока экспортировать нечего, панель скрыта атрибутом hidden — display: flex
+         выше перебивает правило браузера для [hidden]. */
+      .toolbar[hidden] { display: none; }
       .toolbar button {
         font: inherit; font-weight: 600; font-size: 14px;
         color: var(--on-accent); background: var(--accent); border: none;
@@ -136,6 +139,13 @@
         margin-bottom: 16px;
         display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px 8px;
       }
+      .situation-current { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 12px 16px; margin-bottom: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+      .situation-current-label { color: var(--muted); font-size: 13px; }
+      #situation-current-name { font-size: 15px; }
+      #situation-toggle { margin-left: auto; }
+      /* Панель свёрнута атрибутом hidden, а display: flex выше перебивает
+         правило браузера для [hidden] — тот же случай, что у label.situation. */
+      .situation-switch[hidden] { display: none; }
       #situation-search-input, #situation-search-count, #situation-search-empty {
         flex-basis: 100%;
       }
@@ -309,6 +319,7 @@
         header p,
         .header-nav,
         .situation-switch,
+        .situation-current,
         section.primary,
         .toolbar,
         .toolbar-note,
@@ -416,7 +427,12 @@
         <p class="header-nav"><a href="apk.html">← Сроки по АПК РФ (апелляция, кассация, надзор)</a></p>
       </header>
 
-      <section class="situation-switch" id="situation"></section>
+      <div class="situation-current" id="situation-current">
+        <span class="situation-current-label">Ситуация:</span>
+        <strong id="situation-current-name"></strong>
+        <button type="button" id="situation-toggle" class="link-button" aria-expanded="false" aria-controls="situation">Сменить</button>
+      </div>
+      <section class="situation-switch" id="situation" hidden></section>
 
       <!-- Содержимое рисует renderPrimaryField (apk/bankruptcy-app.js) — под
            текущий situation.primary_field выбранной ветви. -->
