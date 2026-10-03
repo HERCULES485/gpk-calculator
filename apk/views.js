@@ -81,6 +81,8 @@ import {
   computeArbitralAwardChallengeNonpartyApk,
   computeArbitralAwardChallengeRulingCassationApk,
   computeArbitralCompetenceChallengeApk,
+  computeForeignJudgmentEnforcementTermApk,
+  computeAntisuitInjunctionCassationApk,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -142,6 +144,8 @@ import {
   ARBITRAL_AWARD_CHALLENGE_NONPARTY_APK,
   ARBITRAL_AWARD_CHALLENGE_RULING_CASSATION_APK,
   ARBITRAL_COMPETENCE_CHALLENGE_APK,
+  FOREIGN_JUDGMENT_ENFORCEMENT_TERM_APK,
+  ANTISUIT_INJUNCTION_CASSATION_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -820,6 +824,19 @@ const NODE_REQUIREMENTS = {
     node: ARBITRAL_COMPETENCE_CHALLENGE_APK,
     deps: () => ['arbitral_competence_ruling_received_date_apk'],
     compute: (i) => computeArbitralCompetenceChallengeApk(i),
+  },
+  // Два обычных term-узла иностранных решений и разбирательств (ч. 2 ст. 246,
+  // ч. 9 ст. 248.2), без restoration-узлов: числового потолка восстановления
+  // в этих нормах нет.
+  foreign_judgment_enforcement_term_apk: {
+    node: FOREIGN_JUDGMENT_ENFORCEMENT_TERM_APK,
+    deps: () => ['foreign_judgment_entry_into_force_date_apk'],
+    compute: (i) => computeForeignJudgmentEnforcementTermApk(i),
+  },
+  antisuit_injunction_cassation_apk: {
+    node: ANTISUIT_INJUNCTION_CASSATION_APK,
+    deps: () => ['antisuit_injunction_ruling_date_apk'],
+    compute: (i) => computeAntisuitInjunctionCassationApk(i),
   },
 };
 

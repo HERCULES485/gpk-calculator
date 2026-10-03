@@ -4904,3 +4904,122 @@ export function computeArbitralCompetenceChallengeApk(inputs) {
   }
   return computeSimpleTerm(ARBITRAL_COMPETENCE_CHALLENGE_APK, anchor);
 }
+
+// --- Иностранные решения и разбирательства: предъявление к исполнению (ч. 2 ст. 246), кассация по запрету разбирательства (ч. 9 ст. 248.2 АПК РФ) ---
+//
+// Два обычных срочных узла по образцу узлов третейских судов
+// (ARBITRAL_ENFORCEMENT_WRIT_CASSATION_APK, COURT_COSTS_APPLICATION_APK):
+// computeSimpleTerm, offset_start 1, без restoration-узлов. Ч. 2 ст. 246
+// допускает восстановление по правилам главы 10, но числового потолка не
+// называет — отдельного расчёта для него нет. В ч. 9 ст. 248.2 восстановления
+// нет вовсе (общие правила ст. 117 числового потолка не дают).
+
+export const FOREIGN_JUDGMENT_ENFORCEMENT_TERM_APK = {
+  id: 'foreign_judgment_enforcement_term_apk',
+  title:
+    'Предъявление решения иностранного суда или иностранного арбитражного ' +
+    'решения к принудительному исполнению (АПК)',
+  duration: { value: 3, unit: 'year' },
+  anchor: { offset_start: 1 },
+  weekend_shift: true,
+  logic:
+    'Решение иностранного суда или иностранное арбитражное решение может быть ' +
+    'предъявлено к принудительному исполнению в срок, не превышающий трёх лет ' +
+    'со дня вступления его в законную силу (ч. 2 ст. 246 АПК РФ). Пропущенный ' +
+    'срок может быть восстановлен арбитражным судом по ходатайству взыскателя ' +
+    'по правилам главы 10 АПК РФ — числового потолка для восстановления нет, ' +
+    'отдельного расчёта для него нет.',
+  midnight_rule:
+    'ч. 5, 6 ст. 114 АПК РФ — процессуальное действие может быть совершено, а ' +
+    'заявление сдано на почту, до 24:00 последнего дня срока.',
+  norm_versions: [
+    {
+      id: 'current',
+      from: null,
+      to: null,
+      anchor: { offset_start: 1 },
+      norm: {
+        primary: 'ч. 2 ст. 246 АПК РФ',
+        calculation: ['ч. 4 ст. 113', 'ч. 1, 4 ст. 114 АПК РФ'],
+      },
+    },
+  ],
+};
+
+/**
+ * Срок предъявления решения иностранного суда или иностранного арбитражного
+ * решения к принудительному исполнению по ч. 2 ст. 246 АПК РФ — три года со
+ * дня вступления решения в законную силу.
+ * @param {{ foreign_judgment_entry_into_force_date_apk: string }} inputs
+ */
+export function computeForeignJudgmentEnforcementTermApk(inputs) {
+  const anchor = inputs?.foreign_judgment_entry_into_force_date_apk;
+  if (anchor == null) {
+    throw new Error(
+      'Обязательна дата вступления в законную силу решения иностранного суда ' +
+        '(иностранного арбитражного решения) ' +
+        '(foreign_judgment_entry_into_force_date_apk)',
+    );
+  }
+  return computeSimpleTerm(FOREIGN_JUDGMENT_ENFORCEMENT_TERM_APK, anchor);
+}
+
+export const ANTISUIT_INJUNCTION_CASSATION_APK = {
+  id: 'antisuit_injunction_cassation_apk',
+  title:
+    'Кассационное обжалование определения о запрете иностранного ' +
+    'разбирательства (АПК)',
+  duration: { value: 1, unit: 'month' },
+  anchor: { offset_start: 1 },
+  weekend_shift: true,
+  logic:
+    'Определение арбитражного суда по делу о запрете инициировать или ' +
+    'продолжать разбирательство в иностранном суде, международном ' +
+    'коммерческом арбитраже, находящихся за пределами территории Российской ' +
+    'Федерации, по спорам, указанным в ст. 248.1 АПК РФ, может быть ' +
+    'обжаловано в кассационном порядке в арбитражный суд округа в течение ' +
+    'одного месяца со дня вынесения определения (ч. 9 ст. 248.2 АПК РФ) — ' +
+    'сразу в кассацию, минуя апелляцию. Определение выносится по правилам ' +
+    'главы 20 АПК РФ для вынесения решений (ч. 7 ст. 248.2), поэтому датой ' +
+    'его вынесения считается дата изготовления в полном объёме (абз. 2 ч. 2 ' +
+    'ст. 176 АПК РФ).',
+  midnight_rule:
+    'ч. 5, 6 ст. 114 АПК РФ — процессуальное действие может быть совершено, а ' +
+    'жалоба сдана на почту, до 24:00 последнего дня срока.',
+  norm_versions: [
+    {
+      id: 'current',
+      from: null,
+      to: null,
+      anchor: { offset_start: 1 },
+      norm: {
+        primary: 'ч. 9 ст. 248.2 АПК РФ',
+        calculation: [
+          'ч. 7 ст. 248.2',
+          'абз. 2 ч. 2 ст. 176',
+          'ч. 4 ст. 113',
+          'ч. 2, 4 ст. 114 АПК РФ',
+        ],
+      },
+    },
+  ],
+};
+
+/**
+ * Срок кассационного обжалования определения по делу о запрете инициировать
+ * или продолжать иностранное разбирательство по ч. 9 ст. 248.2 АПК РФ — один
+ * месяц со дня вынесения определения (даты изготовления в полном объёме),
+ * минуя апелляцию.
+ * @param {{ antisuit_injunction_ruling_date_apk: string }} inputs
+ */
+export function computeAntisuitInjunctionCassationApk(inputs) {
+  const anchor = inputs?.antisuit_injunction_ruling_date_apk;
+  if (anchor == null) {
+    throw new Error(
+      'Обязательна дата вынесения определения по делу о запрете инициировать ' +
+        'или продолжать иностранное разбирательство ' +
+        '(antisuit_injunction_ruling_date_apk)',
+    );
+  }
+  return computeSimpleTerm(ANTISUIT_INJUNCTION_CASSATION_APK, anchor);
+}

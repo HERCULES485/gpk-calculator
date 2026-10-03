@@ -70,6 +70,23 @@ export const SITUATION_CATEGORIES_APK = [
     ],
   },
   {
+    // Новая категория — решение архитектора (по задаче про предъявление
+    // иностранных решений к исполнению и кассацию по запрету иностранного
+    // разбирательства: ч. 2 ст. 246, ч. 9 ст. 248.2 АПК РФ). Ветви
+    // foreign_judgment_enforcement_cassation и
+    // foreign_judgment_recognition_cassation перенесены сюда из категории
+    // «Обжалование отдельных процессуальных определений…» — тоже решение
+    // архитектора.
+    title: 'Иностранные решения и разбирательства',
+    collapsed: true,
+    ids: [
+      'foreign_judgment_enforcement_term',
+      'foreign_judgment_enforcement_cassation',
+      'foreign_judgment_recognition_cassation',
+      'antisuit_injunction_cassation',
+    ],
+  },
+  {
     title: 'Оспаривание актов и привлечения к ответственности',
     collapsed: true,
     ids: [
@@ -97,8 +114,6 @@ export const SITUATION_CATEGORIES_APK = [
     collapsed: true,
     ids: [
       'settlement_approval_cassation',
-      'foreign_judgment_enforcement_cassation',
-      'foreign_judgment_recognition_cassation',
       'case_transfer_jurisdiction_appeal',
       'coplaintiff_codefendant_refusal_appeal',
       'third_party_claim_refusal_appeal',
