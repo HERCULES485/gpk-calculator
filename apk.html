@@ -96,6 +96,7 @@
         background: var(--input-bg);
         color: var(--ink);
       }
+      input::placeholder { color: var(--muted); opacity: 1; }
       input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
       input.invalid { border-color: var(--miss-line); background: var(--miss-bg); }
       .hint { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
@@ -175,6 +176,8 @@
       .situation-current-label { color: var(--muted); font-size: 13px; }
       #situation-current-name { font-size: 15px; }
       #situation-toggle { margin-left: auto; }
+      #situation-toggle { position: relative; }
+      #situation-toggle::after { content: ''; position: absolute; inset: -12px -10px; }
       /* Панель свёрнута атрибутом hidden, а display: flex выше перебивает
          правило браузера для [hidden] — тот же случай, что у label.situation. */
       .situation-switch[hidden] { display: none; }
