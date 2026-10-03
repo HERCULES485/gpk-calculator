@@ -42,6 +42,7 @@ import {
   computeReasonableTermCompensationApk,
   computeReasonableTermExecutionCompensationApk,
   computeSimplifiedProceedingsAppealApk,
+  computeSimplifiedProceedingsReasonedDecisionRequestApk,
   computeSimplifiedProceedingsEntryIntoForceApk,
   computeCourtOrderObjectionApk,
   computeNonnormativeActChallengeApk,
@@ -92,6 +93,7 @@ import {
   REASONABLE_TERM_COMPENSATION_APK,
   REASONABLE_TERM_EXECUTION_COMPENSATION_APK,
   SIMPLIFIED_PROCEEDINGS_APPEAL_APK,
+  SIMPLIFIED_PROCEEDINGS_REASONED_DECISION_REQUEST_APK,
   SIMPLIFIED_PROCEEDINGS_ENTRY_INTO_FORCE_APK,
   COURT_ORDER_OBJECTION_APK,
   NONNORMATIVE_ACT_CHALLENGE_APK,
@@ -543,6 +545,14 @@ const NODE_REQUIREMENTS = {
     kind: 'window',
     deps: executionCompensationDeps,
     compute: (i) => computeReasonableTermExecutionCompensationApk(i),
+  },
+  // Без restoration-узла: ч. 2 ст. 229 механизм восстановления не упоминает.
+  // Якорь — отдельное поле (дата размещения решения в сети «Интернет»), не
+  // simplified_proceedings_decision_date, как у двух узлов ниже.
+  simplified_proceedings_reasoned_decision_request_apk: {
+    node: SIMPLIFIED_PROCEEDINGS_REASONED_DECISION_REQUEST_APK,
+    deps: () => ['simplified_decision_published_date_apk'],
+    compute: (i) => computeSimplifiedProceedingsReasonedDecisionRequestApk(i),
   },
   // Без restoration-узла: ч. 4 ст. 229 механизм восстановления не упоминает —
   // тот же случай, что уже был со ст. 322, 112 и 222.1 ч. 2.
