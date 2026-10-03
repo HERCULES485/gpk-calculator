@@ -73,6 +73,7 @@ import {
   computeAdditionalDecisionRefusalAppealApk,
   computeCorporateRulingAppealApk,
   computeMeetingConveningAppealApk,
+  computeProtocolRemarksApk,
   APPEAL_GENERAL_APK,
   APPEAL_GENERAL_APK_RESTORATION,
   ENTRY_INTO_FORCE_APK,
@@ -126,6 +127,7 @@ import {
   ADDITIONAL_DECISION_REFUSAL_APPEAL_APK,
   CORPORATE_RULING_APPEAL_APK,
   MEETING_CONVENING_APPEAL_APK,
+  PROTOCOL_REMARKS_APK,
   ENFORCEMENT_INTERRUPTION_TYPES_APK,
   ENFORCEMENT_EXCLUSION_TYPES_APK,
   SUSPENSION_TYPE_APK,
@@ -749,6 +751,12 @@ const NODE_REQUIREMENTS = {
     node: MEETING_CONVENING_APPEAL_APK,
     deps: () => ['meeting_convening_decision_date_apk'],
     compute: (i) => computeMeetingConveningAppealApk(i),
+  },
+  // Без restoration-узла: ч. 7 ст. 155 числового потолка восстановления не даёт.
+  protocol_remarks_apk: {
+    node: PROTOCOL_REMARKS_APK,
+    deps: () => ['protocol_signed_date_apk'],
+    compute: (i) => computeProtocolRemarksApk(i),
   },
 };
 

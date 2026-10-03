@@ -29,6 +29,7 @@ export const SITUATION_CATEGORIES_APK = [
       'court_costs',
       'evidence_unavailability_notice',
       'enforcement_writ_duplicate_request',
+      'protocol_remarks',
     ],
   },
   {

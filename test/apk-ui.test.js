@@ -105,13 +105,14 @@ test('АПК ситуации: тридцать семь ветвей ожида
       'additional_decision_refusal_appeal',
       'corporate_ruling_appeal',
       'meeting_convening_appeal',
+      'protocol_remarks',
     ],
   );
   assert.deepEqual(
     SITUATIONS_APK.map((s) => s.nodes.length),
     [
       8, 4, 2, 2, 2, 1, 1, 1, 3, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-      1, 1, 1, 1, 1, 1,
+      1, 1, 1, 1, 1, 1, 1,
     ],
   );
   assert.equal(situationById(DEFAULT_SITUATION_APK, SITUATIONS_APK).id, 'decision_chain');
@@ -165,6 +166,7 @@ test('АПК ситуации: тридцать семь ветвей ожида
       'additional_decision_refusal_appeal',
       'corporate_ruling_appeal',
       'meeting_convening_appeal',
+      'protocol_remarks',
     ],
   );
 });
@@ -221,8 +223,8 @@ test('АПК подписи: словарь покрывает все входы
   }
 });
 
-test('АПК реестр сроков: 49 узлов из 53 — без трёх узлов-событий и узла-окна', () => {
-  assert.equal(CHAIN_NODE_IDS.length, 53);
+test('АПК реестр сроков: 50 узлов из 54 — без трёх узлов-событий и узла-окна', () => {
+  assert.equal(CHAIN_NODE_IDS.length, 54);
   // Счётчики узлов и реестра растут НЕ синхронно: узел-окно ч. 3 ст. 222.1
   // добавился в chain.js, но в реестр сроков не попал — у него нет top-level
   // duration, и это намеренно (экспорт окна в .ics вне объёма задачи). Узел
@@ -239,7 +241,7 @@ test('АПК реестр сроков: 49 узлов из 53 — без трё�
       'simplified_proceedings_entry_into_force_apk',
     ],
   );
-  assert.equal(Object.keys(TERM_REGISTRY_APK).length, 49);
+  assert.equal(Object.keys(TERM_REGISTRY_APK).length, 50);
   for (const id of NON_REGISTRY_NODE_IDS) {
     assert.equal(TERM_REGISTRY_APK[id], undefined, `узел без duration "${id}" попал в реестр`);
   }
@@ -263,7 +265,7 @@ test('АПК реестр сроков: идентификаторы проду�
 
 // --- buildView (задача UI.3) --------------------------------------------------
 
-// Данные, поднимающие все 53 узла разом. Ветви дискриминаторов выбраны так,
+// Данные, поднимающие все 54 узла разом. Ветви дискриминаторов выбраны так,
 // чтобы цепочка считалась целиком: жалоба не подана → вступление в силу от
 // срока апелляции, окружная кассация не подавалась → якорь кассации в ВС РФ от
 // срока окружной кассации.
@@ -317,13 +319,14 @@ const ALL_NODES_INPUTS_APK = {
   simplified_decision_published_date_apk: '2025-03-11',
   corporate_ruling_date_apk: '2025-03-11',
   meeting_convening_decision_date_apk: '2025-03-11',
+  protocol_signed_date_apk: '2025-03-11',
 };
 
 const TODAY_APK = '2025-01-01'; // раньше всех дедлайнов — ничего не истекло
 
-test('АПК buildView: на полном наборе данных считаются все 53 узла, incomplete пуст', () => {
+test('АПК buildView: на полном наборе данных считаются все 54 узла, incomplete пуст', () => {
   const view = buildView(ALL_NODES_INPUTS_APK, { today: TODAY_APK });
-  assert.equal(view.cards.length, 53);
+  assert.equal(view.cards.length, 54);
   assert.equal(view.incomplete.length, 0);
   assert.deepEqual(view.stubs, []);
   // Форма возврата совпадает с ГПК-шной: cards/incomplete/stubs.
@@ -359,7 +362,7 @@ test('АПК buildView: пересечение периодов даёт кар�
     { today: TODAY_APK },
   );
   // Расчёт не падает целиком: 16 карточек на месте, ошибочная — ровно одна.
-  assert.equal(view.cards.length, 53);
+  assert.equal(view.cards.length, 54);
   const errors = view.cards.filter((c) => c.kind === 'error');
   assert.equal(errors.length, 1);
   assert.equal(errors[0].id, 'enforcement_presentation_apk');
@@ -485,9 +488,9 @@ test('АПК buildView: узлы-события дают карточку kind="
   assert.equal(entry.based_on, 'appellate_ruling_date');
 });
 
-test('АПК buildView: без данных все 53 узла уходят в incomplete, расчёт не вызывается', () => {
+test('АПК buildView: без данных все 54 узла уходят в incomplete, расчёт не вызывается', () => {
   const view = buildView({}, { today: TODAY_APK });
-  assert.equal(view.incomplete.length, 53);
+  assert.equal(view.incomplete.length, 54);
   // Ни одной карточки вообще: если бы compute-функции вызывались на пустых
   // данных, они бросили бы, и мы увидели бы карточки kind="error".
   assert.equal(view.cards.length, 0);
@@ -663,5 +666,5 @@ test('АПК buildView: решение отменено или изменено 
 
   // Ни одной карточки-ошибки: ни на вступлении в силу, ни дальше по цепочке.
   assert.equal(view.cards.filter((c) => c.kind === 'error').length, 0);
-  assert.equal(view.cards.length, 53);
+  assert.equal(view.cards.length, 54);
 });
