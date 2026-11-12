@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="copyright" content="© 2026 Ельмеев Ярослав Евгеньевич">
     <title>Калькулятор процессуальных сроков по ГПК РФ</title>
     <style>
       :root {
@@ -36,12 +37,16 @@
       .header-nav a { color: var(--accent); text-decoration: none; }
       .header-nav a:hover { text-decoration: underline; }
 
-      .primary {
+      .primary { margin-bottom: 22px; }
+      /* Рамка блока полей общей ветви — отдельно от section.primary, чтобы
+         заголовок «Исходные данные» стоял снаружи неё, как и у остальных
+         11 ситуаций (см. renderSituationFields в web/app.js: там заголовок и
+         рамка `.invite` — тоже соседи, а не вложенность). */
+      .primary-box {
         background: var(--card);
         border: 1px solid var(--line);
         border-radius: 12px;
         padding: 18px;
-        margin-bottom: 22px;
       }
       label { display: block; font-weight: 600; margin-bottom: 6px; }
       .req { color: var(--accent); }
@@ -97,15 +102,17 @@
       .to-calendar:hover { text-decoration: underline; }
       .to-calendar-block { margin-top: 10px; }
       .to-calendar-block .to-calendar { margin-top: 0; }
-      .to-calendar-note { margin-top: 4px; }
 
       .print-only { display: none; }
 
       /* Дисклеймер в подвале — приглушённо, не конкурирует с картой сроков. */
       .disclaimer {
         margin: 36px 0 0; padding-top: 14px; border-top: 1px solid var(--line);
-        color: var(--muted); font-size: 12px; line-height: 1.5; max-width: 60ch;
+        color: var(--muted); font-size: 12px; line-height: 1.5;
       }
+      /* Строка авторского права под дисклеймером, в той же колонке и рамке. */
+      .disclaimer .copyright { margin: 10px 0 0; }
+      .disclaimer .copyright a { color: inherit; white-space: nowrap; }
 
       /* Плавное появление блоков: разворот по высоте через grid-template-rows.
          Анимируется одноразовым keyframes только на впервые показанном блоке —
@@ -244,6 +251,14 @@
         margin-bottom: 14px;
       }
       .invite h2 { font-size: 16px; margin: 0 0 4px; }
+      /* Заголовок-указатель над блоком полей одного независимого узла
+         («Третейский суд», «Отдельные сроки», признание иностранных решений,
+         приказное производство) — подписью, а не вторым уровнем текста. */
+      .invite h3 {
+        font-size: 13px; text-transform: uppercase; letter-spacing: .03em;
+        color: var(--muted); margin: 20px 0 0;
+      }
+      .invite h3:first-child { margin-top: 0; }
       .invite p.reason { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
       .invite .field { margin-top: 10px; }
       .invite label { font-weight: 600; font-size: 14px; }
@@ -254,7 +269,8 @@
         border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink);
       }
 
-      /* Перерывы срока предъявления (ст. 22 ФЗ № 229-ФЗ): повторяемый список. */
+      /* События, изменяющие срок предъявления (ст. 22 ФЗ № 229-ФЗ):
+         повторяемый список — перерыв (одна дата) и вычет ч. 3.1 (две). */
       .interruptions .field { margin-top: 10px; }
       .interruptions label { font-weight: 600; font-size: 14px; }
       .interruption-row {
@@ -282,22 +298,24 @@
       .interruption.ignored .interruption-date, .interruption.ignored .interruption-label {
         color: var(--muted); text-decoration: line-through;
       }
-
-      .related-stubs { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 8px; }
-      .related-stubs-title { font-size: 13px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin: 0 0 4px; }
-      .related-stubs .stub { border-top: none; padding: 8px 0 4px; }
+      /* Вычет по ч. 3.1: период вместо одной даты, длина периода рядом. */
+      .deduction-days { color: var(--muted); margin-left: 8px; white-space: nowrap; }
+      .interruption.ignored .deduction-days { text-decoration: line-through; }
+      .deduction-history { margin-top: 8px; }
+      .deduction-history .warn { margin-top: 8px; font-size: 13px; }
+      /* Короткий флажок-предупреждение об интерпретационных допущениях
+         (ч. 3.1 ст. 22): виден всегда, без жёлтого фона на весь блок —
+         полный список допущений уходит под «Подробнее». */
+      .assumption-flag { color: var(--warn-ink); font-size: 13px; font-weight: 600; margin-top: 8px; }
+      /* Ошибка ввода: пересекающиеся периоды — рядом с полями, а не в истории. */
+      .deduction-overlap { font-size: 13px; margin-top: 10px; }
 
       .other-terms { margin-top: 26px; }
-      .other-terms h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin-bottom: 4px; }
+      .other-terms h2,
+      .primary h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin-bottom: 4px; }
+      .primary h2 { margin-top: 0; }
       .other-terms > p { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
       .other-terms .invite { border-style: solid; border-color: var(--line); }
-
-      .stubs { margin-top: 30px; }
-      .stubs h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
-      .stub { border-top: 1px solid var(--line); padding: 12px 0; }
-      .stub h3 { font-size: 15px; margin: 0 0 4px; }
-      .stub p { margin: 0; font-size: 14px; color: var(--muted); }
-      .stub .norm { margin-top: 4px; }
 
       .fatal { background: var(--miss-bg); color: var(--miss-ink); border: 1px solid var(--miss-line);
                padding: 14px; border-radius: 10px; font-size: 14px; }
@@ -321,8 +339,7 @@
         #situation-inputs,
         #other-terms,
         #results,
-        .disclaimer,
-        #stubs { display: none !important; }
+        .disclaimer { display: none !important; }
 
         .print-only { display: block; }
         /* Сокращённая пометка в конце печати — мелко и серым. */
@@ -364,13 +381,22 @@
       <section class="situation-switch" id="situation"></section>
 
       <section class="primary">
-        <label for="reasoned">
-          Дата изготовления мотивированного решения <span class="req">*</span>
-        </label>
-        <input id="reasoned" type="text" inputmode="numeric" placeholder="ДД.ММ.ГГГГ"
-               autocomplete="off" aria-describedby="reasoned-hint" />
-        <p class="hint" id="reasoned-hint">Указана в самом решении (ч. 2 ст. 199 ГПК РФ)</p>
-        <p class="field-error" id="reasoned-error"></p>
+        <!-- Заголовок блока ввода общей ветви. У остальных ситуаций такой же
+             заголовок рисует renderSituationFields (web/app.js) над блоком
+             полей, вне рамки `.invite`; здесь блок ввода — статическое поле
+             ниже, поэтому и заголовок статический, но по той же причине он
+             тоже должен стоять вне рамки — здесь ей служит .primary-box, а не
+             сама section.primary. Прячется вместе со всей секцией. -->
+        <h2>Исходные данные</h2>
+        <div class="primary-box">
+          <label for="reasoned">
+            Дата изготовления мотивированного решения <span class="req">*</span>
+          </label>
+          <input id="reasoned" type="text" inputmode="numeric" placeholder="ДД.ММ.ГГГГ"
+                 autocomplete="off" aria-describedby="reasoned-hint" />
+          <p class="hint" id="reasoned-hint">Указана в самом решении (ч. 2 ст. 199 ГПК РФ)</p>
+          <p class="field-error" id="reasoned-error"></p>
+        </div>
       </section>
 
       <section class="other-terms" id="situation-inputs"></section>
@@ -383,6 +409,9 @@
       <p class="toolbar-secondary">
         <button id="download-ics" type="button" class="link-button" disabled>Скачать .ics</button>
         <span class="toolbar-hint">— файл для Outlook и других календарей</span>
+      </p>
+      <p class="toolbar-note" id="ios-non-safari-hint" hidden>
+        Если кнопка не добавляет событие в Календарь — откройте эту страницу в Safari.
       </p>
       <p class="toolbar-note">
         Перенос в календарь ставит сроки с напоминаниями заранее — чтобы не пропустить дату.
@@ -397,13 +426,16 @@
 
       <section class="other-terms" id="other-terms"></section>
 
-      <section class="stubs" id="stubs"></section>
 
       <footer class="disclaimer">
         Калькулятор даёт справочный расчёт на основе текста ГПК РФ и разъяснений
         Пленума Верховного Суда. Он не заменяет консультацию юриста и не является
         юридической консультацией. Перед подачей документов проверяйте сроки по
         первоисточникам — расчёт может не учитывать особенности конкретного дела.
+        <p class="copyright">
+          © 2026 Ельмеев Ярослав Евгеньевич. Все права защищены.
+          <a href="license.html">Лицензионное соглашение</a>
+        </p>
       </footer>
 
       <!-- В печати — сокращённая пометка в конце (полный текст скрыт). -->

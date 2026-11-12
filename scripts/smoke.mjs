@@ -3,11 +3,20 @@
 // показе .fatal. Ловит синтаксические и рантайм-ошибки app.js/views.js, которые
 // `node --test` не видит (он не исполняет модули в браузере).
 //
-// Запуск: node test/smoke.mjs  (нужен пакет playwright и браузер chromium).
-// В окружении можно указать путь к chromium: PW_CHROMIUM_PATH=/путь/к/chrome.
+// Запуск: node scripts/smoke.mjs  (нужен пакет playwright и браузер chromium).
+//
+// В контейнере Claude Code браузер лежит по фиксированному пути
+// (PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers), и его ревизия — часть образа,
+// а не репозитория: она может не совпадать с тем, что playwright из
+// node_modules ожидает найти сам, и меняться со временем независимо от
+// package.json. Поэтому путь к chromium ищем автоматически (findChromiumExecutable
+// ниже) по стандартным путям установки — вручную ничего прописывать не нужно.
+// Если нужен конкретный браузер, PW_CHROMIUM_PATH=/путь/к/chrome всё ещё
+// перебивает автоопределение.
 
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir, realpath } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -24,6 +33,43 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
 };
+
+// Ищет установленный браузер chromium по стандартным путям, не полагаясь на
+// то, что ревизия, которую ожидает playwright из node_modules, совпадает с
+// тем, что реально лежит на диске (см. комментарий в шапке файла). Явный
+// PW_CHROMIUM_PATH имеет приоритет. Возвращает undefined, если ничего не
+// нашлось, — тогда playwright ищет браузер сам обычным способом (штатный
+// случай вне контейнера Claude Code, например после `playwright install`).
+async function findChromiumExecutable() {
+  if (process.env.PW_CHROMIUM_PATH) return process.env.PW_CHROMIUM_PATH;
+
+  const roots = [process.env.PLAYWRIGHT_BROWSERS_PATH, '/opt/pw-browsers'].filter(Boolean);
+  for (const root of roots) {
+    // Готовый симлинк на текущую ревизию — так устроен контейнер Claude Code.
+    const link = join(root, 'chromium');
+    if (existsSync(link)) {
+      try {
+        return await realpath(link);
+      } catch {
+        // битый симлинк — ищем ниже по каталогам ревизий
+      }
+    }
+    // Иначе перебираем каталоги chromium-<revision>/chrome-linux/chrome —
+    // так playwright раскладывает браузер на Linux.
+    let entries;
+    try {
+      entries = await readdir(root);
+    } catch {
+      continue;
+    }
+    const revision = entries.filter((name) => /^chromium-\d+$/.test(name)).sort().at(-1);
+    if (revision) {
+      const candidate = join(root, revision, 'chrome-linux', 'chrome');
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return undefined;
+}
 
 // Минимальный статический сервер из корня репозитория.
 const server = createServer(async (req, res) => {
@@ -50,10 +96,8 @@ await new Promise((resolve) => server.listen(0, resolve));
 const port = server.address().port;
 
 const problems = [];
-const launchOpts = process.env.PW_CHROMIUM_PATH
-  ? { executablePath: process.env.PW_CHROMIUM_PATH }
-  : {};
-const browser = await chromium.launch(launchOpts);
+const executablePath = await findChromiumExecutable();
+const browser = await chromium.launch(executablePath ? { executablePath } : {});
 const page = await browser.newPage();
 page.on('console', (m) => {
   if (m.type() === 'error') problems.push(`console error: ${m.text()}`);
@@ -62,8 +106,7 @@ page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
 
 await page.goto(`http://localhost:${port}/index.html`, { waitUntil: 'networkidle' });
 
-// Приложение должно инициализироваться: без .fatal, поле ввода на месте,
-// заглушки отрисованы (значит render() отработал).
+// Приложение должно инициализироваться: без .fatal, поле ввода на месте.
 if ((await page.locator('.fatal').count()) > 0) {
   problems.push('.fatal показан — приложение не инициализировалось');
 }
@@ -83,23 +126,37 @@ if ((await page.locator('#results .card').count()) < 1) {
   problems.push('после ввода даты карточки не появились');
 }
 
-// Перерыв срока предъявления (ч. 1–3 ст. 22 ФЗ № 229-ФЗ): список событий на
-// карточке ИЛ добавляет строку и пересчитывает срок от даты события. Проверяем
-// в браузере — расчёт покрыт node --test, а вот повторяемый список полей
-// (добавление строки, маска даты, перерисовка) живёт только в app.js.
+// События ст. 22 ФЗ № 229-ФЗ на карточке предъявления: список добавляет строку
+// и пересчитывает срок — перерыв (ч. 1–3) от даты события, вычет (ч. 3.1) на
+// длину периода. Проверяем в браузере — расчёт покрыт node --test, а вот
+// повторяемый список полей (добавление строки, смена основания с
+// перерисовкой набора полей, маска даты) живёт только в app.js.
+//
+// Карточка живёт в ситуации «Исполнительное производство»: узлов предъявления
+// на хвостах цепочек обжалования больше нет, и переключиться на эту ситуацию —
+// теперь единственный путь к сроку ст. 21. Даты подобраны так, что все
+// ожидаемые ниже значения не изменились: прежде якорем была дата вступления
+// решения в силу, вычисленная цепочкой из 11.03.2024 (12.04.2024), теперь та
+// же дата вводится сама, напрямую.
+await page.locator('#situation input[type=radio][value="enforcement"]').check();
+await page.waitForTimeout(200);
+await page.selectOption('#in-enforcement_document_type', 'court_decision');
+await page.waitForTimeout(200);
+await page.fill('#in-enforcement_decision_entry_into_force_date', '12.04.2024');
+await page.waitForTimeout(200);
 const ilCard = page
   .locator('#results .card')
-  .filter({ hasText: 'Предъявление исполнительного листа к исполнению' });
+  .filter({ hasText: 'Предъявление исполнительного документа к исполнению' });
 if ((await ilCard.count()) !== 1) {
-  problems.push('карточка предъявления ИЛ не найдена');
+  problems.push('карточка предъявления исполнительного документа не найдена');
 } else {
   if ((await ilCard.locator('.interruption-scope').count()) === 0) {
     problems.push('предупреждение о ч. 3.1 ст. 22 не показано рядом с полем');
   }
-  await ilCard.getByRole('button', { name: 'Добавить перерыв' }).click();
+  await ilCard.getByRole('button', { name: 'Добавить событие' }).click();
   await page.waitForTimeout(100);
   if ((await page.locator('#in-interruption-0-type').count()) === 0) {
-    problems.push('строка перерыва не добавилась');
+    problems.push('строка события не добавилась');
   }
   await page.fill('#in-interruption-0-date', '15.06.2026');
   await page.waitForTimeout(200);
@@ -118,6 +175,78 @@ if ((await ilCard.count()) !== 1) {
   }
   if ((await ilCard.locator('.deadline').first().innerText()).trim() === '15.06.2029') {
     problems.push('после удаления перерыва срок не пересчитался обратно');
+  }
+
+  // Вычет по ч. 3.1: смена основания в том же списке должна заменить одно поле
+  // даты на два, а введённый период — уменьшить срок, не сдвигая точку отсчёта.
+  // Базовый расчёт при вступлении в силу 12.04.2024: срок предъявления до
+  // 12.04.2027. Период 01.05.2024 — 01.09.2024 = 123 дня → 10.12.2026
+  // (четверг, переносить не нужно).
+  await ilCard.getByRole('button', { name: 'Добавить событие' }).click();
+  await page.waitForTimeout(100);
+  await page.selectOption('#in-interruption-0-type', 'creditor_request');
+  await page.waitForTimeout(200);
+  if ((await page.locator('#in-interruption-0-date').count()) !== 0) {
+    problems.push('после выбора основания ч. 3.1 осталось поле одной даты');
+  }
+  if (
+    (await page.locator('#in-interruption-0-from').count()) === 0 ||
+    (await page.locator('#in-interruption-0-to').count()) === 0
+  ) {
+    problems.push('после выбора основания ч. 3.1 не появились два поля дат');
+  }
+  await page.fill('#in-interruption-0-from', '01.05.2024');
+  await page.waitForTimeout(100);
+  // С одной заполненной датой период не измерить — срок меняться не должен.
+  if ((await ilCard.locator('.deadline').first().innerText()).trim() !== '12.04.2027') {
+    problems.push('период с одной датой уже повлиял на срок');
+  }
+  await page.fill('#in-interruption-0-to', '01.09.2024');
+  await page.waitForTimeout(200);
+  const deducted = (await ilCard.locator('.deadline').first().innerText()).trim();
+  if (deducted !== '10.12.2026') {
+    problems.push(`после вычета ч. 3.1 ждали 10.12.2026, получили «${deducted}»`);
+  }
+  if ((await ilCard.locator('.deduction-history').count()) === 0) {
+    problems.push('история вычетов на карточке не показана');
+  }
+  // Короткий флажок виден на карточке всегда; полный список трёх допущений —
+  // только под «Подробнее» (жёлтый блок на весь текст убран, см. PR).
+  if ((await ilCard.locator('.assumption-flag').count()) === 0) {
+    problems.push('короткий флажок о допущениях по ч. 3.1 не показан рядом с расчётом');
+  }
+  const assumptionText = ilCard.getByText('складываются все без исключения').first();
+  if ((await assumptionText.count()) === 0) {
+    problems.push('полный текст допущений по ч. 3.1 не найден в разметке карточки');
+  } else if (await assumptionText.isVisible()) {
+    problems.push('полный текст допущений по ч. 3.1 виден без раскрытия «Подробнее»');
+  }
+  await ilCard.locator('details.more > summary').first().click();
+  await page.waitForTimeout(100);
+  if (!(await assumptionText.isVisible())) {
+    problems.push('полный текст допущений по ч. 3.1 не найден под «Подробнее»');
+  }
+  if ((await ilCard.locator('.deduction-overlap').count()) !== 0) {
+    problems.push('предупреждение о пересечении показано на одном периоде');
+  }
+
+  // Проверка ввода: второй период, перекрывающий первый, должен дать
+  // предупреждение рядом с полями — при этом расчёт не меняется иначе, чем на
+  // сумму обоих периодов (валидация арифметику не подстраивает).
+  await ilCard.getByRole('button', { name: 'Добавить событие' }).click();
+  await page.waitForTimeout(100);
+  await page.selectOption('#in-interruption-1-type', 'creditor_obstruction');
+  await page.waitForTimeout(200);
+  await page.fill('#in-interruption-1-from', '01.07.2024');
+  await page.fill('#in-interruption-1-to', '01.11.2024');
+  await page.waitForTimeout(200);
+  if ((await ilCard.locator('.deduction-overlap').count()) === 0) {
+    problems.push('пересекающиеся периоды не дали предупреждения о вводе');
+  }
+  // 123 + 123 = 246 дней от 12.04.2027 → 09.08.2026 (воскресенье → 10.08.2026).
+  const overlapped = (await ilCard.locator('.deadline').first().innerText()).trim();
+  if (overlapped !== '10.08.2026') {
+    problems.push(`при пересечении ждали 10.08.2026, получили «${overlapped}»`);
   }
 }
 

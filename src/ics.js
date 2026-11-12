@@ -26,10 +26,10 @@ import {
   APPEAL_GENERAL,
   CASSATION_KSOYU,
   CASSATION_VS,
-  ENFORCEMENT_PRESENTATION,
   COURT_ORDER_OBJECTION,
-  COURT_ORDER_PRESENTATION,
-  PERIODIC_PAYMENTS_PRESENTATION,
+  ENFORCEMENT_DOCUMENT_PRESENTATION,
+  FOREIGN_JUDGMENT_ENFORCEMENT_PRESENTATION,
+  FOREIGN_JUDGMENT_RECOGNITION_OBJECTION,
   PROTOCOL_REMARKS,
   PRIVATE_COMPLAINT,
   CHILD_RETURN_APPEAL,
@@ -38,6 +38,10 @@ import {
   CASSATION_RETURN_RULING_APPEAL,
   ARBITRATION_COMPETENCE_APPEAL,
   SETTLEMENT_APPROVAL_CASSATION_APPEAL,
+  SUDEBNY_PRIKAZ_CASSATION,
+  TRETEISKY_OSPARIVANIE_CASSATION,
+  TRETEISKY_ISPOLLIST_CASSATION,
+  COURT_ARBITRATION_AWARD_SETASIDE,
   REVIEW_NEW_CIRCUMSTANCES_FILING,
   REVIEW_NEW_CIRCUMSTANCES_RESTORATION,
   SIMPLIFIED_REASONED_REQUEST,
@@ -116,15 +120,6 @@ export function icsTermsFromChain(chain) {
       norm: chain.cassation_vs.norm.primary,
       ics: CASSATION_VS.ics,
       duration: CASSATION_VS.duration,
-    });
-  }
-  if (chain && chain.enforcement && chain.enforcement.deadline) {
-    terms.push({
-      title: chain.enforcement.title,
-      deadline: chain.enforcement.deadline,
-      norm: chain.enforcement.norm.primary,
-      ics: ENFORCEMENT_PRESENTATION.ics,
-      duration: ENFORCEMENT_PRESENTATION.duration,
     });
   }
   // Сроки в рабочих днях. Правила напоминаний (раздел 8) заданы только для
@@ -237,6 +232,61 @@ export function icsTermsFromChain(chain) {
       duration: SETTLEMENT_APPROVAL_CASSATION_APPEAL.duration,
     });
   }
+  // Прямая кассация, минуя апелляцию, по общему трёхмесячному сроку
+  // (ч. 1 ст. 376.1) — три независимых узла по той же логике, что и
+  // settlement_approval_cassation_appeal выше: судебный приказ, определения по
+  // делам об оспаривании решений третейских судов и о выдаче/отказе в выдаче
+  // исполнительного листа на принудительное исполнение решения третейского
+  // суда (п. 3 ПП ВС РФ от 22.06.2021 № 17).
+  if (chain && chain.sudebny_prikaz_cassation && chain.sudebny_prikaz_cassation.deadline) {
+    terms.push({
+      title: chain.sudebny_prikaz_cassation.title,
+      deadline: chain.sudebny_prikaz_cassation.deadline,
+      norm: chain.sudebny_prikaz_cassation.norm.primary,
+      ics: SUDEBNY_PRIKAZ_CASSATION.ics,
+      duration: SUDEBNY_PRIKAZ_CASSATION.duration,
+    });
+  }
+  if (
+    chain &&
+    chain.treteisky_osparivanie_cassation &&
+    chain.treteisky_osparivanie_cassation.deadline
+  ) {
+    terms.push({
+      title: chain.treteisky_osparivanie_cassation.title,
+      deadline: chain.treteisky_osparivanie_cassation.deadline,
+      norm: chain.treteisky_osparivanie_cassation.norm.primary,
+      ics: TRETEISKY_OSPARIVANIE_CASSATION.ics,
+      duration: TRETEISKY_OSPARIVANIE_CASSATION.duration,
+    });
+  }
+  if (
+    chain &&
+    chain.treteisky_ispollist_cassation &&
+    chain.treteisky_ispollist_cassation.deadline
+  ) {
+    terms.push({
+      title: chain.treteisky_ispollist_cassation.title,
+      deadline: chain.treteisky_ispollist_cassation.deadline,
+      norm: chain.treteisky_ispollist_cassation.norm.primary,
+      ics: TRETEISKY_ISPOLLIST_CASSATION.ics,
+      duration: TRETEISKY_ISPOLLIST_CASSATION.duration,
+    });
+  }
+  // Заявление об отмене решения третейского суда (глава 46, ч. 2, 3 ст. 418
+  // ГПК) — независимый узел: первая стадия того же процесса, что и
+  // treteisky_osparivanie_cassation выше, но якорь вводится напрямую одним из
+  // двух альтернативных полей (см. комментарий в chain.js), не вычисляется
+  // из другого узла цепочки.
+  if (chain && chain.arbitration_award_setaside && chain.arbitration_award_setaside.deadline) {
+    terms.push({
+      title: chain.arbitration_award_setaside.title,
+      deadline: chain.arbitration_award_setaside.deadline,
+      norm: chain.arbitration_award_setaside.norm.primary,
+      ics: COURT_ARBITRATION_AWARD_SETASIDE.ics,
+      duration: COURT_ARBITRATION_AWARD_SETASIDE.duration,
+    });
+  }
   // Пересмотр по вновь открывшимся/новым обстоятельствам (глава 42 ГПК) —
   // независимый узел: считается по своим input (review_ground + дата(-ы)),
   // норма в экспорте — та, что соответствует выбранному основанию (см.
@@ -277,8 +327,9 @@ export function icsTermsFromChain(chain) {
   }
   // Возражения должника относительно исполнения судебного приказа (ст. 128
   // ГПК) — независимый узел приказного производства, считается по своему input
-  // (court_order_copy_received_date), отдельно от срока предъявления приказа к
-  // исполнению.
+  // (court_order_copy_received_date). Срок предъявления приказа к исполнению
+  // здесь больше не экспортируется отдельной строкой: он уходит в .ics вместе
+  // с узлом enforcement_document_presentation ниже (вариант «судебный приказ»).
   if (chain && chain.court_order_objection && chain.court_order_objection.deadline) {
     terms.push({
       title: chain.court_order_objection.title,
@@ -288,33 +339,57 @@ export function icsTermsFromChain(chain) {
       duration: COURT_ORDER_OBJECTION.duration,
     });
   }
-  // Предъявление судебного приказа к исполнению (ч. 3 ст. 21 ФЗ № 229-ФЗ) —
-  // независимый узел (глава 11 ГПК вне цепочки обжалования), считается по
-  // своему input (court_order_issued_date).
-  if (chain && chain.court_order_presentation && chain.court_order_presentation.deadline) {
-    terms.push({
-      title: chain.court_order_presentation.title,
-      deadline: chain.court_order_presentation.deadline,
-      norm: chain.court_order_presentation.norm.primary,
-      ics: COURT_ORDER_PRESENTATION.ics,
-      duration: COURT_ORDER_PRESENTATION.duration,
-    });
-  }
-  // Предъявление документов о взыскании периодических платежей (ч. 4 ст. 21
-  // ФЗ № 229-ФЗ) — независимый узел, считается по своему input
-  // (periodic_payment_period_end_date). В ветке not_applicable (бессрочное
-  // взыскание) deadline нет — в экспорт узел не попадает.
+  // Предъявление исполнительного документа к исполнению (ст. 21 ФЗ № 229-ФЗ) —
+  // самостоятельный узел для документа, который уже на руках; один на три типа
+  // документа (ч. 1, ч. 3 и ч. 4 ст. 21), считается по своему input
+  // (enforcement_document_type + якорное поле выбранного типа). Это
+  // единственная строка экспорта для срока предъявления: прежние узлы на
+  // хвостах цепочек обжалования и в приказном производстве убраны, а узел
+  // периодических платежей перенесён сюда вариантом 'periodic_payments'. В ветке not_applicable (бессрочное
+  // взыскание) deadline нет — в экспорт узел не попадает, как и раньше.
   if (
     chain &&
-    chain.periodic_payments_presentation &&
-    chain.periodic_payments_presentation.deadline
+    chain.enforcement_document_presentation &&
+    chain.enforcement_document_presentation.deadline
   ) {
     terms.push({
-      title: chain.periodic_payments_presentation.title,
-      deadline: chain.periodic_payments_presentation.deadline,
-      norm: chain.periodic_payments_presentation.norm.primary,
-      ics: PERIODIC_PAYMENTS_PRESENTATION.ics,
-      duration: PERIODIC_PAYMENTS_PRESENTATION.duration,
+      title: chain.enforcement_document_presentation.title,
+      deadline: chain.enforcement_document_presentation.deadline,
+      norm: chain.enforcement_document_presentation.norm.primary,
+      ics: ENFORCEMENT_DOCUMENT_PRESENTATION.ics,
+      duration: ENFORCEMENT_DOCUMENT_PRESENTATION.duration,
+    });
+  }
+  // Признание и исполнение решений иностранных судов (глава 45 ГПК) — два
+  // независимых узла, каждый считается по своему input: предъявление решения
+  // к принудительному исполнению (ч. 3 ст. 409, три года со дня вступления
+  // решения в законную силу) и возражения относительно признания решения, не
+  // требующего принудительного исполнения (ч. 2 ст. 413, один месяц со дня,
+  // когда заинтересованному лицу стало известно о решении).
+  if (
+    chain &&
+    chain.foreign_judgment_enforcement_presentation &&
+    chain.foreign_judgment_enforcement_presentation.deadline
+  ) {
+    terms.push({
+      title: chain.foreign_judgment_enforcement_presentation.title,
+      deadline: chain.foreign_judgment_enforcement_presentation.deadline,
+      norm: chain.foreign_judgment_enforcement_presentation.norm.primary,
+      ics: FOREIGN_JUDGMENT_ENFORCEMENT_PRESENTATION.ics,
+      duration: FOREIGN_JUDGMENT_ENFORCEMENT_PRESENTATION.duration,
+    });
+  }
+  if (
+    chain &&
+    chain.foreign_judgment_recognition_objection &&
+    chain.foreign_judgment_recognition_objection.deadline
+  ) {
+    terms.push({
+      title: chain.foreign_judgment_recognition_objection.title,
+      deadline: chain.foreign_judgment_recognition_objection.deadline,
+      norm: chain.foreign_judgment_recognition_objection.norm.primary,
+      ics: FOREIGN_JUDGMENT_RECOGNITION_OBJECTION.ics,
+      duration: FOREIGN_JUDGMENT_RECOGNITION_OBJECTION.duration,
     });
   }
   // Упрощённое производство: заявление о мотивированном решении и апелляция.

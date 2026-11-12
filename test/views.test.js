@@ -5,20 +5,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildView, REVIEW_GROUNDS } from '../src/views.js';
+import { buildView, REVIEW_GROUNDS, ACTION_FACT_INPUT, collectFactInputMaps } from '../src/views.js';
 import { icsTermsFromView } from '../src/ics.js';
 
 const BASE = { reasoned_decision_date: '2025-03-11' }; // апелляция → 11.04.2025
 
 const ids = (nodes) => nodes.map((n) => n.id);
 const byId = (nodes, id) => nodes.find((n) => n.id === id);
-
-test('заглушек в модели больше нет — все ветви раскрыты', () => {
-  // Раскрыты: частная жалоба (3.1), упрощённое производство (3.2), заочное
-  // решение (3.3), мировой судья без мотивировки (3.4).
-  const v = buildView(BASE, { today: '2025-05-01' });
-  assert.deepEqual(v.stubs, []);
-});
 
 test('нет даты мотивированного решения → нет карточек цепочки, узел в incomplete', () => {
   const v = buildView({}, { today: '2025-05-01' });
@@ -49,12 +42,9 @@ test('pending: видны апелляция и событие; кассация
 
 test('not_appealed: видны все три узла, incomplete пуст', () => {
   const v = buildView(BASE, { today: '2025-05-01' }); // после дедлайна
-  assert.deepEqual(ids(v.cards), [
-    'appeal_general',
-    'entry_into_force',
-    'cassation_ksoyu',
-    'enforcement_presentation',
-  ]);
+  // Четвёртой карточкой прежде шёл узел предъявления ИЛ — он убран с хвоста
+  // цепочки (см. тест «на хвосте цепочек узла предъявления нет» ниже).
+  assert.deepEqual(ids(v.cards), ['appeal_general', 'entry_into_force', 'cassation_ksoyu']);
   assert.deepEqual(ids(v.incomplete), []);
 
   const entry = byId(v.cards, 'entry_into_force');
@@ -76,12 +66,7 @@ test('appealed (полные данные): три узла, без alternative'
     },
     { today: '2025-07-01' },
   );
-  assert.deepEqual(ids(v.cards), [
-    'appeal_general',
-    'entry_into_force',
-    'cassation_ksoyu',
-    'enforcement_presentation',
-  ]);
+  assert.deepEqual(ids(v.cards), ['appeal_general', 'entry_into_force', 'cassation_ksoyu']);
   assert.deepEqual(ids(v.incomplete), []);
   const cass = byId(v.cards, 'cassation_ksoyu');
   assert.equal(cass.deadline, '2025-09-02');
@@ -116,12 +101,7 @@ test('прежняя редакция: карточка кассации счи�
     },
     { today: '2025-07-01' },
   );
-  assert.deepEqual(ids(v.cards), [
-    'appeal_general',
-    'entry_into_force',
-    'cassation_ksoyu',
-    'enforcement_presentation',
-  ]);
+  assert.deepEqual(ids(v.cards), ['appeal_general', 'entry_into_force', 'cassation_ksoyu']);
   assert.deepEqual(ids(v.incomplete), []);
   const cass = byId(v.cards, 'cassation_ksoyu');
   assert.equal(cass.version_id, 'before_135fz');
@@ -147,18 +127,34 @@ test('пограничное окно: карточка кассации нес�
   assert.equal(cass.deadline, '2024-09-20'); // расчёт — по действующей редакции
 });
 
-test('ИЛ: узел появляется при resolved, заглушек рядом не осталось; в pending — отсутствует', () => {
+test('на хвосте цепочек узла предъявления нет, вступление в силу осталось', () => {
+  // ЧТО ИЗМЕНИЛОСЬ. Тест назывался «ИЛ: узел появляется при resolved,
+  // заглушек рядом не осталось; в pending — отсутствует» и проверял карточку
+  // предъявления ИЛ на хвосте общей цепочки. Узла на хвосте нет: срок ч. 1
+  // ст. 21 ФЗ № 229-ФЗ считается один раз, в ситуации «Исполнительное
+  // производство». Проверяем обратное утверждение — карточки предъявления в
+  // цепочке нет ни при разрешённом вступлении в силу, ни в pending, — и что
+  // сама карточка вступления в силу (самостоятельно полезная) на месте.
   const resolved = buildView(BASE, { today: '2025-05-01' }); // not_appealed → resolved
-  const il = byId(resolved.cards, 'enforcement_presentation');
-  assert.ok(il, 'узел ИЛ есть, когда вступление в силу разрешено');
-  assert.match(il.norm, /229-ФЗ/);
-  // Все три смежных случая раскрыты: судебный приказ и периодические платежи —
-  // отдельными узлами, перерыв срока — сдвигом якоря (ст. 22). Блок пуст.
-  assert.deepEqual(il.stubs, []);
+  assert.equal(byId(resolved.cards, 'enforcement_presentation'), undefined);
+  assert.equal(byId(resolved.cards, 'entry_into_force').status, 'resolved');
 
   const pending = buildView(BASE, { today: '2025-04-01' }); // pending
   const allIds = [...pending.cards, ...pending.incomplete].map((n) => n.id);
-  assert.ok(!allIds.includes('enforcement_presentation'), 'в pending узла ИЛ нет');
+  assert.ok(!allIds.includes('enforcement_presentation'));
+  assert.ok(allIds.includes('entry_into_force'));
+
+  // Тот же срок в своей ситуации — карточка есть и норма та же.
+  const enforcement = buildView(
+    {
+      enforcement_document_type: 'court_decision',
+      enforcement_decision_entry_into_force_date: '2025-04-12',
+    },
+    { today: '2025-05-01' },
+  );
+  const card = byId(enforcement.cards, 'enforcement_document_presentation');
+  assert.ok(card, 'узел предъявления живёт в своей ситуации');
+  assert.match(card.norm, /229-ФЗ/);
 });
 
 test('узел кассации в ВС появляется только после даты определения КСОЮ', () => {
@@ -263,8 +259,8 @@ test('appealed: введена только дата принятия опред
     { ...BASE, appeal_filed_date: '2025-04-05', appeal_ruling_date: '2025-06-02' },
     { today: '2025-07-01' },
   );
-  // Событие разрешено (есть дата принятия) → появляется и узел ИЛ.
-  assert.deepEqual(ids(v.cards), ['appeal_general', 'entry_into_force', 'enforcement_presentation']);
+  // Событие разрешено (есть дата принятия) — карточка вступления в силу есть.
+  assert.deepEqual(ids(v.cards), ['appeal_general', 'entry_into_force']);
   assert.deepEqual(ids(v.incomplete), ['cassation_ksoyu']);
 
   const entry = byId(v.cards, 'entry_into_force');
@@ -379,12 +375,13 @@ test('независимые сроки видны без даты мотиви�
 
 test('упрощённое производство: три карточки без заявления, событие по ст. 232.4', () => {
   const v = buildView({ simplified_resolution_date: '2025-12-22' }, { today: '2026-03-01' });
+  // Узла предъявления ИЛ на хвосте ветви больше нет — см. тест «на хвосте
+  // цепочек узла предъявления нет» выше.
   assert.deepEqual(ids(v.cards), [
     'simplified_reasoned_request',
     'simplified_appeal',
     'simplified_entry_into_force',
     'simplified_cassation_ksoyu',
-    'simplified_enforcement_presentation',
   ]);
 
   // Кассация в КСОЮ: не обжаловалось → предупреждение об исчерпании (3.7).
@@ -402,10 +399,8 @@ test('упрощённое производство: три карточки б�
   assert.match(entry.norm, /232\.4/);
   assert.match(entry.norm, /ч\. 5/);
 
-  // Предъявление ИЛ — три года со дня вступления в силу (событие разрешено).
-  const enf = byId(v.cards, 'simplified_enforcement_presentation');
-  assert.equal(enf.deadline, '2029-01-23'); // 2026-01-23 (дата события) + 3 года
-  assert.match(enf.norm, /ст\. 21 ФЗ .*229-ФЗ/);
+  assert.equal(entry.date, '2026-01-23');
+  assert.equal(byId(v.cards, 'simplified_enforcement_presentation'), undefined);
 });
 
 test('упрощённое: срок изготовления появляется после заявления, помечен справочным', () => {
@@ -436,12 +431,13 @@ test('заочное решение: карточки, выбор субъект
     { default_judgment_service_date: '2025-12-22', default_judgment_refusal_date: '2026-02-10' },
     { today: '2026-03-01' },
   );
+  // Узла предъявления ИЛ на хвосте ветви больше нет — см. тест «на хвосте
+  // цепочек узла предъявления нет» выше.
   assert.deepEqual(ids(v.cards), [
     'default_judgment_cancellation_request',
     'default_judgment_appeal',
     'default_judgment_entry_into_force',
     'default_judgment_cassation_ksoyu',
-    'default_judgment_enforcement_presentation',
   ]);
 
   // Кассация в КСОЮ: ответчик, заявление рассмотрено (отказ), но апелляции нет —
@@ -466,10 +462,7 @@ test('заочное решение: карточки, выбор субъект
   assert.match(entry.norm, /ч\. 1 ст\. 244/);
   assert.equal(entry.date, '2026-03-11');
 
-  // Предъявление ИЛ — три года со дня вступления заочного решения в силу.
-  const enf = byId(v.cards, 'default_judgment_enforcement_presentation');
-  assert.equal(enf.deadline, '2029-03-12'); // 2026-03-11 + 3 года = вс 11.03.2029 → пн 12.03
-  assert.match(enf.norm, /ст\. 21 ФЗ .*229-ФЗ/);
+  assert.equal(byId(v.cards, 'default_judgment_enforcement_presentation'), undefined);
 });
 
 test('заочное решение: карточка ст. 244 в трёх ветвях и при отмене решения', () => {
@@ -577,12 +570,13 @@ test('заочное решение против иностранного гос
     },
     { today: '2026-03-01' },
   );
+  // Узла предъявления ИЛ на хвосте ветви больше нет — см. тест «на хвосте
+  // цепочек узла предъявления нет» выше.
   assert.deepEqual(ids(v.cards), [
     'foreign_state_default_judgment_cancellation_request',
     'foreign_state_default_judgment_appeal',
     'foreign_state_default_judgment_entry_into_force',
     'foreign_state_default_judgment_cassation_ksoyu',
-    'foreign_state_default_judgment_enforcement_presentation',
   ]);
 
   // Заявление об отмене — 2 месяца, не 7 рабочих дней: рендерится
@@ -634,27 +628,26 @@ test('мировой судья: карточки ветви, выбор явк�
   const present = buildView({ mirovoy_resolution_date: '2025-12-22' }, { today: '2026-03-01' });
   // Срок апелляции истёк (today 01.03.2026 > 22.01.2026), поэтому появляется и
   // кассационный узел — от даты вступления решения в силу.
+  // Узла предъявления ИЛ на хвосте ветви больше нет — см. тест «на хвосте
+  // цепочек узла предъявления нет» выше.
   assert.deepEqual(ids(present.cards), [
     'mirovoy_reasoned_request',
     'mirovoy_appeal',
     'mirovoy_entry_into_force',
     'mirovoy_cassation',
-    'mirovoy_enforcement_presentation',
   ]);
   const req = byId(present.cards, 'mirovoy_reasoned_request');
   assert.equal(req.unit, 'working_day');
   assert.equal(req.deadline, '2025-12-25');
 
-  // Не обжаловано (срок апелляции истёк) → вступление в силу и предъявление ИЛ.
+  // Не обжаловано (срок апелляции истёк) → вступление решения в силу.
   const entry = byId(present.cards, 'mirovoy_entry_into_force');
   assert.equal(entry.kind, 'event');
   assert.equal(entry.status, 'resolved');
   assert.equal(entry.branch, 'not_appealed');
   assert.equal(entry.date, '2026-01-23'); // дедлайн апелляции 22.01 + 1
   assert.match(entry.norm, /ч\. 1 ст\. 209/);
-  const enf = byId(present.cards, 'mirovoy_enforcement_presentation');
-  assert.equal(enf.deadline, '2029-01-23'); // + 3 года
-  assert.match(enf.norm, /ст\. 21 ФЗ .*229-ФЗ/);
+  assert.equal(byId(present.cards, 'mirovoy_enforcement_presentation'), undefined);
 
   const absent = buildView(
     { mirovoy_resolution_date: '2025-12-22', mirovoy_attendance: 'absent' },
@@ -857,6 +850,42 @@ test('пересмотр: практика Пленума/Президиума �
   assert.match(REVIEW_GROUNDS.find((g) => g.id === 'vs_practice_change').label, /Пленум\/Президиума? ВС/i);
 });
 
+test('судебный приказ (кассация): карточка показывает, что дата вступления в силу вычислена', () => {
+  const v = buildView(
+    { court_order_copy_received_date: '2025-09-01' },
+    { today: '2025-07-01' },
+  );
+  const card = byId(v.cards, 'sudebny_prikaz_cassation');
+  assert.ok(card);
+  assert.equal(card.kind, 'term');
+  assert.equal(card.deadline, '2025-12-15');
+
+  const detail = card.details.entry_into_force;
+  assert.ok(detail, 'промежуточные данные расчёта должны быть в details');
+  assert.equal(detail.computed, true);
+  assert.equal(detail.date, '2025-09-15');
+  assert.equal(detail.via_postal_storage, false);
+  assert.equal(detail.received_date, '2025-09-01');
+  assert.equal(detail.postal_arrival_date, undefined);
+});
+
+test('судебный приказ (кассация): карточка показывает промежуточное хранение на почте (вариант b)', () => {
+  const v = buildView(
+    { sudebny_prikaz_postal_arrival_date: '2025-08-29' },
+    { today: '2025-07-01' },
+  );
+  const card = byId(v.cards, 'sudebny_prikaz_cassation');
+  assert.ok(card);
+
+  const detail = card.details.entry_into_force;
+  assert.equal(detail.via_postal_storage, true);
+  assert.equal(detail.postal_arrival_date, '2025-08-29');
+  assert.equal(detail.postal_storage_start, '2025-09-01');
+  // Семь дней хранения включительно от первого: 01.09 — первый, 07.09 — седьмой.
+  assert.equal(detail.received_date, '2025-09-07');
+  assert.equal(detail.date, '2025-09-19');
+});
+
 test('практика ВС: карточка показывает обе промежуточные даты и контролирующую', () => {
   const v = buildView(
     {
@@ -949,12 +978,21 @@ test('пересмотр: узел доступен в любой ветви, б
   }
 });
 
-test('судебный приказ: карточка появляется по дате выдачи приказа', () => {
-  const without = buildView({}, { today: '2026-03-01' });
-  assert.ok(!ids(without.cards).includes('court_order_presentation'));
+test('судебный приказ: карточка предъявления появляется в своей ситуации по дате выдачи', () => {
+  // ЧТО ИЗМЕНИЛОСЬ. Прежде карточку давал узел приказного производства
+  // (court_order_presentation) от одной только даты выдачи приказа. Узла нет:
+  // предъявление считается вариантом «судебный приказ» ситуации
+  // «Исполнительное производство», и одной даты уже мало — нужен ещё выбранный
+  // тип документа (у трёх типов три разных якоря). Даты и норма те же.
+  const withoutType = buildView({ court_order_issued_date: '2023-04-12' }, { today: '2026-03-01' });
+  assert.ok(!ids(withoutType.cards).includes('court_order_presentation'));
+  assert.ok(!ids(withoutType.cards).includes('enforcement_document_presentation'));
 
-  const v = buildView({ court_order_issued_date: '2023-04-12' }, { today: '2026-03-01' });
-  const co = byId(v.cards, 'court_order_presentation');
+  const v = buildView(
+    { enforcement_document_type: 'court_order', court_order_issued_date: '2023-04-12' },
+    { today: '2026-03-01' },
+  );
+  const co = byId(v.cards, 'enforcement_document_presentation');
   assert.ok(co);
   assert.equal(co.deadline, '2026-04-13'); // 12.04.2026 — воскресенье, перенос
   assert.match(co.norm, /ч\. 3 ст\. 21/);
@@ -976,48 +1014,98 @@ test('возражения должника: карточка появляетс
   assert.deepEqual(obj.duration, { value: 10, unit: 'working_day' });
 });
 
-test('возражения должника: заметка связывает узел со сроком предъявления (ст. 130)', () => {
+test('возражения должника: карточка появляется по одной лишь дате прибытия на почту', () => {
+  // ЧТО ИЗМЕНИЛОСЬ. Прежде фикция п. 32 ПП ВС РФ № 62 была подключена только к
+  // кассационному узлу, и при почтовом варианте карточка возражений не
+  // появлялась вовсе — хотя п. 32 определяет начало течения именно
+  // десятидневного срока ст. 128. Теперь появляется, и на ней видно, что
+  // точка отсчёта вычислена, а не введена.
+  const v = buildView(
+    { sudebny_prikaz_postal_arrival_date: '2025-08-29' },
+    { today: '2025-07-01' },
+  );
+  const obj = byId(v.cards, 'court_order_objection');
+  assert.ok(obj, 'карточка возражений появляется по почтовой дате');
+  assert.equal(obj.status, 'computed');
+  assert.equal(obj.unit, 'working_day');
+  assert.equal(obj.deadline, '2025-09-19');
+
+  const detail = obj.details.received;
+  assert.ok(detail, 'промежуточные данные вывода даты получения должны быть в details');
+  assert.equal(detail.computed, true);
+  assert.equal(detail.via_postal_storage, true);
+  assert.equal(detail.postal_arrival_date, '2025-08-29');
+  assert.equal(detail.postal_storage_start, '2025-09-01');
+  // Седьмой день хранения, считая первым 01.09 (а не 01.09 + 7).
+  assert.equal(detail.date, '2025-09-07');
+
+  // Та же дата получения — на соседней карточке кассации: она посчитана один
+  // раз, а не двумя параллельными формулами.
+  const cassation = byId(v.cards, 'sudebny_prikaz_cassation');
+  assert.equal(cassation.details.entry_into_force.received_date, detail.date);
+  assert.equal(cassation.details.entry_into_force.date, obj.deadline);
+});
+
+test('возражения должника: при прямой дате получения почтовых данных на карточке нет', () => {
+  const v = buildView({ court_order_copy_received_date: '2026-03-02' }, { today: '2026-03-01' });
+  const detail = byId(v.cards, 'court_order_objection').details.received;
+  assert.equal(detail.computed, false);
+  assert.equal(detail.via_postal_storage, false);
+  assert.equal(detail.date, '2026-03-02');
+  assert.equal(detail.postal_arrival_date, undefined);
+  assert.equal(detail.postal_storage_start, undefined);
+});
+
+test('возражения должника: заметка ведёт к сроку предъявления (ст. 130)', () => {
+  // Заметка та же, но соседний узел уехал в другую ситуацию: после удаления
+  // court_order_presentation она ссылается на узел «Исполнительного
+  // производства» и прямо называет ситуацию, где срок считается, — иначе
+  // отсылка «см. срок предъявления» вела бы в никуда.
   const v = buildView({ court_order_copy_received_date: '2026-03-02' }, { today: '2026-03-01' });
   const obj = byId(v.cards, 'court_order_objection');
   assert.match(obj.note, /ст\. 130/);
   assert.match(obj.note, /предъявлени/);
-  assert.equal(obj.details.related_node, 'court_order_presentation');
+  assert.match(obj.note, /Исполнительное производство/);
+  assert.equal(obj.details.related_node, 'enforcement_document_presentation');
   // Заметка — только связь, а не второй расчёт: своего дедлайна у неё нет.
   assert.ok(!ids(v.cards).includes('court_order_presentation'));
+  assert.ok(!ids(v.cards).includes('enforcement_document_presentation'));
 });
 
-test('судебный приказ: два узла ситуации независимы друг от друга', () => {
+test('приказное производство и предъявление независимы, хотя теперь в разных ситуациях', () => {
+  // Прежде тест назывался «два узла ситуации независимы друг от друга»: оба
+  // жили в ситуации «Судебный приказ». Предъявление переехало в
+  // «Исполнительное производство» вместе со своим полем, но независимость
+  // расчётов — то, что тест проверял, — осталась: у каждого своя дата, и
+  // соседняя его не сдвигает.
+  const PRESENTATION = {
+    enforcement_document_type: 'court_order',
+    court_order_issued_date: '2023-04-12',
+  };
+  const relevant = (view) =>
+    ids(view.cards).filter(
+      (id) => id.startsWith('court_order') || id === 'enforcement_document_presentation',
+    );
+
   const onlyObjection = buildView(
     { court_order_copy_received_date: '2026-03-02' },
     { today: '2026-03-01' },
   );
-  assert.deepEqual(
-    ids(onlyObjection.cards).filter((id) => id.startsWith('court_order')),
-    ['court_order_objection'],
-  );
+  assert.deepEqual(relevant(onlyObjection), ['court_order_objection']);
 
-  const onlyPresentation = buildView(
-    { court_order_issued_date: '2023-04-12' },
-    { today: '2026-03-01' },
-  );
-  assert.deepEqual(
-    ids(onlyPresentation.cards).filter((id) => id.startsWith('court_order')),
-    ['court_order_presentation'],
-  );
+  const onlyPresentation = buildView(PRESENTATION, { today: '2026-03-01' });
+  assert.deepEqual(relevant(onlyPresentation), ['enforcement_document_presentation']);
 
   const both = buildView(
-    { court_order_copy_received_date: '2026-03-02', court_order_issued_date: '2023-04-12' },
+    { ...PRESENTATION, court_order_copy_received_date: '2026-03-02' },
     { today: '2026-03-01' },
   );
-  assert.deepEqual(
-    ids(both.cards).filter((id) => id.startsWith('court_order')),
-    ['court_order_objection', 'court_order_presentation'],
-  );
+  assert.deepEqual(relevant(both), ['court_order_objection', 'enforcement_document_presentation']);
   assert.equal(byId(both.cards, 'court_order_objection').deadline, '2026-03-17');
-  assert.equal(byId(both.cards, 'court_order_presentation').deadline, '2026-04-13');
+  assert.equal(byId(both.cards, 'enforcement_document_presentation').deadline, '2026-04-13');
 
   const neither = buildView({}, { today: '2026-03-01' });
-  assert.deepEqual(ids(neither.cards).filter((id) => id.startsWith('court_order')), []);
+  assert.deepEqual(relevant(neither), []);
 });
 
 test('возражения должника: истёкший срок помечается по текущей дате', () => {
@@ -1136,45 +1224,83 @@ test('глава 22.2: истёкший срок помечается по те�
   assert.equal(byId(v.cards, 'child_return_private_complaint').status, 'expired');
 });
 
+// Периодические платежи — вариант узла enforcement_document_presentation
+// (ч. 4 ст. 21 ФЗ № 229-ФЗ), а не свой узел: прежний periodic_payments_presentation
+// со своей ситуацией поглощён целиком. Проверки те же, что были у него.
+const PERIODIC = { enforcement_document_type: 'periodic_payments' };
+
 test('периодические платежи: карточка появляется по дате окончания периода', () => {
-  const without = buildView({}, { today: '2026-03-01' });
-  assert.ok(!ids(without.cards).includes('periodic_payments_presentation'));
+  const without = buildView(PERIODIC, { today: '2026-03-01' });
+  assert.ok(!ids(without.cards).includes('enforcement_document_presentation'));
 
   const v = buildView(
-    { periodic_payment_period_end_date: '2023-04-12' },
+    { ...PERIODIC, periodic_payment_period_end_date: '2023-04-12' },
     { today: '2026-03-01' },
   );
-  const pp = byId(v.cards, 'periodic_payments_presentation');
+  const pp = byId(v.cards, 'enforcement_document_presentation');
   assert.ok(pp);
   assert.equal(pp.status, 'computed');
   assert.equal(pp.deadline, '2026-04-13'); // 12.04.2026 — воскресенье, перенос
   assert.match(pp.norm, /ч\. 4 ст\. 21/);
   assert.deepEqual(pp.duration, { value: 3, unit: 'year' });
+  // Оговорка ч. 4 доезжает до карточки.
+  assert.match(pp.details.logic, /в любой момент/);
 });
 
 test('периодические платежи: бессрочное взыскание — карточка not_applicable без даты', () => {
-  const v = buildView({ periodic_payment_indefinite: true }, { today: '2026-03-01' });
-  const pp = byId(v.cards, 'periodic_payments_presentation');
+  const v = buildView(
+    { ...PERIODIC, periodic_payment_indefinite: true },
+    { today: '2026-03-01' },
+  );
+  const pp = byId(v.cards, 'enforcement_document_presentation');
   assert.ok(pp, 'карточка остаётся — это содержательный факт, не нехватка данных');
   assert.equal(pp.status, 'not_applicable');
   assert.equal(pp.deadline, null);
   assert.match(pp.message, /бессрочное/);
   assert.match(pp.details.logic, /бессрочно/);
-  assert.ok(!ids(v.incomplete).includes('periodic_payments_presentation'));
+  assert.ok(!ids(v.incomplete).includes('enforcement_document_presentation'));
   // И в .ics не попадает — экспортировать нечего.
-  assert.ok(
-    !icsTermsFromView(v).some((t) =>
-      /периодических платежей/.test(t.title),
-    ),
+  assert.ok(!icsTermsFromView(v).some((t) => /исполнительного документа/.test(t.title)));
+});
+
+test('периодические платежи: бессрочность перекрывает введённую дату и на карточке', () => {
+  // Взаимоисключающие входы: карточка не должна показывать дедлайн, посчитанный
+  // от даты, которую пользователь ввёл до того, как отметил бессрочность.
+  const v = buildView(
+    {
+      ...PERIODIC,
+      periodic_payment_period_end_date: '2023-04-12',
+      periodic_payment_indefinite: true,
+    },
+    { today: '2026-03-01' },
   );
+  const pp = byId(v.cards, 'enforcement_document_presentation');
+  assert.equal(pp.status, 'not_applicable');
+  assert.equal(pp.deadline, null);
 });
 
 // --- Перерыв срока предъявления (ч. 1–3 ст. 22 ФЗ № 229-ФЗ) -----------------
+//
+// ЧТО ИЗМЕНИЛОСЬ В ЭТОМ БЛОКЕ. Карточкой предъявления здесь была карточка узла
+// на хвосте общей цепочки (enforcement_presentation), где дата вступления
+// решения в силу вычислялась из BASE и today. Узла на хвосте нет — карточку
+// даёт единственный оставшийся узел, в ситуации «Исполнительное
+// производство», и та же дата (12.04.2025) вводится напрямую. Ожидаемые даты
+// и вся механика ст. 22 от этого не изменились.
 
-test('перерыв: карточка ИЛ показывает историю событий и норму ст. 22', () => {
+// Вход к карточке предъявления: вариант «решение суда» (ч. 1 ст. 21) с той же
+// датой вступления в силу, которую прежде давала общая цепочка.
+const ENFORCEMENT_ENTRY = {
+  enforcement_document_type: 'court_decision',
+  enforcement_decision_entry_into_force_date: '2025-04-12',
+};
+const PRESENTATION_NODE = 'enforcement_document_presentation';
+
+test('перерыв: карточка предъявления показывает историю событий и норму ст. 22', () => {
   const v = buildView(
     {
       ...BASE,
+      ...ENFORCEMENT_ENTRY,
       enforcement_interruptions: [
         { type: 'partial_execution', date: '2027-02-10' },
         { type: 'presentment', date: '2026-06-01' },
@@ -1182,7 +1308,7 @@ test('перерыв: карточка ИЛ показывает историю 
     },
     { today: '2025-05-01' },
   );
-  const il = byId(v.cards, 'enforcement_presentation');
+  const il = byId(v.cards, PRESENTATION_NODE);
   assert.equal(il.deadline, '2030-02-11'); // от 10.02.2027 + 3 года, перенос
   // История — в хронологическом порядке, с подписями оснований.
   assert.deepEqual(
@@ -1203,21 +1329,29 @@ test('перерыв: карточка ИЛ показывает историю 
 
 test('перерыв: карточка несёт предупреждение о ч. 3.1 ст. 22', () => {
   const v = buildView(
-    { ...BASE, enforcement_interruptions: [{ type: 'returned_no_assets', date: '2026-06-01' }] },
+    {
+      ...BASE,
+      ...ENFORCEMENT_ENTRY,
+      enforcement_interruptions: [{ type: 'returned_no_assets', date: '2026-06-01' }],
+    },
     { today: '2025-05-01' },
   );
-  const warning = byId(v.cards, 'enforcement_presentation').interruption_warning;
+  const warning = byId(v.cards, PRESENTATION_NODE).interruption_warning;
   assert.equal(warning.code, 'interruption_scope');
   assert.match(warning.norm, /3\.1/);
-  // Смысл: сюда идёт только возврат по невозможности взыскания; отзыв самим
-  // взыскателем считается по другому правилу и завысит срок.
-  assert.match(warning.text, /невозможност/i);
+  // Смысл: сюда идёт только возврат по невозможности взыскания; окончание ИП по
+  // вине самого взыскателя считается по другому правилу (ч. 3.1) и завысит срок,
+  // если выбрать не то основание.
+  assert.match(warning.text, /невозможно/i);
   assert.match(warning.text, /ч\. 3\.1/);
-  assert.match(warning.text, /завысит/);
+  assert.match(warning.text, /завысить/);
 });
 
 test('перерыв: без событий карточка не обрастает полями истории', () => {
-  const il = byId(buildView(BASE, { today: '2025-05-01' }).cards, 'enforcement_presentation');
+  const il = byId(
+    buildView({ ...BASE, ...ENFORCEMENT_ENTRY }, { today: '2025-05-01' }).cards,
+    PRESENTATION_NODE,
+  );
   assert.equal(il.deadline, '2028-04-12');
   assert.equal(il.interruptions, undefined);
   assert.equal(il.interruption_warning, undefined);
@@ -1228,10 +1362,14 @@ test('перерыв: без событий карточка не обраста
 
 test('перерыв: неучтённое событие остаётся в истории с объяснением', () => {
   const v = buildView(
-    { ...BASE, enforcement_interruptions: [{ type: 'presentment', date: '2025-01-10' }] },
+    {
+      ...BASE,
+      ...ENFORCEMENT_ENTRY,
+      enforcement_interruptions: [{ type: 'presentment', date: '2025-01-10' }],
+    },
     { today: '2025-05-01' },
   );
-  const il = byId(v.cards, 'enforcement_presentation');
+  const il = byId(v.cards, PRESENTATION_NODE);
   assert.equal(il.deadline, '2028-04-12'); // дедлайн не уехал назад
   assert.equal(il.restarted_from, null);
   assert.equal(il.interruptions[0].ignored, true);
@@ -1239,14 +1377,17 @@ test('перерыв: неучтённое событие остаётся в и
 });
 
 test('перерыв: карточка судебного приказа считает срок от последнего события', () => {
+  // Тот же тест на тех же датах, но приказ теперь — тип документа, а не свой
+  // узел: карточку даёт та же ситуация «Исполнительное производство».
   const v = buildView(
     {
+      enforcement_document_type: 'court_order',
       court_order_issued_date: '2023-04-12',
       enforcement_interruptions: [{ type: 'presentment', date: '2024-03-05' }],
     },
     { today: '2026-03-01' },
   );
-  const co = byId(v.cards, 'court_order_presentation');
+  const co = byId(v.cards, PRESENTATION_NODE);
   assert.equal(co.deadline, '2027-03-05'); // вместо 13.04.2026 без перерыва
   assert.equal(co.base_anchor, '2023-04-12');
   assert.equal(co.restarted_from, '2024-03-05');
@@ -1254,22 +1395,29 @@ test('перерыв: карточка судебного приказа счи�
 });
 
 test('перерыв: карточка периодических платежей его не получает', () => {
-  // Обе фичи включены одним набором входных данных: ИЛ прерван, периодические
-  // платежи (ч. 4 ст. 21) считаются от своей даты и списка перерывов не несут.
-  const v = buildView(
-    {
-      ...BASE,
-      periodic_payment_period_end_date: '2023-04-12',
-      enforcement_interruptions: [{ type: 'presentment', date: '2026-06-01' }],
-    },
-    { today: '2025-05-01' },
-  );
-  const il = byId(v.cards, 'enforcement_presentation');
-  assert.equal(il.deadline, '2029-06-01');
-  assert.ok(il.interruptions);
+  // Прежде тест ставил рядом две карточки — прерванный ИЛ общей цепочки и
+  // периодические платежи — и показывал, что список перерывов действует на
+  // одну и не действует на другую. Карточка узла на хвосте цепочки убрана,
+  // поэтому сравниваются два типа документа ОДНОГО узла при одном и том же
+  // списке событий: различие и раньше держалось на флаге interruptible типа,
+  // а не на том, что узлов два.
+  const events = { enforcement_interruptions: [{ type: 'presentment', date: '2026-06-01' }] };
 
-  const pp = byId(v.cards, 'periodic_payments_presentation');
-  assert.ok(pp, 'узел периодических платежей на месте');
+  const decision = byId(
+    buildView({ ...BASE, ...ENFORCEMENT_ENTRY, ...events }, { today: '2025-05-01' }).cards,
+    PRESENTATION_NODE,
+  );
+  assert.equal(decision.deadline, '2029-06-01');
+  assert.ok(decision.interruptions);
+
+  const pp = byId(
+    buildView(
+      { ...BASE, ...PERIODIC, periodic_payment_period_end_date: '2023-04-12', ...events },
+      { today: '2025-05-01' },
+    ).cards,
+    PRESENTATION_NODE,
+  );
+  assert.ok(pp, 'узел предъявления по ч. 4 ст. 21 на месте');
   assert.equal(pp.deadline, '2026-04-13');
   assert.equal(pp.interruptible, undefined);
   assert.equal(pp.interruptions, undefined);
@@ -1575,4 +1723,122 @@ test('апелляция мирового: дата апелляционного
   const appeal = byId(v.cards, 'mirovoy_appeal');
   assert.equal(appeal.status, 'computed');
   assert.equal(appeal.overdue, undefined);
+});
+
+// --- ACTION_FACT_INPUT/MISSED_FROM_FILING: автосборка из chain.js -----------
+//
+// До этого рефакторинга обе карты были ручными объектами в views.js — id узла
+// в них приходилось поддерживать в согласии с id в chain.js вручную, и
+// рассинхронизация (опечатка, забытая запись при добавлении узла) не ловилась
+// ни одним тестом (см. docs/core-extraction-audit.md, §6 Вопрос 5, и
+// диагностику с синтетической рассинхронизацией). Теперь fact_input/
+// missed_from_filing — поля самих term-определений chain.js, а карты
+// собираются обходом его экспортов (collectFactInputMaps, по образцу
+// TERM_REGISTRY в term-registry.js).
+
+test('collectFactInputMaps: механизм сборки на синтетических узлах, без knowledge о ГПК', () => {
+  // Синтетический module-namespace — не chain.js, проверяем сам механизм
+  // фильтрации/сборки, а не конкретный узел ГПК.
+  const fakeModule = {
+    WITH_BOTH: { id: 'synthetic_with_both', title: 'x', fact_input: 'synthetic_filed_date', missed_from_filing: true },
+    WITH_FACT_ONLY: { id: 'synthetic_fact_only', title: 'y', fact_input: 'synthetic_other_date' },
+    WITHOUT_FACT: { id: 'synthetic_no_fact', title: 'z' }, // не должен попасть в ACTION_FACT_INPUT
+    NOT_A_TERM: { foo: 'bar' }, // без id — не term-объект, отфильтровывается
+    helperFn: () => {}, // функция-экспорт (как в chain.js) — не term-объект
+  };
+
+  const { actionFactInput, missedFromFiling } = collectFactInputMaps(fakeModule);
+
+  assert.deepEqual(actionFactInput, {
+    synthetic_with_both: 'synthetic_filed_date',
+    synthetic_fact_only: 'synthetic_other_date',
+  });
+  assert.deepEqual([...missedFromFiling], ['synthetic_with_both']);
+});
+
+test('ACTION_FACT_INPUT: 15 узлов из ручной карты (до рефакторинга) воспроизведены автосборкой без расхождений', () => {
+  // Список — точная копия старой ручной карты ACTION_FACT_INPUT (см. диагностику,
+  // шаг 1). Регрессия: если после переноса fact_input в chain.js значение для
+  // любого из этих 15 узлов разойдётся — тест упадёт.
+  const expected = {
+    appeal_general: 'appeal_filed_date',
+    cassation_ksoyu: 'cassation_filed_date',
+    cassation_vs: 'vs_cassation_filed_date',
+    protocol_remarks: 'protocol_remarks_filed_date',
+    simplified_reasoned_request: 'simplified_reasoned_request_date',
+    simplified_reasoned_making: 'simplified_reasoned_date',
+    simplified_appeal: 'simplified_appeal_filed_date',
+    default_judgment_cancellation_request: 'default_judgment_cancellation_request_date',
+    default_judgment_appeal: 'default_judgment_appeal_filed_date',
+    foreign_state_default_judgment_cancellation_request:
+      'foreign_state_default_judgment_cancellation_request_date',
+    foreign_state_default_judgment_appeal: 'foreign_state_default_judgment_appeal_filed_date',
+    mirovoy_reasoned_request: 'mirovoy_request_date',
+    mirovoy_reasoned_making: 'mirovoy_reasoned_date',
+    mirovoy_appeal: 'mirovoy_appeal_ruling_reasoned_date',
+    mirovoy_cassation: 'cassation_filed_date',
+  };
+  for (const [id, field] of Object.entries(expected)) {
+    assert.equal(ACTION_FACT_INPUT[id], field, `fact_input для узла ${id}`);
+  }
+});
+
+test('ACTION_FACT_INPUT: автосборка распространяет fact_input на клоны CASSATION_KSOYU (пробел старой ручной карты — принято по итогам диагностики)', () => {
+  // simplified_cassation_ksoyu / default_judgment_cassation_ksoyu /
+  // foreign_state_default_judgment_cassation_ksoyu — клоны CASSATION_KSOYU
+  // через object spread (`{...CASSATION_KSOYU, id: '...'}`) в chain.js. Они
+  // наследуют fact_input/missed_from_filing вместе со всеми остальными полями
+  // и попадают в автосборку, хотя в старой ручной ACTION_FACT_INPUT их id
+  // никогда не было.
+  //
+  // computeCassationTerm (chain.js) читает inputs.cassation_filed_date для
+  // ВСЕХ четырёх КСОЮ-веток (general/simplified/default_judgment/
+  // foreign_state_default_judgment) одинаково — fact_input у них семантически
+  // верен, а старая ручная карта эти три узла просто пропускала: их статус
+  // после дедлайна был только 'expired', даже при введённой дате подачи, а
+  // должен был быть 'missed'. Решение принято явно (не выведено рефакторингом
+  // по умолчанию): оставить как есть — это исправление пробела, а не
+  // регрессия. Поведенческая проверка — следующим тестом.
+  const expectedExtra = [
+    'default_judgment_cassation_ksoyu',
+    'foreign_state_default_judgment_cassation_ksoyu',
+    'simplified_cassation_ksoyu',
+  ];
+  const oldManualIds = new Set([
+    'appeal_general',
+    'cassation_ksoyu',
+    'cassation_vs',
+    'protocol_remarks',
+    'simplified_reasoned_request',
+    'simplified_reasoned_making',
+    'simplified_appeal',
+    'default_judgment_cancellation_request',
+    'default_judgment_appeal',
+    'foreign_state_default_judgment_cancellation_request',
+    'foreign_state_default_judgment_appeal',
+    'mirovoy_reasoned_request',
+    'mirovoy_reasoned_making',
+    'mirovoy_appeal',
+    'mirovoy_cassation',
+  ]);
+  const extra = Object.keys(ACTION_FACT_INPUT)
+    .filter((id) => !oldManualIds.has(id))
+    .sort();
+  assert.deepEqual(extra, expectedExtra);
+  for (const id of expectedExtra) {
+    assert.equal(ACTION_FACT_INPUT[id], 'cassation_filed_date');
+  }
+});
+
+test('кассация в КСОЮ для упрощённого производства: подача позже дедлайна теперь даёт missed, а не expired', () => {
+  // Раньше (ручная ACTION_FACT_INPUT без simplified_cassation_ksoyu) эта
+  // карточка после дедлайна оставалась 'expired' независимо от введённой
+  // cassation_filed_date — см. тест выше.
+  const v = buildView(
+    { simplified_resolution_date: '2025-12-22', cassation_filed_date: '2026-06-01' },
+    { today: '2026-07-01' },
+  );
+  const cass = byId(v.cards, 'simplified_cassation_ksoyu');
+  assert.equal(cass.deadline, '2026-04-23'); // дедлайн раньше даты подачи — просрочка
+  assert.equal(cass.status, 'missed');
 });
