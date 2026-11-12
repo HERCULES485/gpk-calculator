@@ -25,6 +25,7 @@ import { INPUT_LABELS_APK } from './labels.js';
 import { ENFORCEMENT_INTERRUPTION_TYPES_APK, ENFORCEMENT_EXCLUSION_TYPES_APK } from './chain.js';
 import { reminderOffsets } from './term-registry.js';
 import { buildICS, icsTermsFromView, exportableCards } from './ics.js';
+import { encodeCase, decodeCase, emptyCase } from './case-link.js';
 
 // --- Из ядра, без изменений ---------------------------------------------------
 import { situationById } from '../core/view/situations.js';
@@ -1518,6 +1519,111 @@ function render() {
   prevComputed = { situation: situation.id, ids: computedNow };
 
   restoreFocus(focus);
+  writeCaseToUrl();
+}
+
+// --- Дело в адресе страницы (#case=…) -----------------------------------------
+//
+// Состояние дела — ветвь, заполненные поля и строки трёх черновиков — после
+// каждой перерисовки записывается во фрагмент адреса (history.replaceState,
+// без новых записей в истории): обновление страницы его не стирает, и расчётом
+// можно поделиться ссылкой. Кодирование и проверка — в apk/case-link.js, здесь
+// только список допустимого и обмен с location.
+//
+// Сырой текст недобранных дат основных полей (rawDates) в ссылку не пишется:
+// в неё идёт только то, что уже стало ISO-датой в state.inputs. У строк
+// черновиков сохраняется сырой текст как есть — так они и хранятся.
+
+// Вид поля для проверки значения из ссылки: та же таблица FIELD_KIND_APK, по
+// которой рисуется виджет; поля, которых в ней нет, — даты (см. fieldKind).
+function caseLinkFieldSpec(id) {
+  const spec = FIELD_KIND_APK[id];
+  if (spec?.kind === 'choice') return { kind: 'choice', values: spec.options.map((o) => o.value) };
+  if (spec?.kind === 'boolean') return { kind: 'boolean' };
+  return { kind: 'date' };
+}
+
+// Известные приложению поля — основные поля и поля всех ветвей. Готовые
+// списки перерывов и периодов в state.inputs сюда не входят: их приложение
+// выводит из черновиков (sync*), и в ссылке они хранятся черновиками.
+const CASE_LINK_SCHEMA = (() => {
+  const fields = {};
+  for (const s of SITUATIONS_APK) {
+    for (const id of [s.primary_field, ...s.fields]) {
+      if (id) fields[id] = caseLinkFieldSpec(id);
+    }
+  }
+  return {
+    situations: SITUATIONS_APK.map((s) => s.id),
+    defaultSituation: DEFAULT_SITUATION_APK,
+    fields,
+    interruptionTypes: ENFORCEMENT_INTERRUPTION_TYPES_APK.map((t) => t.id),
+    exclusionTypes: ENFORCEMENT_EXCLUSION_TYPES_APK.map((t) => t.id),
+  };
+})();
+
+function currentCase() {
+  return {
+    situation: state.situation,
+    inputs: state.inputs,
+    interruptions: interruptionDraft,
+    suspensions: suspensionDraft,
+    exclusions: exclusionDraft,
+  };
+}
+
+// Адрес страницы без фрагмента — тот же путь и query, что и сейчас.
+function pageUrlWithoutFragment() {
+  return `${location.pathname}${location.search}`;
+}
+
+function writeCaseToUrl() {
+  const encoded = encodeCase(currentCase(), CASE_LINK_SCHEMA);
+  if (encoded === '') {
+    // Пустое состояние — фрагмент убирается совсем, включая голый '#'.
+    if (location.href.includes('#')) history.replaceState(history.state, '', pageUrlWithoutFragment());
+    return;
+  }
+  if (location.hash === `#${encoded}`) return;
+  history.replaceState(history.state, '', `${pageUrlWithoutFragment()}#${encoded}`);
+}
+
+// Заменяет всё состояние дела целиком: и введённое, и сырой текст дат, и
+// черновики. Готовые списки в state.inputs пересобираются из черновиков.
+function applyCase(next) {
+  state.situation = next.situation;
+  state.inputs = { ...next.inputs };
+  rawDates.clear();
+  interruptionDraft.splice(0, interruptionDraft.length, ...next.interruptions);
+  suspensionDraft.splice(0, suspensionDraft.length, ...next.suspensions);
+  exclusionDraft.splice(0, exclusionDraft.length, ...next.exclusions);
+  syncInterruptions();
+  syncSuspension();
+  syncExclusion();
+}
+
+// Фрагмент, не принятый целиком, игнорируется: страница открывается чистой, а
+// сам фрагмент убирает следующая запись (writeCaseToUrl в render()) — у
+// пустого состояния фрагмента нет.
+function loadCaseFromUrl() {
+  applyCase(decodeCase(location.hash, CASE_LINK_SCHEMA) ?? emptyCase(CASE_LINK_SCHEMA));
+}
+
+async function copyCaseLink() {
+  writeCaseToUrl();
+  const text = location.href;
+  let ok = true;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    ok = copyViaSelection(text);
+  }
+  showCopyStatus(ok ? 'Ссылка скопирована' : 'Не удалось скопировать');
+}
+
+function resetCase() {
+  applyCase(emptyCase(CASE_LINK_SCHEMA));
+  render();
 }
 
 // --- Инициализация ------------------------------------------------------------
@@ -1533,6 +1639,8 @@ function init() {
   document.getElementById('download-ics')?.addEventListener('click', downloadICS);
   document.getElementById('copy-terms')?.addEventListener('click', copyTerms);
   document.getElementById('print-terms')?.addEventListener('click', printTerms);
+  document.getElementById('copy-link')?.addEventListener('click', copyCaseLink);
+  document.getElementById('reset-case')?.addEventListener('click', resetCase);
   document.getElementById('situation-toggle').addEventListener('click', () => {
     setSituationPanelOpen(document.getElementById('situation').hidden);
   });
@@ -1549,6 +1657,15 @@ function init() {
       { capture: true },
     );
   }
+
+  // Дело из адреса — до первой отрисовки; при смене фрагмента (вставили другую
+  // ссылку в ту же вкладку) — заново целиком. Своя запись через replaceState
+  // события hashchange не вызывает.
+  loadCaseFromUrl();
+  window.addEventListener('hashchange', () => {
+    loadCaseFromUrl();
+    render();
+  });
 
   render();
 }

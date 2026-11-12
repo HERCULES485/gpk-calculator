@@ -1427,7 +1427,7 @@ check(
 {
   const originalViewport = page.viewportSize();
   await page.setViewportSize({ width: 375, height: 812 });
-  await page.reload({ waitUntil: 'networkidle' });
+  await page.goto(`http://localhost:${port}/apk.html`, { waitUntil: 'networkidle' });
   const pos = await page.evaluate(() => {
     const r = document.querySelector('section.primary input').getBoundingClientRect();
     return { bottom: r.bottom, scrollY: window.scrollY };
@@ -1512,7 +1512,7 @@ await chooseSituation('decision_chain');
 {
   const originalViewport = page.viewportSize();
   await page.setViewportSize({ width: 375, height: 812 });
-  await page.reload({ waitUntil: 'networkidle' });
+  await page.goto(`http://localhost:${port}/apk.html`, { waitUntil: 'networkidle' });
   const freshCount = () => page.locator('.fresh-terms').count();
   // Следующий соседний элемент после .field с данным полем — класс или null.
   const nextAfterField = (inputId) =>
@@ -1748,6 +1748,114 @@ check(await page.locator('#download-ics').isEnabled(), 'экспорт[protocol_
     note === 'Напоминания за 1 и 2 рабочих дня ссылка не ставит — добавьте их в событии вручную.',
     `экспорт[protocol_remarks]: фраза в карточке «${note}»`,
   );
+}
+
+// --- Дело в адресе страницы (#case=…) -----------------------------------------
+//
+// Состояние дела пишется во фрагмент адреса: (а) ветвь не по умолчанию, основное
+// поле и одно дополнительное — карточка срока; (б) перезагрузка сохраняет всё;
+// (в) тот же адрес в новой странице — то же; (г) «Начать заново» — поля пустые,
+// фрагмента нет; (д) мусорный фрагмент — чистая страница, фрагмент убран,
+// ошибок в консоли нет (их собирает общий сборщик problems).
+{
+  const CASE_SITUATION = 'nadzor';
+  const PRIMARY = '#in-last_contested_act_entry_into_force_date';
+  const EXTRA = '#in-subject_category';
+  const cleanUrl = `http://localhost:${port}/apk.html`;
+  const deadlines = (p) => p.$$eval('#results .deadline', (nodes) => nodes.map((n) => n.textContent));
+  const watch = (p) => {
+    p.on('console', (m) => {
+      if (m.type() === 'error') problems.push(`console error: ${m.text()}`);
+    });
+    p.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
+  };
+  const expectCase = async (p, label, expectedDeadlines) => {
+    check(
+      (await p.textContent('#situation-current-name')) === situationLabel(CASE_SITUATION),
+      `ссылка[${label}]: ветвь «${await p.textContent('#situation-current-name')}», ждали ${CASE_SITUATION}`,
+    );
+    check(
+      (await p.locator(PRIMARY).count()) === 1 && (await p.inputValue(PRIMARY)) === '10.03.2026',
+      `ссылка[${label}]: основное поле не восстановлено`,
+    );
+    check(
+      (await p.locator(EXTRA).count()) === 1 && (await p.inputValue(EXTRA)) === 'article_42_person',
+      `ссылка[${label}]: дополнительное поле не восстановлено`,
+    );
+    const got = await deadlines(p);
+    check(
+      JSON.stringify(got) === JSON.stringify(expectedDeadlines),
+      `ссылка[${label}]: даты в карточках ${JSON.stringify(got)}, ждали ${JSON.stringify(expectedDeadlines)}`,
+    );
+  };
+  const expectClean = async (p, label) => {
+    check((await p.locator('.fatal').count()) === 0, `ссылка[${label}]: .fatal показан`);
+    check(!p.url().includes('#'), `ссылка[${label}]: фрагмент не убран из адреса (${p.url()})`);
+    check(
+      (await p.textContent('#situation-current-name')) === situationLabel(DEFAULT_SITUATION_APK),
+      `ссылка[${label}]: ветвь не по умолчанию`,
+    );
+    check(
+      (await p.inputValue('section.primary input')) === '',
+      `ссылка[${label}]: основное поле не пустое`,
+    );
+    check((await p.locator('#results .card').count()) === 0, `ссылка[${label}]: на чистой странице есть карточки`);
+  };
+
+  // (а) Ввод.
+  await page.goto(cleanUrl, { waitUntil: 'networkidle' });
+  await chooseSituation(CASE_SITUATION);
+  await page.fill(PRIMARY, '10.03.2026');
+  await settle();
+  await page.selectOption(EXTRA, 'article_42_person');
+  await settle();
+  await page.waitForSelector('#results .card .deadline');
+  const before = await deadlines(page);
+  check(before.length > 0, 'ссылка[ввод]: нет ни одной даты в карточках');
+  check(/#case=[A-Za-z0-9_-]+$/.test(page.url()), `ссылка[ввод]: в адресе нет #case=… (${page.url()})`);
+  const caseUrl = page.url();
+
+  // (б) Перезагрузка.
+  await page.reload({ waitUntil: 'networkidle' });
+  await expectCase(page, 'reload', before);
+  check(page.url() === caseUrl, `ссылка[reload]: адрес изменился (${page.url()})`);
+
+  // (в) Тот же адрес в новой странице.
+  {
+    const p = await browser.newPage();
+    watch(p);
+    await p.goto(caseUrl, { waitUntil: 'networkidle' });
+    await expectCase(p, 'новая страница', before);
+    await p.close();
+  }
+
+  // (г) «Начать заново».
+  await page.click('#reset-case');
+  await settle();
+  await expectClean(page, 'начать заново');
+  await chooseSituation(CASE_SITUATION);
+  check((await page.inputValue(PRIMARY)) === '', 'ссылка[начать заново]: у nadzor основное поле не пустое');
+
+  // (д) Мусорный фрагмент — при загрузке страницы.
+  const garbage = [
+    '#case=%%%',
+    `#case=${Buffer.from(JSON.stringify({ v: 1, s: 'нет_такой' }), 'utf8').toString('base64url')}`,
+  ];
+  for (const hash of garbage) {
+    await page.goto('about:blank');
+    await page.goto(`${cleanUrl}${hash}`, { waitUntil: 'networkidle' });
+    await expectClean(page, `загрузка ${hash}`);
+  }
+  // И при смене фрагмента в открытой вкладке (hashchange): мусор — чистая
+  // страница, верная ссылка — дело восстанавливается.
+  for (const hash of garbage) {
+    await page.evaluate((h) => { location.hash = h; }, hash);
+    await settle();
+    await expectClean(page, `hashchange ${hash}`);
+  }
+  await page.evaluate((h) => { location.hash = h; }, new URL(caseUrl).hash);
+  await settle();
+  await expectCase(page, 'hashchange', before);
 }
 
 await browser.close();
