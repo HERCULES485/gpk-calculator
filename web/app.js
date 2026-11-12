@@ -7,25 +7,78 @@ import {
   INTERRUPTION_TYPES,
   INTERRUPTION_TYPE_LABELS,
   INTERRUPTION_SCOPE_WARNING,
+  DEDUCTION_TYPES,
+  DEDUCTION_TYPE_LABELS,
+  DEDUCTION_DATE_LABELS,
   REVIEW_GROUNDS,
+  ENFORCEMENT_DOCUMENT_TYPES,
+  enforcementDocumentTypeById,
 } from '../src/views.js';
 import { buildICS, icsTermsFromView, exportableCards } from '../src/ics.js';
-import { reminderOffsets } from '../src/term-registry.js';
 import {
   googleCalendarUrl,
   termsAsText,
   caseSummaryLines,
   caseSummaryItems,
   caseSummaryHeader,
-  reminderRulePhrase,
   calendarEventTitle,
   DEADLINE_CAPTION,
   DEADLINE_CAPTION_COURT,
 } from '../core/export/links.js';
 import { applyDateEdit, dateFieldError, isoToRu, ruToISO } from '../core/ui/date-field.js';
-import { SITUATIONS, DEFAULT_SITUATION } from '../src/situations.js';
+import {
+  SITUATIONS,
+  DEFAULT_SITUATION,
+  CHILD_CASE_CATEGORIES,
+  childCaseCategoryById,
+} from '../src/situations.js';
 import { situationById } from '../core/view/situations.js';
 import { INPUT_LABELS } from '../src/labels.js';
+
+// UI восстановления пропущенного срока (годичный потолок ч. 7 ст. 112 ГПК РФ:
+// поля *_restoration_circumstance_date и текстовый блок card.restoration_one_year_cap,
+// см. CASSATION_SUPERVISORY_RESTORATION_NODE_IDS и core/engine/restoration.js)
+// временно скрыт из интерфейса по всему калькулятору — один флаг вместо
+// точечных правок в каждом из узлов, к которым он подключён. Расчёт в
+// движке (src/chain.js, core/engine/restoration.js) не меняется: он
+// продолжает работать и покрыт тестами (test/core/, test/integration/) —
+// скрывается только вывод.
+const SHOW_RESTORATION_CAP_UI = false;
+
+// Поле «Когда подана кассационная жалоба в ВС РФ?» (vs_cassation_filed_date,
+// см. п. 4.1 SPEC.md) влияет только на выбор редакции ч. 1 ст. 390.3 — при
+// дате подачи после 01.09.2024 (обычный случай) расчёт не меняется. Юристу
+// оно почти никогда не даёт практической пользы, но выглядит как «рабочее»
+// поле и создаёт ложные ожидания. Тот же приём, что и у SHOW_RESTORATION_CAP_UI
+// выше: скрывается только вывод (поле и поясняющий текст к нему), редакция
+// по-прежнему выбирается по текущей дате — ветвление в src/chain.js и тесты
+// не меняются.
+const SHOW_VS_CASSATION_FILED_UI = false;
+
+// Расхождение п. 12 ПП ВС РФ № 17 с нормой закона после 135-ФЗ: разъяснение
+// Пленума устарело, консультация подтвердила использовать норму закона, а не
+// разъяснение. Расчёт card.alternative (alternative_calculation в
+// src/chain.js) не меняется и по-прежнему покрыт тестами — скрывается только
+// вывод. Тот же приём, что и у SHOW_RESTORATION_CAP_UI и
+// SHOW_VS_CASSATION_FILED_UI выше.
+const SHOW_ALTERNATIVE_UI = false;
+
+// *_restoration_circumstance_date — соглашение об именовании всех восьми
+// полей годичного потолка (см. fields в src/situations.js); суффикс уникален
+// для них и не пересекается с другими полями (review_circumstance_date под
+// него не попадает).
+function isRestorationCircumstanceField(id) {
+  return id.endsWith('_restoration_circumstance_date');
+}
+
+// Поля ситуации без учёта скрытых полей годичного потолка восстановления —
+// единая точка фильтрации и для списка отрисовки, и для проверки «есть ли
+// у ветви уже введённое значение» (см. renderSituationFields ниже).
+function visibleSituationFields(situation) {
+  return SHOW_RESTORATION_CAP_UI
+    ? situation.fields
+    : situation.fields.filter((id) => !isRestorationCircumstanceField(id));
+}
 
 // --- Метаданные полей (п. 4.1 SPEC.md) --------------------------------------
 //
@@ -70,11 +123,10 @@ const INPUT_HINTS = {
     'Если заявление удовлетворено: решение отменено, вступления в силу не наступает',
   default_judgment_appeal_filed_date:
     'Если решение обжаловано, оно вступит в силу после рассмотрения жалобы (ч. 1 ст. 244)',
-  default_judgment_appeal_ruling_date: 'Дата вступления решения в силу, если оно не отменено',
+  default_judgment_appeal_ruling_date:
+    'Дата вступления решения в силу (ч. 1 ст. 209), если оно не отменено',
   default_judgment_appeal_ruling_reasoned_date:
     'Если дело обжаловалось — от неё считается кассационный срок (абз. 2 ч. 1 ст. 376.1)',
-  mirovoy_resolution_date:
-    'По делу мирового судьи сроки считаются в рабочих днях (ч. 3–5 ст. 199 ГПК)',
   mirovoy_request_date:
     'После подачи заявления у мирового судьи есть 10 рабочих дней на составление решения ' +
     '(ч. 5 ст. 199)',
@@ -86,12 +138,10 @@ const INPUT_HINTS = {
     'вынесения (ч. 1 ст. 379.2). При отмене определения жалоба считается поданной в день ' +
     'первоначального обращения',
   mirovoy_appeal_ruling_reasoned_date:
-    'Если дело прошло апелляцию в районном суде — от неё считается кассационный срок',
+    'Если дело прошло апелляцию в районном суде — от неё считается кассационный срок ' +
+    '(абз. 2 ч. 1 ст. 376.1)',
   mirovoy_appeal_ruling_date:
     'Со дня принятия решение вступает в силу (ч. 1 ст. 209); от неё считается предъявление ИЛ',
-  court_order_copy_received_date:
-    'Возражения должника — 10 рабочих дней со дня получения копии приказа (ст. 128 ГПК). ' +
-    'Отсчёт идёт от получения копии, а не от вынесения приказа и не от его отправки',
   court_order_issued_date:
     'Три года со дня выдачи приказа взыскателю (ч. 3 ст. 21 ФЗ № 229-ФЗ), а не со дня его ' +
     'вынесения мировым судьёй',
@@ -112,16 +162,38 @@ const INPUT_HINTS = {
     'Один месяц со дня получения (не вынесения!) постановления третейского ' +
     'суда о наличии компетенции (ч. 2 ст. 422.1). Касается только вопроса о ' +
     'компетенции, не итогового решения по существу спора',
+  treteisky_osparivanie_entry_into_force_date:
+    'Три месяца на кассационное обжалование (ч. 1 ст. 376.1) — минуя ' +
+    'апелляцию, определение по такому делу ею не обжалуется (ч. 5 ст. 422, ' +
+    'п. 3 ПП ВС РФ от 22.06.2021 № 17)',
+  treteisky_ispollist_entry_into_force_date:
+    'Три месяца на кассационное обжалование (ч. 1 ст. 376.1) — минуя ' +
+    'апелляцию, определение по такому делу ею не обжалуется (ч. 5 ст. 427, ' +
+    'п. 3 ПП ВС РФ от 22.06.2021 № 17)',
   settlement_approval_ruling_date:
     'Один месяц на кассационное обжалование (ч. 11 ст. 153.10) — минуя ' +
     'апелляцию, определение об утверждении мирового соглашения ею не ' +
     'обжалуется. Срок суда на рассмотрение вопроса об утверждении (месяц со ' +
     'дня поступления заявления, ч. 4 ст. 153.10) в модель не входит — это ' +
     'не срок участника',
+  foreign_judgment_entry_into_force_date:
+    'Три года на предъявление к принудительному исполнению (ч. 3 ст. 409 ГПК ' +
+    'РФ) — относится к решениям, требующим принудительного исполнения ' +
+    '(ст. 409–412 ГПК), не к признанию решений без него (ст. 413–415 ГПК)',
+  foreign_judgment_recognition_aware_date:
+    'Один месяц со дня, когда заинтересованному лицу стало известно о решении ' +
+    '(ч. 2 ст. 413 ГПК РФ) — не со дня вынесения решения и не со дня вступления ' +
+    'его в силу; относится к решениям, не требующим принудительного исполнения',
+  arbitration_award_setaside_received_date:
+    'Три месяца со дня получения этой даты (ч. 2 ст. 418 ГПК РФ) — для стороны ' +
+    'третейского разбирательства, обратившейся с заявлением',
+  arbitration_award_setaside_aware_date:
+    'Три месяца со дня, когда лицо узнало или должно было узнать о решении ' +
+    '(ч. 3 ст. 418 ГПК РФ) — для лица, не являющегося стороной третейского ' +
+    'разбирательства, в отношении прав и обязанностей которого оно вынесено, ' +
+    'а также для прокурора в установленных случаях',
   foreign_state_default_judgment_service_date:
-    'Дело в отсутствие представителя иностранного государства рассматривается ' +
-    'по правилам главы 22 ГПК РФ (заочное производство), но с другими сроками ' +
-    '(ч. 1–4 ст. 417.10)',
+    'Заочное производство по правилам главы 22 ГПК РФ, но со сроками по ст. 417.10',
   foreign_state_default_judgment_cancellation_request_date:
     'Два месяца со дня вручения копии решения (ч. 3 ст. 417.10) — не семь ' +
     'рабочих дней общего порядка (ст. 237)',
@@ -131,8 +203,13 @@ const INPUT_HINTS = {
   foreign_state_default_judgment_appeal_filed_date:
     'Дата вступления решения в силу, если оно не отменено',
   enforcement_interruptions:
-    'Каждое событие перезапускает трёхлетний срок: он идёт заново от последнего по дате ' +
-    '(ч. 1–3 ст. 22 ФЗ № 229-ФЗ), время до перерыва не засчитывается',
+    'Перерыв (ч. 1–3 ст. 22 ФЗ № 229-ФЗ) перезапускает трёхлетний срок от последнего по ' +
+    'дате события, время до перерыва не засчитывается; окончание производства по вине ' +
+    'взыскателя (ч. 3.1) срок не перезапускает, а уменьшает на время, пока шло ' +
+    'производство — там нужны две даты',
+  enforcement_decision_entry_into_force_date:
+    'Три года с этой даты (ч. 1 ст. 21 ФЗ № 229-ФЗ) — со дня вступления решения в ' +
+    'законную силу, а не со дня его вынесения и не со дня выдачи исполнительного листа',
   review_circumstance_date:
     'Три месяца со дня, указанного в норме карточки ниже (ч. 1 ст. 394 ГПК РФ) — точка ' +
     'отсчёта зависит от выбранного основания',
@@ -145,6 +222,30 @@ const INPUT_HINTS = {
   review_last_act_entry_into_force_date:
     'Шестимесячный потолок (ч. 3 ст. 394 ГПК РФ, первое предложение): срок не может быть ' +
     'позднее шести месяцев с этой даты, даже если трёхмесячный компонент истекает позже',
+  cassation_ksoyu_restoration_circumstance_date:
+    'Заполните, только если пропущенный срок нужно восстановить: покажем, укладывается ли ' +
+    'обстоятельство в годичный потолок ч. 7 ст. 112 ГПК РФ',
+  cassation_vs_restoration_circumstance_date:
+    'Заполните, только если пропущенный срок нужно восстановить: покажем, укладывается ли ' +
+    'обстоятельство в годичный потолок ч. 7 ст. 112 ГПК РФ',
+  supervision_restoration_circumstance_date:
+    'Заполните, только если пропущенный срок нужно восстановить: покажем, укладывается ли ' +
+    'обстоятельство в годичный потолок ч. 7 ст. 112 ГПК РФ',
+  settlement_approval_cassation_appeal_restoration_circumstance_date:
+    'Заполните, только если пропущенный срок нужно восстановить: покажем, укладывается ли ' +
+    'обстоятельство в годичный потолок ч. 7 ст. 112 ГПК РФ',
+  sudebny_prikaz_cassation_restoration_circumstance_date:
+    'Заполните, только если пропущенный срок нужно восстановить: покажем, укладывается ли ' +
+    'обстоятельство в годичный потолок ч. 7 ст. 112 ГПК РФ',
+  treteisky_osparivanie_cassation_restoration_circumstance_date:
+    'Заполните, только если пропущенный срок нужно восстановить: покажем, укладывается ли ' +
+    'обстоятельство в годичный потолок ч. 7 ст. 112 ГПК РФ',
+  treteisky_ispollist_cassation_restoration_circumstance_date:
+    'Заполните, только если пропущенный срок нужно восстановить: покажем, укладывается ли ' +
+    'обстоятельство в годичный потолок ч. 7 ст. 112 ГПК РФ',
+  mirovoy_cassation_restoration_circumstance_date:
+    'Заполните, только если пропущенный срок нужно восстановить: покажем, укладывается ли ' +
+    'обстоятельство в годичный потолок ч. 7 ст. 112 ГПК РФ',
 };
 
 // Подписи полей для истёкшего срока. Пока срок идёт, речь о возможной подаче;
@@ -162,17 +263,15 @@ const expiredFields = new Set();
 // Узлы, которые имеет смысл переносить в календарь: тот же отбор, что у .ics.
 const exportableIds = new Set();
 
-// Действующая длительность узла (из карточки или из реестра) — для фразы про
-// напоминания под ссылкой в Google. На самой карточке duration есть не всегда.
-const exportDurations = new Map();
-
 // Узлы цепочки общего порядка — они требуют даты мотивированного решения.
+// Узла предъявления ИЛ в этом списке больше нет: он убран с хвоста цепочки —
+// срок предъявления считается в ситуации «Исполнительное производство»
+// (см. situations.js).
 const GENERAL_CHAIN_NODES = new Set([
   'appeal_general',
   'entry_into_force',
   'cassation_ksoyu',
   'cassation_vs',
-  'enforcement_presentation',
 ]);
 
 // Порядок узлов внутри экрана задаётся выбранной ситуацией (src/situations.js):
@@ -194,19 +293,6 @@ function todayISO() {
 }
 
 // isoToRu/ruToISO живут в core/ui/date-field.js — они нужны и тестам.
-
-// Название поля для фразы «Укажите …»: подписи начинаются с «Дата», а дальше
-// уже идёт родительный падеж — остаётся отбросить уточнение в скобках. Поля не
-// про дату (dropdown вроде review_ground) такого начала не имеют — для них
-// просто снижаем регистр первой буквы, чтобы фраза не спотыкалась о заглавную
-// букву посреди предложения («Укажите основание пересмотра», а не «… Основание …»).
-function askFor(id) {
-  const label = INPUT_LABELS[id] ?? '';
-  if (/^Дата /.test(label)) {
-    return label.replace(/^Дата /, 'дату ').replace(/\s*\([^)]*\)$/, '');
-  }
-  return label.charAt(0).toLowerCase() + label.slice(1);
-}
 
 function pluralDays(n) {
   const t = n % 10, h = n % 100;
@@ -298,6 +384,13 @@ function renderDetails(details) {
     dl.appendChild(el('dt', null, 'Отсечка 24:00 / почта'));
     dl.appendChild(el('dd', null, details.midnight_rule));
   }
+  if (details.deduction_assumption) {
+    dl.appendChild(el('dt', null, 'Допущения расчёта'));
+    const dd = el('dd');
+    dd.appendChild(el('div', null, details.deduction_assumption.text));
+    dd.appendChild(el('div', 'hint', details.deduction_assumption.norm));
+    dl.appendChild(dd);
+  }
   wrap.appendChild(dl);
   return wrap;
 }
@@ -317,9 +410,6 @@ function renderTermCard(card, opts = {}) {
   if (card.unit === 'working_day') {
     h.appendChild(el('span', 'badge wd', 'рабочие дни'));
   }
-  if (card.informational) {
-    h.appendChild(el('span', 'badge info', 'справочно'));
-  }
   c.appendChild(h);
 
   // Что означает дата: без подписи «13.08.2026» читается неоднозначно — как
@@ -333,7 +423,7 @@ function renderTermCard(card, opts = {}) {
     c.appendChild(el('div', 'norm', card.norm));
     const days = card.overdue.days;
     c.appendChild(
-      el('div', 'miss', `Срок пропущен на ${days} ${pluralDays(days)}. Восстановление — ${card.overdue.norm}.`),
+      el('div', 'miss', `Пропущен срок: ${days} ${pluralDays(days)}. Восстановление — ${card.overdue.norm}.`),
     );
   } else if (card.status === 'expired') {
     // Дедлайн прошёл, а даты подачи нет: факт пропуска не установлен, известно
@@ -345,36 +435,33 @@ function renderTermCard(card, opts = {}) {
       el(
         'div',
         'expired-note',
-        `Срок истёк ${days} ${pluralDays(days)} назад. Дата подачи не введена — ` +
+        `Истёк срок: ${days} ${pluralDays(days)} назад. Дата подачи не введена — ` +
           'пропуск не подтверждён.',
       ),
     );
   } else if (card.status === 'not_applicable') {
-    // Срока не возникает вовсе — вместо даты прочерк и причина, как у события
-    // вступления в силу в том же состоянии.
-    c.appendChild(el('div', 'deadline', '—'));
+    // Срока не возникает вовсе — вместо даты формулировка и причина, как у
+    // события вступления в силу в том же состоянии.
+    c.appendChild(el('div', 'deadline', 'Срок не возникает.'));
     if (card.message) c.appendChild(el('div', 'warn', card.message));
     c.appendChild(el('div', 'norm', card.norm));
   } else {
+    // Статус 'в порядке' — молчаливый по умолчанию; добавление текста —
+    // отдельная UX-задача, не часть этого прохода.
     c.appendChild(el('div', 'deadline', isoToRu(card.deadline)));
     c.appendChild(el('div', 'norm', card.norm));
   }
 
-  // Для сроков в рабочих днях показываем первый день течения — иначе непонятно,
-  // почему дата уехала так далеко (например, за январские каникулы).
-  if (card.first_working_day) {
-    c.appendChild(
-      el('div', 'hint', `Отсчёт рабочих дней с ${isoToRu(card.first_working_day)}`),
-    );
-  }
   if (card.note) c.appendChild(el('div', 'note', card.note));
 
   if (opts.conditionNote) {
     c.appendChild(el('div', 'note', opts.conditionNote));
   }
 
-  // Перерывы срока (ст. 22 ФЗ № 229-ФЗ): история введённых событий.
+  // События ст. 22 ФЗ № 229-ФЗ: история введённого. Два блока, а не один —
+  // перерыв и вычет читаются по-разному и могут встретиться на одной карточке.
   if (card.interruptions) c.appendChild(renderInterruptionHistory(card));
+  if (card.deductions) c.appendChild(renderDeductionHistory(card));
 
   if (card.warnings) {
     for (const w of card.warnings) {
@@ -414,7 +501,11 @@ function renderTermCard(card, opts = {}) {
 
   if (card.boundary_warning) c.appendChild(renderBoundaryWarning(card.boundary_warning));
 
-  if (card.alternative) c.appendChild(renderAlternative(card));
+  if (SHOW_RESTORATION_CAP_UI && card.restoration_one_year_cap) {
+    c.appendChild(renderRestorationOneYearCap(card.restoration_one_year_cap));
+  }
+
+  if (SHOW_ALTERNATIVE_UI && card.alternative) c.appendChild(renderAlternative(card));
 
   // Практика ВС (vs_practice_change, п. 5 ч. 4 ст. 392): обе промежуточные
   // даты и явное указание, какая контролирует, — иначе на карточке был бы
@@ -428,41 +519,122 @@ function renderTermCard(card, opts = {}) {
   return c;
 }
 
-// --- Перерывы срока предъявления (ч. 1–3 ст. 22 ФЗ № 229-ФЗ) -----------------
+// --- События, изменяющие срок предъявления (ст. 22 ФЗ № 229-ФЗ) --------------
 //
-// Повторяемый список: у каждой строки основание и дата. Черновик живёт отдельно
-// от state.inputs по той же причине, что и rawDates: render() пересобирает поля
-// заново, а строка с недобранной датой должна остаться на экране — в расчёт при
-// этом она не идёт.
+// Повторяемый список: у каждой строки основание и дата (или две — см. ниже).
+// Черновик живёт отдельно от state.inputs по той же причине, что и rawDates:
+// render() пересобирает поля заново, а строка с недобранной датой должна
+// остаться на экране — в расчёт при этом она не идёт.
+//
+// Оснований два класса, и от выбранного зависит, сколько дат спрашивать:
+//   перерыв (ч. 1–3) — одна дата события, срок идёт заново от неё;
+//   вычет (ч. 3.1)   — две даты (предъявление → окончание ИП), из срока
+//                      уходит измеренный ими период.
+// Список один: для пользователя это один вопрос «почему срок изменился», а
+// разбирает события по ветвям модель (partitionEnforcementEvents в chain.js).
 const interruptionDraft = [];
 
 const DEFAULT_INTERRUPTION_TYPE = INTERRUPTION_TYPES[0].id;
 
-// Черновик → input модели: только строки с полной существующей датой.
+const DEDUCTION_TYPE_IDS = new Set(DEDUCTION_TYPES.map((t) => t.id));
+
+// Основание требует двух дат (ч. 3.1), а не одной.
+function isDeductionType(typeId) {
+  return DEDUCTION_TYPE_IDS.has(typeId);
+}
+
+// Черновик → input модели: только строки со всеми нужными датами. Строка
+// вычета без одной из двух дат не идёт в расчёт целиком — половина периода
+// измерению не поддаётся.
+//
+// Сырой текст всех трёх полей (raw / rawFrom / rawTo) хранится в строке
+// одновременно и при смене основания не стирается: пользователь может
+// переключиться туда-обратно, не потеряв набранного.
 function syncInterruptions() {
-  const ready = interruptionDraft
-    .map((row) => ({ type: row.type, date: ruToISO(row.raw) }))
-    .filter((row) => row.date != null);
+  const ready = [];
+  for (const row of interruptionDraft) {
+    if (isDeductionType(row.type)) {
+      const from = ruToISO(row.rawFrom ?? '');
+      const to = ruToISO(row.rawTo ?? '');
+      if (from != null && to != null) ready.push({ type: row.type, from, to });
+    } else {
+      const date = ruToISO(row.raw ?? '');
+      if (date != null) ready.push({ type: row.type, date });
+    }
+  }
   if (ready.length) state.inputs.enforcement_interruptions = ready;
   else delete state.inputs.enforcement_interruptions;
 }
 
-// Одна строка списка: основание (выпадающий список) + дата + кнопка удаления.
-function renderInterruptionRow(row, index) {
-  const wrap = el('div', 'field interruption-row');
-  const typeId = `in-interruption-${index}-type`;
-  const dateId = `in-interruption-${index}-date`;
+// Одно поле даты внутри строки события: подпись, маска, разбор ошибки.
+// Вынесено отдельно, потому что у строки их может быть и одно, и два, а вся
+// обвязка (id, восстановление ошибки из сырого текста, маска) одинаковая.
+//
+// commit(raw) кладёт набранное в нужное поле строки черновика — какое именно,
+// решает вызывающий код.
+function renderEventDateField(wrap, { id, label, value, className, commit }) {
+  const dateLabel = el('label', className, label);
+  dateLabel.setAttribute('for', id);
+  wrap.appendChild(dateLabel);
+  const input = el('input');
+  input.type = 'text';
+  input.id = id;
+  input.setAttribute('inputmode', 'numeric');
+  input.placeholder = 'ДД.ММ.ГГГГ';
+  input.autocomplete = 'off';
+  input.value = value;
+  wrap.appendChild(input);
+  const err = el('p', 'field-error');
+  // Строка пересоздаётся при каждой перерисовке — состояние ошибки
+  // восстанавливаем из сырого текста, как в renderInviteField.
+  err.textContent = dateFieldError(value);
+  if (err.textContent) input.classList.add('invalid');
+  wrap.appendChild(err);
+  attachDateMask(input, (_input, parsed) => {
+    commit(parsed.raw);
+    syncInterruptions();
+    render();
+  });
+}
 
-  const typeLabel = el('label', null, 'Основание перерыва');
+// Одна строка списка: основание (выпадающий список) + одна или две даты +
+// кнопка удаления. Сколько дат — зависит от выбранного основания: перерыв
+// (ч. 1–3) описывается одним днём, вычет (ч. 3.1) — периодом из двух.
+function renderInterruptionRow(row, index) {
+  const deduction = isDeductionType(row.type);
+  const rowClass = deduction ? 'field interruption-row deduction-row' : 'field interruption-row';
+  const wrap = el('div', rowClass);
+  const typeId = `in-interruption-${index}-type`;
+
+  const typeLabel = el('label', null, 'Основание изменения срока');
   typeLabel.setAttribute('for', typeId);
   wrap.appendChild(typeLabel);
   const select = el('select');
   select.id = typeId;
-  for (const type of INTERRUPTION_TYPES) {
-    const option = el('option', null, INTERRUPTION_TYPE_LABELS[type.id]);
-    option.value = type.id;
-    if (type.id === row.type) option.selected = true;
-    select.appendChild(option);
+  // Две группы в одном списке: у них разная арифметика, и видеть границу между
+  // ними важнее, чем экономить строку в выпадающем списке.
+  const groups = [
+    {
+      label: 'Перерыв срока (ч. 1–3 ст. 22)',
+      types: INTERRUPTION_TYPES,
+      labels: INTERRUPTION_TYPE_LABELS,
+    },
+    {
+      label: 'Вычет периода из срока (ч. 3.1 ст. 22)',
+      types: DEDUCTION_TYPES,
+      labels: DEDUCTION_TYPE_LABELS,
+    },
+  ];
+  for (const group of groups) {
+    const optgroup = el('optgroup');
+    optgroup.label = group.label;
+    for (const type of group.types) {
+      const option = el('option', null, group.labels[type.id]);
+      option.value = type.id;
+      if (type.id === row.type) option.selected = true;
+      optgroup.appendChild(option);
+    }
+    select.appendChild(optgroup);
   }
   select.addEventListener('change', () => {
     row.type = select.value;
@@ -471,28 +643,36 @@ function renderInterruptionRow(row, index) {
   });
   wrap.appendChild(select);
 
-  const dateLabel = el('label', 'interruption-date-label', 'Дата события');
-  dateLabel.setAttribute('for', dateId);
-  wrap.appendChild(dateLabel);
-  const input = el('input');
-  input.type = 'text';
-  input.id = dateId;
-  input.setAttribute('inputmode', 'numeric');
-  input.placeholder = 'ДД.ММ.ГГГГ';
-  input.autocomplete = 'off';
-  input.value = row.raw;
-  wrap.appendChild(input);
-  const err = el('p', 'field-error');
-  // Строка пересоздаётся при каждой перерисовке — состояние ошибки
-  // восстанавливаем из сырого текста, как в renderInviteField.
-  err.textContent = dateFieldError(row.raw);
-  if (err.textContent) input.classList.add('invalid');
-  wrap.appendChild(err);
-  attachDateMask(input, (_input, parsed) => {
-    row.raw = parsed.raw;
-    syncInterruptions();
-    render();
-  });
+  if (deduction) {
+    renderEventDateField(wrap, {
+      id: `in-interruption-${index}-from`,
+      label: DEDUCTION_DATE_LABELS.from,
+      value: row.rawFrom ?? '',
+      className: 'interruption-date-label',
+      commit: (raw) => {
+        row.rawFrom = raw;
+      },
+    });
+    renderEventDateField(wrap, {
+      id: `in-interruption-${index}-to`,
+      label: DEDUCTION_DATE_LABELS.to,
+      value: row.rawTo ?? '',
+      className: 'interruption-date-label',
+      commit: (raw) => {
+        row.rawTo = raw;
+      },
+    });
+  } else {
+    renderEventDateField(wrap, {
+      id: `in-interruption-${index}-date`,
+      label: 'Дата события',
+      value: row.raw ?? '',
+      className: 'interruption-date-label',
+      commit: (raw) => {
+        row.raw = raw;
+      },
+    });
+  }
 
   const remove = el('button', 'row-remove', 'Удалить');
   remove.type = 'button';
@@ -505,28 +685,50 @@ function renderInterruptionRow(row, index) {
   return wrap;
 }
 
-// Редактор списка — на карточке прерываемого срока (card.interruptible).
-function renderInterruptions() {
+// Редактор списка — на карточке изменяемого срока (card.interruptible).
+//
+// card нужен, чтобы показать рядом с полями предупреждение о пересечении
+// периодов: это ошибка ВВОДА, и место ей там, где её исправляют, а не в
+// истории расчёта ниже.
+function renderInterruptions(card) {
   const box = el('div', 'note interruptions');
   box.appendChild(
     el(
       'div',
       null,
-      'Срок прерывался? Добавьте события — срок пойдёт заново от последнего по дате.',
+      'Исполнительный лист уже предъявлялся? Добавьте события — от основания зависит, ' +
+        'пойдёт ли срок заново или уменьшится на время прошлого производства.',
     ),
   );
   box.appendChild(el('p', 'hint', INPUT_HINTS.enforcement_interruptions));
   interruptionDraft.forEach((row, index) => box.appendChild(renderInterruptionRow(row, index)));
 
-  const add = el('button', 'row-add', 'Добавить перерыв');
+  if (card?.deduction_overlap_warning) {
+    const warn = el('div', 'warn deduction-overlap');
+    warn.appendChild(el('div', null, card.deduction_overlap_warning.text));
+    for (const pair of card.deduction_overlap_warning.pairs) {
+      warn.appendChild(
+        el(
+          'div',
+          'hint',
+          `Пересекаются: ${isoToRu(pair.a.from)} — ${isoToRu(pair.a.to)} и ` +
+            `${isoToRu(pair.b.from)} — ${isoToRu(pair.b.to)}.`,
+        ),
+      );
+    }
+    box.appendChild(warn);
+  }
+
+  const add = el('button', 'row-add', 'Добавить событие');
   add.type = 'button';
   add.addEventListener('click', () => {
-    interruptionDraft.push({ type: DEFAULT_INTERRUPTION_TYPE, raw: '' });
+    interruptionDraft.push({ type: DEFAULT_INTERRUPTION_TYPE, raw: '', rawFrom: '', rawTo: '' });
     const index = interruptionDraft.length - 1;
     syncInterruptions();
     render();
     // render() пересобрал DOM — фокус ставим уже на новое поле, иначе строка
-    // появляется, а курсор остаётся на кнопке.
+    // появляется, а курсор остаётся на кнопке. Новая строка всегда создаётся с
+    // основанием-перерывом, поэтому поле у неё одно.
     document.getElementById(`in-interruption-${index}-date`)?.focus();
   });
   box.appendChild(add);
@@ -568,31 +770,112 @@ function renderInterruptionHistory(card) {
   return box;
 }
 
+// Склонение слова «день» при числе — для строки «вычтено N дней».
+function daysWord(n) {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return 'дней';
+  const mod10 = n % 10;
+  if (mod10 === 1) return 'день';
+  if (mod10 >= 2 && mod10 <= 4) return 'дня';
+  return 'дней';
+}
+
+// История вычетов на карточке (ч. 3.1 ст. 22): какие периоды введены, сколько
+// дней каждый из них занял, что не принято в расчёт и из какой даты вычитали.
+//
+// Отдельный блок от истории перерывов: у события ч. 3.1 две даты вместо одной,
+// и точка отсчёта у срока не меняется — меняется его длина, поэтому строка
+// «срок течёт заново с …» здесь была бы неверной.
+function renderDeductionHistory(card) {
+  const box = el('div', 'interruption-history deduction-history');
+  box.appendChild(
+    el('div', 'interruption-history-title', 'Периоды, вычитаемые из срока (ч. 3.1 ст. 22)'),
+  );
+  const list = el('ul', 'interruption-list');
+  for (const event of card.deductions) {
+    const item = el('li', event.ignored ? 'interruption ignored' : 'interruption');
+    const period =
+      event.from && event.to ? `${isoToRu(event.from)} — ${isoToRu(event.to)}` : '—';
+    item.appendChild(el('span', 'interruption-date', period));
+    item.appendChild(el('span', 'interruption-label', event.label));
+    if (!event.ignored) {
+      item.appendChild(el('span', 'deduction-days', `${event.days} ${daysWord(event.days)}`));
+    }
+    if (event.ignored_text) item.appendChild(el('div', 'hint', event.ignored_text));
+    list.appendChild(item);
+  }
+  box.appendChild(list);
+
+  if (card.deduction_exhausts_term) {
+    // Граничный случай: периодов набралось больше, чем сам срок. Дата на
+    // карточке упёрлась в день начала течения срока — без этой строки она
+    // читалась бы как обычный расчёт.
+    box.appendChild(
+      el(
+        'div',
+        'warn',
+        `Сумма периодов (${card.deducted_days} ${daysWord(card.deducted_days)}) больше самого ` +
+          `трёхлетнего срока: вычитать дальше нечего. Показана дата начала течения срока — ` +
+          `по этому расчёту срок предъявления исчерпан полностью.`,
+      ),
+    );
+  } else if (card.deducted_days > 0) {
+    box.appendChild(
+      el(
+        'div',
+        'hint',
+        `Из срока вычтено ${card.deducted_days} ${daysWord(card.deducted_days)}: без вычета он ` +
+          `истекал бы ${isoToRu(card.deadline_before_deduction)}. Точка отсчёта при этом не ` +
+          `меняется — уменьшается длина срока (ч. 3.1 ст. 22).`,
+      ),
+    );
+  } else {
+    box.appendChild(
+      el('div', 'hint', 'Ни один период в расчёт не принят — срок не уменьшен.'),
+    );
+  }
+
+  // Сам факт предупреждения виден на карточке всегда, даже без раскрытия
+  // «Подробнее» — не все станут туда заглядывать, а расчёт по ч. 3.1 не
+  // должен выглядеть железобетонным. Полный список допущений — в деталях
+  // (см. details.deduction_assumption в renderDetails).
+  if (card.deduction_assumption) {
+    box.appendChild(el('div', 'assumption-flag', card.deduction_assumption.short));
+  }
+  return box;
+}
+
 // Ссылка на предзаполненную форму события в Google Календаре — по одной на срок.
 // Открывается в новой вкладке: расчёт на странице должен остаться на месте.
 //
 // Напоминания через ссылку задать нельзя: у формы события Google Календаря нет
 // параметра для них (поддерживаются только text, dates, details, location,
-// гости). Поэтому под ссылкой — честная пометка: Google подставит своё
-// напоминание по умолчанию, наши нужно добавить в событии вручную.
+// гости). Пометка об этом под ссылкой («Google подставит своё напоминание по
+// умолчанию, наши добавьте вручную») больше не выводится — на карточке она
+// объясняла устройство экспорта, а не срок. Правило напоминаний само никуда не
+// делось: его по-прежнему проставляет .ics (reminderOffsets в src/ics.js).
+// Поля для googleCalendarUrl из карточки. Для спорных сроков (card.alternative)
+// в календарь уходит рекомендованная, более ранняя дата вместе с её нормой —
+// иначе норма в описании события не соответствовала бы дате рядом с ней. Обе
+// даты по-прежнему видны в самой карточке и в сводке для копирования/печати.
+// Та же развилка независимо стоит в core/export/ics.js (icsTermsFromView) —
+// для .ics. Вынесена в отдельную функцию (а не только инлайн в
+// googleCalendarLink), чтобы её можно было проверить без DOM.
+export function googleCalendarTermFromCard(card) {
+  return {
+    title: calendarEventTitle(card.title),
+    deadline: card.alternative ? card.alternative.deadline : card.deadline,
+    norm: card.alternative ? card.alternative.norm : card.norm,
+  };
+}
+
 function googleCalendarLink(card) {
   const wrap = el('div', 'to-calendar-block');
   const a = el('a', 'to-calendar', 'Добавить в Google Календарь');
-  a.href = googleCalendarUrl({
-    title: calendarEventTitle(card.title),
-    deadline: card.deadline,
-    norm: card.norm,
-  });
+  a.href = googleCalendarUrl(googleCalendarTermFromCard(card));
   a.target = '_blank';
   a.rel = 'noopener noreferrer';
   wrap.appendChild(a);
-
-  const rule = reminderRulePhrase(exportDurations.get(card.id), reminderOffsets);
-  const note = rule
-    ? `Ссылка не задаёт напоминания — Google подставит своё по умолчанию. ` +
-      `Наши напоминания для этого срока (${rule}) добавьте в событии вручную.`
-    : 'Ссылка не задаёт напоминания — Google подставит своё по умолчанию.';
-  wrap.appendChild(el('div', 'hint to-calendar-note', note));
   return wrap;
 }
 
@@ -620,6 +903,42 @@ function renderExhaustionWarning(w) {
   if (w.calculation_note) rows.push(el('div', 'hint', w.calculation_note));
   rows.push(el('div', 'hint', w.clarification ? `${w.norm} · ${w.clarification}` : w.norm));
   return collapsedWarning('Требуется исчерпание способов обжалования', rows);
+}
+
+// Годичный потолок восстановления пропущенного кассационного/надзорного
+// срока (ч. 7 ст. 112 ГПК РФ): показывается, только когда пользователь ввёл
+// дату обстоятельства — уважительной причины пропуска (card.restoration_one_year_cap,
+// см. restorationOneYearCapResult в src/chain.js). За пределами потолка —
+// не просто предупреждение, а прямое указание на законодательный запрет
+// восстановления, поэтому не сворачиваем в <details> и используем класс
+// .miss, как у уже пропущенного срока — это тоже блокирующее обстоятельство,
+// а не то, что можно свернуть и не заметить.
+function renderRestorationOneYearCap(cap) {
+  const box = el('div');
+  if (cap.within_cap) {
+    box.appendChild(
+      el(
+        'div',
+        'hint',
+        `Обстоятельство (${isoToRu(cap.circumstance_date)}) укладывается в годичный ` +
+          `потолок восстановления — не позднее ${isoToRu(cap.cap_deadline)} (${cap.norm}). ` +
+          'Это не гарантирует восстановление: суд ещё должен признать причину ' +
+          'пропуска уважительной.',
+      ),
+    );
+  } else {
+    box.appendChild(
+      el(
+        'div',
+        'miss',
+        `Обстоятельство (${isoToRu(cap.circumstance_date)}) — позже годичного потолка ` +
+          `восстановления, истёкшего ${isoToRu(cap.cap_deadline)}. По ${cap.norm} в этом ` +
+          'случае восстановление пропущенного срока прямо исключено законом, а не ' +
+          'оставлено на усмотрение суда.',
+      ),
+    );
+  }
+  return box;
 }
 
 function renderBoundaryWarning(bw) {
@@ -713,9 +1032,10 @@ function renderInfoTermCard(card) {
   const head = el('div', 'info-head');
   const title = el('span', 'info-title', card.title);
   head.appendChild(title);
-  head.appendChild(el('span', 'badge info', 'справочно'));
   c.appendChild(head);
 
+  // Статус 'в порядке' — молчаливый по умолчанию; добавление текста —
+  // отдельная UX-задача, не часть этого прохода.
   const line = el('div', 'info-line');
   line.appendChild(el('span', 'deadline-caption inline', `${DEADLINE_CAPTION_COURT}:`));
   line.appendChild(
@@ -730,10 +1050,7 @@ function renderInfoTermCard(card) {
 
   if (card.status === 'expired' && card.expired) {
     const n = card.expired.days;
-    c.appendChild(el('div', 'hint', `Срок истёк ${n} ${pluralDays(n)} назад.`));
-  }
-  if (card.first_working_day) {
-    c.appendChild(el('div', 'hint', `Отсчёт рабочих дней с ${isoToRu(card.first_working_day)}`));
+    c.appendChild(el('div', 'hint', `Истёк срок: ${n} ${pluralDays(n)} назад.`));
   }
   if (card.note) c.appendChild(el('div', 'hint', card.note));
   if (card.calendar_warning) {
@@ -777,14 +1094,14 @@ function renderEvent(card, opts = {}) {
   box.appendChild(head);
 
   // Дата события читается иначе, чем дедлайн: это не «успеть до», а момент,
-  // с которого постановление действует.
-  if (card.status === 'resolved') {
-    box.appendChild(
-      el('div', 'hint', 'С этой даты постановление считается вступившим в законную силу.'),
-    );
-  }
+  // с которого постановление действует. Абзац «С этой даты постановление
+  // считается вступившим в законную силу.» снят по аудиту у всех карточек
+  // события (общее правило, известное юристу и без пояснения, практической
+  // пользы не несёт) — сперва у entry_into_force, теперь и у остальных
+  // (упрощённое производство, заочное решение, в т. ч. против иностранного
+  // государства, мировой судья).
 
-  if (card.note) box.appendChild(el('div', 'hint', card.note));
+  if (card.note && card.id !== 'entry_into_force') box.appendChild(el('div', 'hint', card.note));
   if (card.calendar_warning) {
     box.appendChild(
       collapsedWarning('Календарь на этот год ещё не окончательный', [
@@ -814,7 +1131,13 @@ function renderInviteField(id, labelOverride) {
   input.autocomplete = 'off';
   input.value = dateFieldValue(id);
   wrap.appendChild(input);
-  const hint = (expiredFields.has(id) && INPUT_HINTS_EXPIRED[id]) || INPUT_HINTS[id];
+  // Подсказка про «для иных лиц» (абз. 2 ч. 2 ст. 237) релевантна только когда
+  // выбранный субъект обжалования — иные лица: у ответчика этот абзац не
+  // применяется, и подсказка была бы шумом.
+  const hintApplicable =
+    id !== 'default_judgment_cancellation_request_date' ||
+    (state.inputs.default_judgment_subject || 'defendant') === 'other_persons';
+  const hint = hintApplicable && ((expiredFields.has(id) && INPUT_HINTS_EXPIRED[id]) || INPUT_HINTS[id]);
   if (hint) wrap.appendChild(el('p', 'hint', hint));
   const err = el('p', 'field-error');
   // Поле пересоздаётся при каждой перерисовке, поэтому состояние ошибки
@@ -827,16 +1150,59 @@ function renderInviteField(id, labelOverride) {
   return { wrap, input };
 }
 
+// cassation_ksoyu (общая цепочка) числит среди missing_inputs (src/views.js,
+// buildDownstream) дату подачи апелляции или дату изготовления мотивированного
+// апелляционного определения — но оба поля уже приглашаются на карточке
+// «Вступление решения в законную силу» чуть выше (FOLLOW_UP_FIELDS.entry_into_force),
+// причём безусловно (без `when` на appeal_filed_date, и с тем же условием
+// appeal_filed_date != null на appeal_ruling_reasoned_date, что и у самой
+// ветки missing_inputs). Поэтому здесь это никогда не первый показ поля —
+// только повторный указатель «поле выше на этой странице» (inviteFieldOrPointer).
+// missing_inputs в src/views.js не трогаем (views.test.js держит их непустыми
+// намеренно — иначе поле нигде не отрисуется, когда карточка вступления в
+// силу сама ещё не построена), только не рендерим здесь заведомо избыточный
+// указатель. Аудит серии #109/#110.
+const CASSATION_KSOYU_ALREADY_SHOWN_ABOVE = new Set(['appeal_filed_date', 'appeal_ruling_reasoned_date']);
+
 // Панель неполного узла: приглашение уточнить, а не пустая форма.
 function renderIncompleteNode(node) {
   const box = el('div', 'invite');
   box.appendChild(el('h2', null, node.title));
-  box.appendChild(el('p', 'reason', node.reason));
-  for (const m of node.missing_inputs) box.appendChild(inviteFieldOrPointer(m.id));
-  if (!node.missing_inputs.length) {
+  // У cassation_ksoyu та же избыточность бьёт и по reason: «Кассационный срок
+  // (редакция с 01.09.2024) считается от даты изготовления мотивированного
+  // апелляционного определения» — целиком про то же поле, что и указатель
+  // ниже, и ничего не добавляет к уже видимой карточке вступления в силу.
+  // Признак ветки — сам missing_inputs, а не текст reason.
+  const suppressReason =
+    node.id === 'cassation_ksoyu' &&
+    node.missing_inputs.some((m) => m.id === 'appeal_ruling_reasoned_date');
+  if (!suppressReason) box.appendChild(el('p', 'reason', node.reason));
+  // Поля, которые тот же узел перечисляет и в FOLLOW_UP_FIELDS, рисует блок
+  // уточнений ниже (appendFollowUpFields) — здесь их пропускаем. Иначе вопрос
+  // появлялся бы дважды и в порядке, зависящем от заполненности: недостающие
+  // данные идут до блока уточнений, поэтому дата принятия апелляционного
+  // определения вставала над датой подачи жалобы, как только ту вводили.
+  // Пропускаем только то, что блок уточнений действительно покажет: поле с
+  // невыполненным `when` там не появится, и потерять его нельзя.
+  const inFollowUp = followUpFieldIds(node.id);
+  const skipAboveField = node.id === 'cassation_ksoyu' ? CASSATION_KSOYU_ALREADY_SHOWN_ABOVE : null;
+  const missing = node.missing_inputs.filter(
+    (m) => !inFollowUp.has(m.id) && !(skipAboveField && skipAboveField.has(m.id)),
+  );
+  for (const m of missing) box.appendChild(inviteFieldOrPointer(m.id));
+  if (!missing.length && !inFollowUp.size) {
     box.appendChild(el('p', 'hint', 'Данных для расчёта пока недостаточно.'));
   }
   return box;
+}
+
+// Поля, которые узел покажет в блоке уточнений на этой отрисовке (с учётом
+// `when`). FOLLOW_UP_FIELDS объявлены ниже по файлу — обращение к ним внутри
+// функции, а не на верхнем уровне, поэтому порядок объявлений не важен.
+function followUpFieldIds(id) {
+  const spec = FOLLOW_UP_FIELDS[id];
+  if (!spec) return new Set();
+  return new Set(spec.fields.filter((f) => !f.when || f.when()).map((f) => f.id));
 }
 
 // --- Экспорт .ics -----------------------------------------------------------
@@ -860,7 +1226,7 @@ function summaryEntries(cards) {
       };
       // Спорный срок (раздел 6): в сводку идут обе даты и рекомендация — иначе
       // на распечатке пропадёт более ранняя, безопасная дата.
-      if (card.alternative) {
+      if (SHOW_ALTERNATIVE_UI && card.alternative) {
         entry.alternative = {
           deadline: card.alternative.deadline,
           norm: card.alternative.norm,
@@ -987,14 +1353,108 @@ const ICS_FILENAME = 'gpk-sroki.ics';
 const ICS_TYPE_DOWNLOAD = 'text/calendar;charset=utf-8';
 const ICS_TYPE_FILE = 'text/calendar';
 
+// iPhone/iPod и iPad — очевидный случай по UA. Но iPadOS начиная с 13-й
+// версии по умолчанию выдаёт себя за десктопный Safari: navigator.userAgent
+// содержит «Macintosh», а не «iPad», и /iPad|iPhone|iPod/ его не ловит.
+// Отличить такой iPad от настоящего Mac можно только по сенсорному вводу:
+// у Mac maxTouchPoints равен 0 (или отсутствует), у iPadOS — больше 1
+// (сообщается число точек мультитача). Оба условия нужны как ИЛИ: одно
+// покрывает iPhone/iPod и «честный» UA iPad, другое — замаскированный
+// iPadOS 13+.
+function isIOS() {
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
+}
+
+// Эвристика (UA подделывается): настоящий Safari несёт токен Version/,
+// сторонние iOS-браузеры на WebKit подставляют вместо него свой — YaBrowser,
+// CriOS, FxiOS, EdgiOS, OPiOS и т.п.
+function looksLikeNonSafariIOSBrowser() {
+  const ua = navigator.userAgent;
+  return (
+    !/\bVersion\/\d/.test(ua) &&
+    /YaBrowser|CriOS|FxiOS|EdgiOS|OPiOS|OPR\/|SamsungBrowser|UCBrowser|MQQBrowser|GSA\//.test(ua)
+  );
+}
+
 async function downloadICS() {
   if (currentIcsTerms.length === 0) return;
   const ics = buildICS(currentIcsTerms, { referenceDate: today, now: new Date() });
 
-  // iOS Safari не выполняет атрибут download у blob:-ссылки: она открывает
-  // содержимое предпросмотром, и добавить события в календарь оттуда нельзя —
-  // тип файла при этом ни при чём. Системный лист «Поделиться» такую
-  // возможность даёт: Календарь в нём есть.
+  if (isIOS()) {
+    // На iOS ни Share Sheet, ни a.download до Календаря не доводят.
+    //
+    // navigator.share({ files }) на iOS (проверено и в Safari, и в
+    // Яндекс.Браузере — это системный лист, поведение общее для всех
+    // браузеров на движке WebKit) открывает .ics только в режиме
+    // предпросмотра Quick Look, без кнопки «Добавить»: судя по всему,
+    // iOS показывает кнопку импорта в календарь только когда сама
+    // получает файл, а не когда его передают как вложение через Share.
+    //
+    // a.download на blob:-ссылке (см. вариант ниже, для остальных платформ)
+    // в iOS Safari тоже не работает как «скачивание» — файл открывается
+    // текстовым/HTML-предпросмотром, а не сохраняется.
+    //
+    // Единственный способ, который на практике показывает кнопку «Добавить
+    // в календарь»: прямая навигация браузера по URL с
+    // Content-Type: text/calendar — то есть БЕЗ атрибута download (иначе
+    // это уже явное скачивание, см. выше) и БЕЗ передачи через Share
+    // (иначе это уже вложение, а не переход по адресу). Поэтому здесь —
+    // просто переход по blob-URL, без создания <a download>.
+    //
+    // НЕ заменять на data:-URI (пробовали): начиная с Chrome 60 и Firefox 59
+    // все основные движки, включая WebKit, блокируют прямую навигацию
+    // верхнего уровня на data:-URI — защита от фишинга через подмену
+    // адресной строки (у WebKit это флаг
+    // allow-top-navigation-to-data-urls, по умолчанию выключен и недоступен
+    // со стороны страницы). window.location.href = 'data:...' на iOS
+    // браузер тихо отменяет — без ошибки, просто ничего не происходит. На
+    // реальном устройстве data:-вариант ломал скачивание целиком и в
+    // Safari, и в Яндекс.Браузере.
+    //
+    // Открытый вопрос: в Яндекс.Браузере на iOS кнопка «Добавить в
+    // календарь» не появляется и с blob:-вариантом (в отличие от Safari,
+    // где он работает). Опробованы navigator.share, blob: и data: — ни
+    // один способ передать файл со стороны страницы её не показал. Похоже,
+    // что подхват «предложить импорт в Календарь» — это привилегия именно
+    // приложения Safari через системное расширение предпросмотра файлов, а
+    // не свойство движка WebKit как такового: сторонние браузеры сами
+    // показывают загруженные файлы и могут не иметь доступа к этой
+    // интеграции независимо от способа передачи файла. Если это так, чинить
+    // тут больше нечего на уровне клиентского кода — прежде чем пробовать
+    // новую схему, стоит сначала опровергнуть эту гипотезу.
+    //
+    // Попытка № 4 (после navigator.share, blob:+location.href из #114 и
+    // data:-URI из #115, откаченного в #116) — дешёвый эксперимент перед
+    // более тяжёлыми вариантами: тот же blob:-URL, но открытие в новой
+    // вкладке (window.open) вместо навигации текущей (location.href).
+    // Расчёт на то, что у стороннего браузера может быть отдельная ветка
+    // обработки для «открыть в новой вкладке» и для «перейти по ссылке в
+    // этой же вкладке» — те же перехватчики менеджера загрузок, которые
+    // подозреваются в блокировке текущего варианта (см. «Открытый вопрос»
+    // выше), не обязательно применяются к обоим одинаково. Если гипотеза
+    // про привилегию Safari верна, это не поможет — но проверить дёшево.
+    //
+    // window.open здесь остаётся в синхронной части обработчика клика (до
+    // этого места в ветке isIOS() нет ни одного await) — это важно
+    // сохранить: иначе браузер может расценить вызов как не инициированный
+    // пользователем и заблокировать как всплывающее окно.
+    const blob = new Blob([ics], { type: ICS_TYPE_DOWNLOAD });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    // Отзывать URL сразу нельзя: открытие новой вкладки асинхронно, браузер
+    // может не успеть начать навигацию до отзыва.
+    setTimeout(() => URL.revokeObjectURL(url), 15_000);
+    return;
+  }
+
+  // Остальные платформы (Android, десктоп): здесь известная выше проблема
+  // iOS не воспроизводится, поэтому логика прежняя — сначала предлагаем
+  // системный лист «Поделиться» (там тоже может быть пункт «Календарь» или
+  // просто удобнее пользователю), а откажется/будет недоступен — скачиваем
+  // файл через a.download, который на этих платформах работает штатно.
   const file = new File([ics], ICS_FILENAME, { type: ICS_TYPE_FILE });
   if (navigator.canShare?.({ files: [file] })) {
     try {
@@ -1059,6 +1519,49 @@ function reveal(key, node) {
   return wrap;
 }
 
+// Внутренняя пометка о происхождении формулировки нормы — не для пользователя.
+//
+// В обозначении нормы бывает уточнение редакции: «ч. 1 ст. 390.3 ГПК РФ
+// (ред. ФЗ № 135-ФЗ от 12.06.2024; ФЗ № 79-ФЗ от 09.04.2026 —
+// терминологическая правка)». Первая часть — обычная юридическая ссылка на
+// применяемую редакцию, она остаётся; вторая объясняет РАЗРАБОТКЕ, почему
+// поправка 2026 года не заведена отдельной версией нормы (менялась только
+// терминология, расчёт тот же). Юристу на карточке она ничего не даёт.
+//
+// Чистим на показе, а не в src/chain.js: там это часть данных узла, на неё
+// опираются тесты и сам разбор редакций, — UI лишь не выводит служебную часть.
+const INTERNAL_NORM_NOTE = /;\s*[^();]*—\s*терминологическая правка(?=\)|$)/g;
+
+// После удаления служебной пометки выше у действующих (с 01.09.2024) редакций
+// ст. 390.3 (CASSATION_VS) и ст. 376.1 (CASSATION_KSOYU и её клоны — кассация
+// по упрощённому производству, по заочному решению, у мирового судьи, все
+// используют тот же текст нормы) остаётся ссылка на редакцию — «(ред. ФЗ
+// № 135-ФЗ от 12.06.2024)». Ярослав подтвердил: практического смысла для
+// юриста она не несёт ни там, ни там — снимаем целиком, оставляя голую
+// ссылку на статью. Версию «в редакции до ФЗ № 135-ФЗ» тех же статей не
+// трогаем — там пометка отвечает на прямой вопрос «какая это редакция», а
+// не дублирует его.
+const STATUTE_EDITION_NOTE = /(390\.3|376\.1) ГПК РФ \(ред\. ФЗ № 135-ФЗ от 12\.06\.2024\)/g;
+
+function stripInternalNormNote(text) {
+  return text.replace(INTERNAL_NORM_NOTE, '').replace(STATUTE_EDITION_NOTE, '$1 ГПК РФ');
+}
+
+// Тот же view, но со снятыми служебными пометками во всех текстах. Копия, а не
+// правка на месте: buildView возвращает свежую структуру на каждый вызов, но
+// портить чужой результат всё равно незачем. Всё, что не строка/массив/простой
+// объект, переносится как есть.
+function withoutInternalNormNotes(value) {
+  if (typeof value === 'string') return stripInternalNormNote(value);
+  if (Array.isArray(value)) return value.map(withoutInternalNormNotes);
+  if (value && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, withoutInternalNormNotes(v)]),
+    );
+  }
+  return value;
+}
+
 function render() {
   const focus = captureFocus();
   revealSeen = new Set();
@@ -1068,7 +1571,11 @@ function render() {
 
   // Расчёт от выбора ситуации не зависит: buildView по-прежнему считает все
   // ветви, переключатель лишь решает, что показать и что выгрузить.
-  const view = buildView(state.inputs, { today });
+  //
+  // Тексты норм чистим один раз здесь, на входе в отрисовку: дальше из этого
+  // же view собираются и карточки, и сводка для копирования и печати, и .ics —
+  // иначе пометку пришлось бы вычищать в каждом из них отдельно.
+  const view = withoutInternalNormNotes(buildView(state.inputs, { today }));
 
   // Какие поля относятся к истёкшим срокам — от этого зависит формулировка их
   // подписей и приглашений.
@@ -1083,10 +1590,8 @@ function render() {
   currentIcsTerms = icsTermsFromView({ cards: visibleCards });
   currentSummary = summaryEntries(visibleCards);
   exportableIds.clear();
-  exportDurations.clear();
-  for (const { card, meta } of exportableCards({ cards: visibleCards })) {
+  for (const { card } of exportableCards({ cards: visibleCards })) {
     exportableIds.add(card.id);
-    exportDurations.set(card.id, card.duration || meta.duration);
   }
   updateExportButtons();
   renderPrintList(situation);
@@ -1099,13 +1604,7 @@ function render() {
   root.textContent = '';
 
   // Без даты мотивированного решения цепочка общего порядка не считается.
-  // Приглашение показываем только там, где эта дата и спрашивается.
   const chainAvailable = Boolean(state.inputs.reasoned_decision_date);
-  if (!chainAvailable && situation.primary_field) {
-    root.appendChild(
-      el('p', 'empty', 'Введите дату мотивированного решения — появятся сроки цепочки обжалования.'),
-    );
-  }
 
   const cardById = (id) => view.cards.find((n) => n.id === id);
   const incById = (id) => view.incomplete.find((n) => n.id === id);
@@ -1141,22 +1640,10 @@ function render() {
           opts.conditionNote =
             'Действует при том же условии — что решение не обжаловалось в апелляции.';
         }
-        const termEl = renderTermCard(card, opts);
-        const redField = REDACTION_FIELD[id];
-        if (redField) termEl.appendChild(renderRedactionField(redField));
-        // На карточке замечаний — необязательная дата их подачи: от неё
-        // считается срок рассмотрения судьёй (ч. 2 ст. 232).
-        if (id === 'protocol_remarks') {
-          const box = el('div', 'note');
-          box.appendChild(
-            el('div', null, 'Замечания уже поданы? Укажите дату — уточнится срок их рассмотрения.'),
-          );
-          box.appendChild(inviteFieldOrPointer('protocol_remarks_filed_date'));
-          termEl.appendChild(box);
-        }
-        // После срока кассации в КСОЮ — приглашение ввести дату определения КСОЮ,
-        // которое открывает узел кассации в ВС (condition: ksoyu_ruling_date).
-        // Мировой судья: явка участника — влияет на длительность срока (3/15).
+        // Мировой судья: явка участника определяет длительность именно этого
+        // срока (3 или 15 рабочих дней, п. 1/2 ч. 4 ст. 199) — выбор должен
+        // стоять НАД карточкой результата, а не под ней, иначе пользователь
+        // видит готовый срок раньше вопроса, от которого он зависит.
         if (id === 'mirovoy_reasoned_request') {
           const box = el('div', 'note');
           box.appendChild(
@@ -1169,6 +1656,21 @@ function render() {
               state.inputs.mirovoy_attendance || 'present',
             ),
           );
+          root.appendChild(box);
+        }
+        const termEl = renderTermCard(card, opts);
+        const redField = REDACTION_FIELD[id];
+        if (redField && shouldShowRedactionField(redField)) {
+          termEl.appendChild(renderRedactionField(redField.field));
+        }
+        // На карточке замечаний — необязательная дата их подачи: от неё
+        // считается срок рассмотрения судьёй (ч. 2 ст. 232).
+        if (id === 'protocol_remarks') {
+          const box = el('div', 'note');
+          box.appendChild(
+            el('div', null, 'Замечания уже поданы? Укажите дату — уточнится срок их рассмотрения.'),
+          );
+          box.appendChild(inviteFieldOrPointer('protocol_remarks_filed_date'));
           termEl.appendChild(box);
         }
         // Заочное решение: кто обжалует — влияет на точку отсчёта апелляции.
@@ -1187,11 +1689,10 @@ function render() {
           termEl.appendChild(box);
         }
         // Перерыв срока предъявления (ст. 22 ФЗ № 229-ФЗ) — повторяемый
-        // список событий у узлов ИЛ и судебного приказа.
-        if (card.interruptible) termEl.appendChild(renderInterruptions());
+        // список событий у узла исполнительного производства.
+        if (card.interruptible) termEl.appendChild(renderInterruptions(card));
         // Заглушки рядом с узлом (напр. предъявление ИЛ). Список пуст — все
         // смежные случаи раскрыты узлами; заголовок без содержимого не рисуем.
-        if (card.stubs && card.stubs.length) termEl.appendChild(renderRelatedStubs(card.stubs));
         appendFollowUpFields(termEl, id, card);
         root.appendChild(termEl);
       }
@@ -1205,19 +1706,12 @@ function render() {
     if (inc) {
       const incEl = renderIncompleteNode(inc);
       const redField = REDACTION_FIELD[id];
-      if (redField) incEl.appendChild(renderRedactionField(redField));
+      if (redField && shouldShowRedactionField(redField)) {
+        incEl.appendChild(renderRedactionField(redField.field));
+      }
       appendFollowUpFields(incEl, id, inc);
       root.appendChild(reveal(`inc:${id}`, incEl));
     }
-  }
-
-  // Ветвь выбрана, но данных ещё нет — на экране не должно быть пусто без
-  // объяснения. У общей ветви приглашение уже показано выше.
-  if (!root.childElementCount && !situation.primary_field) {
-    const first = situation.fields[0];
-    root.appendChild(
-      el('p', 'empty', `Укажите ${askFor(first)} — появятся сроки.`),
-    );
   }
 
   // Какие блоки показаны сейчас — то и «уже развёрнуто» для следующей отрисовки.
@@ -1250,6 +1744,17 @@ const FOLLOW_UP_FIELDS = {
     },
     fields: [
       { id: 'appeal_filed_date' },
+      // Дата принятия апелляционного определения перечислена здесь, а не только
+      // в missing_inputs узла: пока её не было, она приходила из недостающих
+      // данных и вставала ВЫШЕ даты подачи (renderIncompleteNode рисует
+      // missing_inputs первым, уточняющие поля — после), из-за чего сразу после
+      // ввода даты подачи два вопроса менялись местами. Порядок здесь — один на
+      // оба состояния: подача, принятие, мотивированное определение.
+      //
+      // Условие то же, что и у соседних полей: узел просит эту дату ровно
+      // тогда, когда жалоба подана (ветвь appealed в src/views.js), — без неё
+      // спрашивать не о чем.
+      { id: 'appeal_ruling_date', when: () => Boolean(state.inputs.appeal_filed_date) },
       // Мотивированное апелляционное определение — тот же документ, что и само
       // определение выше: спрашиваем их рядом, а не в карточке кассации.
       { id: 'appeal_ruling_reasoned_date', when: () => Boolean(state.inputs.appeal_filed_date) },
@@ -1402,7 +1907,7 @@ function renderNoticeCard(card) {
 }
 
 // Поле выбора (не дата): например, субъект обжалования заочного решения.
-function renderChoiceField(id, options, current) {
+function renderChoiceField(id, options, current, onChange) {
   const wrap = el('div', 'field');
   const lab = el('label', null, INPUT_LABELS[id]);
   lab.setAttribute('for', `in-${id}`);
@@ -1417,6 +1922,9 @@ function renderChoiceField(id, options, current) {
   }
   select.addEventListener('change', () => {
     state.inputs[id] = select.value;
+    // onChange — для dropdown'ов, у которых выбор не только меняет расчёт, но и
+    // отменяет ранее введённое по другому варианту (см. renderChildCaseFields).
+    if (onChange) onChange(select.value);
     render();
   });
   wrap.appendChild(select);
@@ -1444,15 +1952,205 @@ function renderCheckboxField(id, current) {
   return wrap;
 }
 
-// Какой input выбирает редакцию нормы (а для дел мировых судей — ещё и
-// маршрут: КСОЮ либо президиум областного суда) на кассационных узлах.
+// Радиогруппа из нескольких взаимоисключающих вариантов — как renderChoiceField
+// (select), но для случая, когда вариантов мало и выбор удобнее видеть сразу
+// (не открывать выпадающий список). У выбора, в отличие от чекбокса и select,
+// нет собственного поля в inputs — вариант приходит из onChange отдельно.
+// Необязательный `legend` — общий заголовок-вопрос над группой. Нужен там, где
+// варианты по смыслу не да/нет-утверждения о факте, а взаимоисключающие
+// самоописания пользователя («я …»): вопрос по правилу 1 тогда ставится один
+// раз над группой, а подписи вариантов остаются ответами (см.
+// docs/ui-copy-proposal.md, D.2).
+function renderRadioGroup(name, options, current, onChange, legend) {
+  const wrap = el('div', 'field radio-field');
+  if (legend) {
+    const lab = el('label', null, legend);
+    lab.id = `in-${name}-legend`;
+    wrap.setAttribute('role', 'group');
+    wrap.setAttribute('aria-labelledby', lab.id);
+    wrap.appendChild(lab);
+  }
+  for (const opt of options) {
+    const lab = el('label', 'radio-option');
+    const input = el('input');
+    input.type = 'radio';
+    input.name = `in-${name}`;
+    input.value = opt.value;
+    input.checked = opt.value === current;
+    input.addEventListener('change', () => {
+      if (input.checked) onChange(opt.value);
+    });
+    lab.appendChild(input);
+    lab.appendChild(el('span', null, opt.label));
+    wrap.appendChild(lab);
+  }
+  return wrap;
+}
+
+// Приказное производство: два узла одной цепочки должника на ОДНОЙ дате-якоре —
+// дне получения копии приказа (court_order_copy_received_date). От неё считаются
+// и возражения (ст. 128), и — если возражения не поданы и приказ вступил в силу
+// — кассационная жалоба на приказ (п. 1 ч. 2 ст. 377). Прежде кассация жила в
+// пуле «Отдельные сроки» и имела собственное поле той же даты: пользователь
+// вводил её дважды. Поле теперь одно, и оба узла читают его.
+//
+// Дата вступления приказа в силу не вводится, а вычисляется (ст. 128 ГПК +
+// п. 32 ПП ВС РФ от 27.12.2016 № 62), поэтому у кассации нет своего поля даты —
+// есть только второй способ узнать ту же дату получения копии, когда напрямую
+// она неизвестна: дата прибытия почтового отправления. Выбор способа не идёт в
+// inputs отдельной датой, это чисто интерфейсное переключение того, какое из
+// двух полей показано (см. resolveSudebnyPrikazReceivedDate в chain.js — там же
+// приоритет прямой даты над почтовой, если почему-то заполнены обе).
+//
+// Переключатель относится к ОБОИМ узлам ситуации сразу, а не к одной кассации:
+// п. 32 определяет начало течения десятидневного срока на возражения (ст. 128),
+// поэтому по почтовой дате считаются и возражения, и — от их результата —
+// кассация. Прежде фикция была подключена только к кассационному узлу, и при
+// выборе почтового варианта карточка возражений не появлялась вовсе; это была
+// ошибка применения нормы, а не следствие разной подсудности входов.
+const SUDEBNY_PRIKAZ_MODE_RECEIVED = 'received';
+const SUDEBNY_PRIKAZ_MODE_POSTAL = 'postal';
+
+function sudebnyPrikazMode() {
+  if (state.sudebnyPrikazMode) return state.sudebnyPrikazMode;
+  return state.inputs.sudebny_prikaz_postal_arrival_date != null
+    ? SUDEBNY_PRIKAZ_MODE_POSTAL
+    : SUDEBNY_PRIKAZ_MODE_RECEIVED;
+}
+
+function renderCourtOrderFields(box) {
+  const mode = sudebnyPrikazMode();
+  box.appendChild(
+    renderRadioGroup(
+      'sudebny_prikaz_mode',
+      [
+        { value: SUDEBNY_PRIKAZ_MODE_RECEIVED, label: 'Известна дата получения копии приказа?' },
+        {
+          value: SUDEBNY_PRIKAZ_MODE_POSTAL,
+          label: 'Известна только дата прибытия отправления на почту?',
+        },
+      ],
+      mode,
+      (value) => {
+        state.sudebnyPrikazMode = value;
+        // Поле неактивного варианта очищаем — иначе после переключения назад
+        // и обратно расчёт молча использует давно введённую дату по варианту,
+        // который сейчас не выбран. И сырой ввод тоже: он живёт отдельно от
+        // state.inputs (см. rawDates выше) и иначе вернул бы на экран дату,
+        // которой в расчёте уже нет.
+        if (value === SUDEBNY_PRIKAZ_MODE_RECEIVED) {
+          delete state.inputs.sudebny_prikaz_postal_arrival_date;
+          rawDates.delete('sudebny_prikaz_postal_arrival_date');
+        } else {
+          delete state.inputs.court_order_copy_received_date;
+          rawDates.delete('court_order_copy_received_date');
+        }
+        render();
+      },
+    ),
+  );
+  box.appendChild(
+    inviteFieldOrPointer(
+      mode === SUDEBNY_PRIKAZ_MODE_POSTAL
+        ? 'sudebny_prikaz_postal_arrival_date'
+        : 'court_order_copy_received_date',
+    ),
+  );
+  // Заголовок-указатель второго узла цепочки убран: у кассации своего поля
+  // нет, но обе карточки результата — возражения и кассация — рендерятся
+  // сразу под этим блоком, каждая в своей рамке со своим заголовком, поэтому
+  // пустоты, которую снимал заголовок-указатель, больше нет.
+}
+
+// Заявление об отмене решения третейского суда (глава 46 ГПК, ст. 418): один
+// и тот же трёхмесячный срок у двух разных субъектов заявления с разной
+// точкой отсчёта — выбор варианта не идёт в inputs отдельным полем, это чисто
+// интерфейсное переключение того, какое из двух полей ввода показано (см.
+// resolveArbitrationAwardSetasideAnchor в chain.js — там же и приоритет
+// received_date над aware_date, если заполнены оба), по тому же образцу, что
+// и renderCourtOrderFields выше.
+const ARBITRATION_AWARD_SETASIDE_MODE_PARTY = 'party';
+const ARBITRATION_AWARD_SETASIDE_MODE_NON_PARTY = 'non_party';
+
+function arbitrationAwardSetasideMode() {
+  if (state.arbitrationAwardSetasideMode) return state.arbitrationAwardSetasideMode;
+  return state.inputs.arbitration_award_setaside_aware_date != null
+    ? ARBITRATION_AWARD_SETASIDE_MODE_NON_PARTY
+    : ARBITRATION_AWARD_SETASIDE_MODE_PARTY;
+}
+
+function renderArbitrationAwardSetasideFields(box) {
+  const mode = arbitrationAwardSetasideMode();
+  box.appendChild(
+    renderRadioGroup(
+      'arbitration_award_setaside_mode',
+      [
+        {
+          value: ARBITRATION_AWARD_SETASIDE_MODE_PARTY,
+          label: 'Я сторона третейского разбирательства',
+        },
+        {
+          value: ARBITRATION_AWARD_SETASIDE_MODE_NON_PARTY,
+          label:
+            'Я не являюсь стороной, но решение касается моих прав, или я прокурор',
+        },
+      ],
+      mode,
+      (value) => {
+        state.arbitrationAwardSetasideMode = value;
+        // Поле неактивного варианта очищаем — иначе после переключения назад
+        // и обратно расчёт молча использует давно введённую дату по варианту,
+        // который сейчас не выбран. И сырой ввод тоже: он живёт отдельно от
+        // state.inputs (см. rawDates выше) и иначе вернул бы на экран дату,
+        // которой в расчёте уже нет.
+        if (value === ARBITRATION_AWARD_SETASIDE_MODE_PARTY) {
+          delete state.inputs.arbitration_award_setaside_aware_date;
+          rawDates.delete('arbitration_award_setaside_aware_date');
+        } else {
+          delete state.inputs.arbitration_award_setaside_received_date;
+          rawDates.delete('arbitration_award_setaside_received_date');
+        }
+        render();
+      },
+      'Кто заполняет обращение?',
+    ),
+  );
+  box.appendChild(
+    inviteFieldOrPointer(
+      mode === ARBITRATION_AWARD_SETASIDE_MODE_NON_PARTY
+        ? 'arbitration_award_setaside_aware_date'
+        : 'arbitration_award_setaside_received_date',
+    ),
+  );
+}
+
+// Какой input выбирает редакцию нормы на кассационных узлах, и меняет ли
+// дата подачи ещё и маршрут (суд/инстанцию), а не только редакцию.
+// affectsCourt: true только у mirovoy_cassation — там дата подачи реально
+// определяет, кому адресована жалоба: президиум областного суда с
+// 10.05.2026 по главе 40.1 (ФЗ № 79-ФЗ) либо КСОЮ по прежним правилам (см.
+// src/chain.js, computeMirovoyCassation). У кассации в КСОЮ общего порядка и
+// её клонов (упрощённое производство, заочное решение) и у кассации в ВС РФ
+// обе редакции ведут в тот же суд — там affectsCourt: false (аудит PR #109).
 const REDACTION_FIELD = {
-  cassation_ksoyu: 'cassation_filed_date',
-  simplified_cassation_ksoyu: 'cassation_filed_date',
-  default_judgment_cassation_ksoyu: 'cassation_filed_date',
-  cassation_vs: 'vs_cassation_filed_date',
-  mirovoy_cassation: 'cassation_filed_date',
+  cassation_ksoyu: { field: 'cassation_filed_date', affectsCourt: false },
+  simplified_cassation_ksoyu: { field: 'cassation_filed_date', affectsCourt: false },
+  default_judgment_cassation_ksoyu: { field: 'cassation_filed_date', affectsCourt: false },
+  cassation_vs: { field: 'vs_cassation_filed_date', affectsCourt: false },
+  mirovoy_cassation: { field: 'cassation_filed_date', affectsCourt: true },
 };
+
+// affectsCourt: false — дата подачи не даёт практической пользы (только
+// редакция, которая и так берётся по текущей дате, если дату не ввести) —
+// поле и текст под ним не рендерятся вовсе, тем же приёмом, что и у уже
+// скрытого vs_cassation_filed_date (SHOW_VS_CASSATION_FILED_UI ниже, для
+// cassation_vs это теперь избыточная, но не противоречащая подстраховка).
+// affectsCourt: true (сейчас — только mirovoy_cassation) — поле показывается,
+// там дата подачи реально меняет суд.
+function shouldShowRedactionField(redField) {
+  if (!redField.affectsCourt) return false;
+  return redField.field !== 'vs_cassation_filed_date' || SHOW_VS_CASSATION_FILED_UI;
+}
 
 // Один и тот же input может относиться к нескольким узлам: cassation_filed_date
 // — и к кассации общего порядка, и к кассации по делам мировых судей; дата
@@ -1481,8 +2179,10 @@ function inviteFieldOrPointer(id, labelOverride) {
   return renderInviteField(id, labelOverride).wrap;
 }
 
-// Необязательное поле даты подачи — выбирает редакцию нормы (ч. 3 ст. 1 ГПК).
-// Без него редакция берётся по текущей дате.
+// Необязательное поле даты подачи — рендерится только когда affectsCourt:
+// true (см. shouldShowRedactionField/REDACTION_FIELD выше), поэтому текст
+// здесь всегда полный, с упоминанием суда. Без даты подачи редакция
+// берётся по текущей дате.
 function renderRedactionField(inputId) {
   const box = el('div', 'note');
   box.appendChild(
@@ -1501,24 +2201,6 @@ function renderRedactionField(inputId) {
   } else {
     box.appendChild(renderInviteField(inputId).wrap);
   }
-  return box;
-}
-
-// Ввод даты определения КСОЮ открывает узел кассации в ВС РФ (ст. 390.3).
-// Дату мотивированного определения запрашивает уже сам узел ВС (новая редакция).
-function stubCard(s) {
-  const box = el('div', 'stub');
-  box.appendChild(el('h3', null, s.title));
-  box.appendChild(el('p', null, s.explanation));
-  box.appendChild(el('p', 'norm', s.norm));
-  return box;
-}
-
-// Заглушки рядом с узлом — отдельными карточками (напр. смежные случаи ИЛ).
-function renderRelatedStubs(stubs) {
-  const box = el('div', 'related-stubs');
-  box.appendChild(el('h3', 'related-stubs-title', 'Смежные случаи'));
-  for (const s of stubs) box.appendChild(stubCard(s));
   return box;
 }
 
@@ -1557,6 +2239,20 @@ function renderSituationSwitch(current) {
       // трогает: скрытая ветвь при возврате показывает те же значения.
       state.situation = input.value;
       render();
+      // На мобильном блок с полями появившейся ситуации рендерится сразу под
+      // переключателем, но может оказаться ниже видимой области экрана —
+      // докручиваем к нему. У общей ветви (general) поле — не в одном из
+      // двух контейнеров ниже, а в статическом section.primary
+      // (renderPrimaryField). Смотрим, какой из всех трёх сейчас виден, а
+      // не дублируем branching по situation.primary_field из
+      // renderSituationFields/renderPrimaryField, чтобы не рассинхронизироваться с ними.
+      const primary = document.querySelector('section.primary');
+      const top = document.getElementById('situation-inputs');
+      const bottom = document.getElementById('other-terms');
+      const visible = [primary, top, bottom].find((box) => box && !box.hidden);
+      if (visible) {
+        visible.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     });
     label.appendChild(input);
     label.appendChild(el('span', null, s.label));
@@ -1567,9 +2263,87 @@ function renderSituationSwitch(current) {
   root.dataset.rendered = 'yes';
 }
 
+// Однострочные пояснения-ориентировки: по одному предложению на ситуацию, что
+// здесь считается.
+//
+// НЕ ВЫВОДЯТСЯ. Над блоком ввода стоит нейтральный заголовок «Исходные данные»
+// и больше ничего: описательная строка повторяла то, что и так написано на
+// карточках сроков. Как и вводный абзац до неё (убран в PR #99), текст снят
+// именно с показа — сами формулировки остаются здесь единым перечнем по
+// ситуациям, чтобы следующая правка шла от них, а не собиралась заново.
+const SITUATION_LEDE = {
+  general: 'Сроки обжалования решения районного суда: апелляция, кассация, надзор.',
+  court_order:
+    'Сроки должника по судебному приказу: возражения или кассация, если приказ вступил в силу.',
+  mirovoy: 'Обжалование решения мирового судьи: апелляция и последующая кассация.',
+  default_judgment: 'Отмена заочного решения ответчиком либо его обжалование в общем порядке.',
+  simplified:
+    'Обжалование решения, вынесенного без вызова сторон, по упрощённой процедуре.',
+  enforcement:
+    'Срок предъявления исполнительного документа к исполнению и его перерывы.',
+  separate:
+    'Разные короткие сроки, не привязанные к одной категории дела — заполните только те даты, которые у вас есть.',
+  child_cases:
+    'Выберите категорию: возврат ребёнка или усыновление — у каждой свой срок обжалования.',
+  arbitration:
+    'Четыре независимых сценария третейского разбирательства — заполните только тот, что относится к вашему делу.',
+  default_judgment_foreign_state:
+    'Заочное решение против государства-ответчика: его отмена или обжалование.',
+  foreign_judgment:
+    'Два независимых срока: принудительное исполнение решения либо возражения против его признания.',
+  review_new_circumstances:
+    'Пересмотр вступившего в силу решения по новым или вновь открывшимся обстоятельствам.',
+};
+
+// Заголовок-указатель над блоком полей одного узла: в ситуациях, где подряд
+// идут несколько формально независимых карточек полей, без него приходится
+// вчитываться в текст вопроса, чтобы понять, тот ли это сценарий.
+//
+// Обычный <h3> внутри уже существующего блока .invite (h2 там — заголовок
+// «Исходные данные»), отдельного класса не заводим.
+function nodeHeading(text) {
+  return el('h3', null, text);
+}
+
+// Заголовки-указатели над блоками полей независимых узлов — по ключу первого
+// (и для всех перечисленных узлов единственного видимого) поля узла.
+//
+// Пересечений полей между узлами в этих трёх ситуациях нет: у каждого узла
+// ровно один вопрос-якорь, кроме заявления об отмене решения третейского суда —
+// там два взаимоисключающих поля одного узла под общим переключателем субъекта,
+// и заголовок стоит над всей группой.
+const SEPARATE_NODE_HEADINGS = {
+  protocol_signed_date: 'Замечания на протокол судебного заседания',
+  interim_ruling_date: 'Частная жалоба на определение суда первой инстанции',
+  cassation_return_ruling_date: 'Обжалование определения о возврате кассационной жалобы',
+  settlement_approval_ruling_date: 'Кассация на определение об утверждении мирового соглашения',
+};
+
+const ARBITRATION_NODE_HEADINGS = {
+  arbitration_competence_ruling_received_date:
+    'Оспаривание постановления о компетенции третейского суда',
+  arbitration_award_setaside_received_date:
+    'Отмена решения третейского суда по существу спора (ст. 418)',
+  treteisky_osparivanie_entry_into_force_date:
+    'Кассация на определение по делу об оспаривании решения',
+  treteisky_ispollist_entry_into_force_date:
+    'Кассация на определение о выдаче исполнительного листа',
+};
+
+const FOREIGN_JUDGMENT_NODE_HEADINGS = {
+  foreign_judgment_entry_into_force_date: 'Принудительное исполнение решения иностранного суда',
+  foreign_judgment_recognition_aware_date:
+    'Возражения против признания решения, не требующего исполнения',
+};
+
 // Поле даты мотивированного решения — статическое, в разметке страницы: маска
 // к нему привязана один раз при инициализации. Прячем его вне общей ветви,
 // значение при этом сохраняется.
+//
+// Заголовок «Исходные данные» у этой ветви тоже статический (index.html): блок
+// ввода общего порядка — это и есть само поле, отдельного блока «Исходных
+// данных», который рисует renderSituationFields, у неё нет. Прячется он вместе
+// со всей секцией, поэтому в других ситуациях не появляется дважды.
 function renderPrimaryField(situation) {
   const box = document.querySelector('section.primary');
   box.hidden = !situation.primary_field;
@@ -1597,8 +2371,9 @@ function renderSituationFields(situation, primaryFilled) {
   other.textContent = '';
   other.hidden = true;
   root.textContent = '';
-  const hasOwnValue = situation.fields.some((id) => state.inputs[id] != null);
-  if (!situation.fields.length || (situation.primary_field && !primaryFilled && !hasOwnValue)) {
+  const fields = visibleSituationFields(situation);
+  const hasOwnValue = fields.some((id) => state.inputs[id] != null);
+  if (!fields.length || (situation.primary_field && !primaryFilled && !hasOwnValue)) {
     root.hidden = true;
     return;
   }
@@ -1606,87 +2381,159 @@ function renderSituationFields(situation, primaryFilled) {
   root.appendChild(
     el('h2', null, situation.primary_field ? 'Дополнительные даты' : 'Исходные данные'),
   );
-  if (situation.id === 'separate') {
-    root.appendChild(
-      el(
-        'p',
-        null,
-        'Сроки, которые считаются независимо от цепочки обжалования и от категории ' +
-          'дела: замечания на протокол и частная жалоба — в рабочих днях ' +
-          '(абз. 2 ч. 3 ст. 107 ГПК), обжалование определения о возврате кассационной ' +
-          'жалобы — месяц со дня его вынесения (ч. 1 ст. 379.2 ГПК), отмена постановления ' +
-          'третейского суда о компетенции — месяц со дня его ПОЛУЧЕНИЯ стороной, а не ' +
-          'вынесения (ч. 2 ст. 422.1 ГПК), обжалование определения об утверждении ' +
-          'мирового соглашения, заключаемого в процессе исполнения судебного акта, — ' +
-          'месяц со дня его вынесения, сразу в кассацию, минуя апелляцию ' +
-          '(ч. 11 ст. 153.10 ГПК). Заполните нужную дату.',
-      ),
-    );
-  }
-  if (situation.id === 'child_return') {
-    root.appendChild(
-      el(
-        'p',
-        null,
-        'Дела о возвращении ребёнка и об осуществлении прав доступа на основании ' +
-          'международного договора РФ (глава 22.2 ГПК): сроки обжалования здесь короче ' +
-          'общего порядка — по десять рабочих дней и на апелляцию (ч. 1 ст. 244.17), и ' +
-          'на частную жалобу (ч. 1 ст. 244.18). Даты независимы, заполните нужную.',
-      ),
-    );
-  }
-  if (situation.id === 'adoption') {
-    root.appendChild(
-      el(
-        'p',
-        null,
-        'Дела об усыновлении (удочерении) ребёнка (глава 29 ГПК): апелляция на решение ' +
-          'об удовлетворении заявления — десять рабочих дней со дня принятия решения в ' +
-          'окончательной форме (ч. 2.1 ст. 274), а не месяц общего порядка. При отказе в ' +
-          'удовлетворении заявления действует общий месячный срок (ст. 321).',
-      ),
-    );
-  }
-  if (situation.id === 'review_new_circumstances') {
-    root.appendChild(
-      el(
-        'p',
-        null,
-        'Заявление о пересмотре вступившего в законную силу постановления по вновь ' +
-          'открывшимся или новым обстоятельствам (глава 42 ГПК): для шести оснований — один и ' +
-          'тот же трёхмесячный срок (ч. 1 ст. 394 ГПК), но точка отсчёта зависит от основания ' +
-          '(ст. 395). У седьмого — практика Пленума/Президиума ВС (п. 5 ч. 4 ст. 392) — своя ' +
-          'механика: итоговый срок — минимум из трёхмесячного компонента и шестимесячного ' +
-          'потолка (ч. 1, ч. 3 ст. 394 ГПК).',
-      ),
-    );
-  }
   const box = el('div', 'invite');
-  if (situation.id === 'periodic_payments') {
-    // Дата окончания периода и чекбокс бессрочности — взаимоисключающие: при
-    // бессрочном взыскании дедлайна не существует в принципе, дата ему не
-    // нужна (см. computePeriodicPayments в chain.js), поэтому поле даты
-    // скрывается, а не просто перестаёт учитываться.
-    const indefinite = Boolean(state.inputs.periodic_payment_indefinite);
-    box.appendChild(renderCheckboxField('periodic_payment_indefinite', indefinite));
-    if (indefinite) {
-      box.appendChild(
-        el(
-          'p',
-          'hint',
-          'Дата окончания срока не нужна — предъявить можно в любой момент, пока ' +
-            'сохраняется право на периодические платежи.',
-        ),
-      );
-    } else {
-      box.appendChild(inviteFieldOrPointer('periodic_payment_period_end_date'));
+  if (situation.id === 'court_order') {
+    renderCourtOrderFields(box);
+  } else if (situation.id === 'separate') {
+    // Четыре независимых узла подряд: над каждым — свой заголовок-указатель,
+    // иначе отличить сценарии можно только вчитавшись в текст вопроса.
+    for (const id of fields) {
+      const heading = SEPARATE_NODE_HEADINGS[id];
+      if (heading) box.appendChild(nodeHeading(heading));
+      box.appendChild(inviteFieldOrPointer(id));
     }
+  } else if (situation.id === 'arbitration') {
+    // Списком, как у «Отдельных сроков» выше: узлы независимы, и по одному делу
+    // пользователю может понадобиться сразу несколько (сначала компетенция,
+    // потом отмена решения). Единственное исключение — два взаимоисключающих
+    // поля заявления об отмене: там переключатель субъекта, а не две даты.
+    // Над каждым узлом — свой заголовок-указатель.
+    for (const id of fields) {
+      const heading = ARBITRATION_NODE_HEADINGS[id];
+      if (heading) box.appendChild(nodeHeading(heading));
+      if (id === 'arbitration_award_setaside_received_date') {
+        renderArbitrationAwardSetasideFields(box);
+        continue;
+      }
+      if (id === 'arbitration_award_setaside_aware_date') continue; // показано выше вместе с received_date
+      box.appendChild(inviteFieldOrPointer(id));
+    }
+  } else if (situation.id === 'foreign_judgment') {
+    // Два независимых узла главы 45 — каждый со своим заголовком-указателем.
+    for (const id of fields) {
+      const heading = FOREIGN_JUDGMENT_NODE_HEADINGS[id];
+      if (heading) box.appendChild(nodeHeading(heading));
+      box.appendChild(inviteFieldOrPointer(id));
+    }
+  } else if (situation.id === 'child_cases') {
+    renderChildCaseFields(box);
   } else if (situation.id === 'review_new_circumstances') {
     renderReviewGroundFields(box);
+  } else if (situation.id === 'enforcement') {
+    renderEnforcementDocumentFields(box);
   } else {
-    for (const id of situation.fields) box.appendChild(inviteFieldOrPointer(id));
+    for (const id of fields) box.appendChild(inviteFieldOrPointer(id));
   }
   root.appendChild(reveal(`sitfields:${situation.id}`, box));
+}
+
+// Поля ситуации «Исполнительное производство» (ст. 21 ФЗ № 229-ФЗ): dropdown с
+// типом исполнительного документа + поле даты-якоря, своё у каждого типа, а у
+// периодических платежей — ещё и чекбокс бессрочности взамен даты.
+//
+// Тот же приём, что и у renderReviewGroundFields ниже (выбор переписывает норму
+// на карточке), но поле даты здесь не общее: у трёх типов документа три разных
+// якоря, и одновременно показывается ровно один. Поэтому поле берётся по
+// anchor_field выбранного типа, а не перебором situation.fields (см.
+// ENFORCEMENT_DOCUMENT_TYPES в chain.js и комментарий у ситуации 'enforcement'
+// в situations.js).
+//
+// Блок «Добавить событие» (перерыв/вычет ст. 22) здесь не рисуется: он живёт на
+// самой карточке срока по признаку card.interruptible — тот же общий
+// renderInterruptions, что и у остальных узлов предъявления, ничего своего. У
+// периодических платежей его нет: ст. 22 к сроку по ч. 4 ст. 21 не сведена, и
+// узел приходит без этого признака.
+const ENFORCEMENT_DOCUMENT_TYPE_PLACEHOLDER = '';
+
+function renderEnforcementDocumentFields(box) {
+  const current = state.inputs.enforcement_document_type || ENFORCEMENT_DOCUMENT_TYPE_PLACEHOLDER;
+  box.appendChild(
+    renderChoiceField(
+      'enforcement_document_type',
+      [
+        { value: ENFORCEMENT_DOCUMENT_TYPE_PLACEHOLDER, label: 'Выберите документ' },
+        ...ENFORCEMENT_DOCUMENT_TYPES.map((t) => ({ value: t.id, label: t.label })),
+      ],
+      current,
+    ),
+  );
+  const docType = enforcementDocumentTypeById(current);
+  if (docType == null) return;
+
+  // Чекбокс бессрочности — только у того типа, у которого он есть в модели
+  // (периодические платежи, indefinite_field в ENFORCEMENT_DOCUMENT_TYPES).
+  // Он и дата-якорь взаимоисключающие: при бессрочном взыскании дедлайна не
+  // существует в принципе, дата ему не нужна (см.
+  // computeEnforcementDocumentPresentation в chain.js), поэтому поле даты
+  // скрывается, а не просто перестаёт учитываться.
+  if (docType.indefinite_field) {
+    const indefinite = Boolean(state.inputs[docType.indefinite_field]);
+    box.appendChild(renderCheckboxField(docType.indefinite_field, indefinite));
+    if (indefinite) {
+      box.appendChild(
+        reveal(
+          'enforcement-indefinite',
+          el(
+            'p',
+            'hint',
+            'Дата окончания срока не нужна — предъявить можно в любой момент, пока ' +
+              'сохраняется право на периодические платежи.',
+          ),
+        ),
+      );
+      return;
+    }
+  }
+  box.appendChild(reveal('enforcement-anchor', inviteFieldOrPointer(docType.anchor_field)));
+}
+
+// Поля ситуации «Дела о детях» (глава 22.2 и глава 29 ГПК): dropdown с
+// категорией дела + блок полей этой категории.
+//
+// Тот же приём, что и у renderEnforcementDocumentFields выше и
+// renderReviewGroundFields ниже — выбор переписывает, что показано под
+// dropdown'ом, — но с одним отличием: там
+// вариант меняет норму и якорь ОДНОГО узла, а здесь узлы разные и готовые
+// (CHILD_RETURN_APPEAL, CHILD_RETURN_PRIVATE_COMPLAINT, ADOPTION_APPEAL в
+// chain.js), и выбор только делит поля ситуации на два блока. Поэтому таблица
+// категорий лежит в situations.js, а не в chain.js: предметного в ней ничего
+// нет.
+//
+// Поля невыбранных категорий очищаются — по тому же правилу, что и у
+// переключателей в renderCourtOrderFields / renderArbitrationAwardSetasideFields:
+// иначе после переключения назад и обратно на экране осталась бы карточка
+// категории, поля которой сейчас не показаны и которую нечем править.
+const CHILD_CASE_CATEGORY_PLACEHOLDER = '';
+
+function renderChildCaseFields(box) {
+  const current = state.inputs.child_case_category || CHILD_CASE_CATEGORY_PLACEHOLDER;
+  box.appendChild(
+    renderChoiceField(
+      'child_case_category',
+      [
+        { value: CHILD_CASE_CATEGORY_PLACEHOLDER, label: 'Выберите категорию дела' },
+        ...CHILD_CASE_CATEGORIES.map((c) => ({ value: c.id, label: c.label })),
+      ],
+      current,
+      (value) => {
+        for (const category of CHILD_CASE_CATEGORIES) {
+          if (category.id === value) continue;
+          for (const field of category.fields) {
+            delete state.inputs[field];
+            // И сырой ввод тоже: он живёт отдельно от state.inputs (см.
+            // rawDates выше) и иначе вернул бы на экран дату, которой в
+            // расчёте уже нет.
+            rawDates.delete(field);
+          }
+        }
+      },
+    ),
+  );
+  const category = childCaseCategoryById(current);
+  if (category == null) return;
+  for (const field of category.fields) {
+    box.appendChild(reveal(`child-case:${field}`, inviteFieldOrPointer(field)));
+  }
 }
 
 // Поля ситуации «Пересмотр по вновь открывшимся/новым обстоятельствам» (глава
@@ -1749,33 +2596,28 @@ function renderVsPracticeChangeFields(box) {
   );
 }
 
-// --- Заглушки (раздел 4.4) — статичны, рисуем один раз -----------------------
-
-function renderStubs() {
-  const view = buildView({}, { today });
-  const root = document.getElementById('stubs');
-  root.textContent = '';
-  // Все ветви раскрыты — блока «неподдерживаемые» больше нет; заголовок без
-  // содержимого не рисуем.
-  if (!view.stubs.length) return;
-  root.appendChild(el('h2', null, 'Неподдерживаемые ветки'));
-  for (const s of view.stubs) root.appendChild(stubCard(s));
-}
-
 // --- Инициализация ----------------------------------------------------------
 
-const reasoned = document.getElementById('reasoned');
-const reasonedError = document.getElementById('reasoned-error');
-attachDateMask(reasoned, (input, parsed) =>
-  commitDateInput('reasoned_decision_date', input, reasonedError, parsed),
-);
+// Гвардия: модуль импортируется и в node --test (test/integration/export-links.test.js)
+// ради чистых функций выше (googleCalendarTermFromCard) — без браузера document
+// не существует, и сама инициализация страницы там не нужна и не должна запускаться.
+if (typeof document !== 'undefined') {
+  const reasoned = document.getElementById('reasoned');
+  const reasonedError = document.getElementById('reasoned-error');
+  attachDateMask(reasoned, (input, parsed) =>
+    commitDateInput('reasoned_decision_date', input, reasonedError, parsed),
+  );
 
-const downloadBtn = document.getElementById('download-ics');
-if (downloadBtn) downloadBtn.addEventListener('click', downloadICS);
-const copyBtn = document.getElementById('copy-terms');
-if (copyBtn) copyBtn.addEventListener('click', copyTerms);
-const printBtn = document.getElementById('print-terms');
-if (printBtn) printBtn.addEventListener('click', printTerms);
+  const downloadBtn = document.getElementById('download-ics');
+  if (downloadBtn) downloadBtn.addEventListener('click', downloadICS);
+  const nonSafariIosHint = document.getElementById('ios-non-safari-hint');
+  if (nonSafariIosHint && isIOS() && looksLikeNonSafariIOSBrowser()) {
+    nonSafariIosHint.hidden = false;
+  }
+  const copyBtn = document.getElementById('copy-terms');
+  if (copyBtn) copyBtn.addEventListener('click', copyTerms);
+  const printBtn = document.getElementById('print-terms');
+  if (printBtn) printBtn.addEventListener('click', printTerms);
 
-renderStubs();
-render();
+  render();
+}

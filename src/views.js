@@ -1,8 +1,8 @@
 // Сборка карточек для отображения (раздел 8, задача 4а SPEC.md).
 //
 // Берёт входные данные, считает цепочку и возвращает готовую структуру данных
-// для UI: карточки видимых узлов, список неполных узлов («что ещё уточнить») и
-// статические заглушки. Никакой вёрстки — только данные.
+// для UI: карточки видимых узлов и список неполных узлов («что ещё уточнить»).
+// Никакой вёрстки — только данные.
 //
 // Прогрессивное раскрытие (вариант А): полностью показываются только узлы, для
 // которых достаточно введённых данных; остальные попадают в `incomplete` с
@@ -23,14 +23,24 @@ import {
   reasonedDelayVersionFor,
   INTERRUPTION_TYPES,
   INTERRUPTION_SCOPE_WARNING,
+  DEDUCTION_TYPES,
   REVIEW_GROUNDS,
   REVIEW_NEW_CIRCUMSTANCES_FILING,
+  ENFORCEMENT_DOCUMENT_TYPES,
+  enforcementDocumentTypeById,
 } from './chain.js';
+// Пространственный импорт — только для автосборки ACTION_FACT_INPUT/
+// MISSED_FROM_FILING ниже (см. комментарий там). По тому же образцу, что и
+// `import * as chainModule` в term-registry.js для TERM_REGISTRY.
+import * as chainModule from './chain.js';
 
-// Перерыв срока (ст. 22 ФЗ № 229-ФЗ) — константы модели нужны и интерфейсу:
-// список оснований для выпадающего списка и текст предупреждения о ч. 3.1.
-// Отдаём их через слой представления, чтобы web/app.js не тянул chain.js.
-export { INTERRUPTION_TYPES, INTERRUPTION_SCOPE_WARNING };
+// События ст. 22 ФЗ № 229-ФЗ — константы модели нужны и интерфейсу: два списка
+// оснований для одного выпадающего списка (перерыв ч. 1–3 и вычет ч. 3.1),
+// предупреждение о выборе основания и текст допущений ч. 3.1. Отдаём их через
+// слой представления, чтобы web/app.js не тянул chain.js. Текст допущений
+// ч. 3.1 сюда не попадает: он приезжает на карточку вместе с расчётом
+// (card.deduction_assumption), отдельной константой интерфейсу не нужен.
+export { INTERRUPTION_TYPES, INTERRUPTION_SCOPE_WARNING, DEDUCTION_TYPES };
 
 // Основания пересмотра по вновь открывшимся/новым обстоятельствам (глава 42
 // ГПК) — список для dropdown в UI, по тому же образцу: подпись поля даты и
@@ -38,13 +48,13 @@ export { INTERRUPTION_TYPES, INTERRUPTION_SCOPE_WARNING };
 // reviewTermFor в chain.js).
 export { REVIEW_GROUNDS };
 
-// Заглушки рядом с узлом предъявления ИЛ (ст. 21–22 ФЗ № 229-ФЗ). Список пуст:
-// судебный приказ и периодические платежи раскрыты отдельными узлами
-// (court_order_presentation, periodic_payments_presentation — свои ситуации в
-// situations.js), перерыв срока — сдвигом якоря по событиям ст. 22 (см.
-// applyInterruptions в chain.js). Механизм оставлен, как и STUBS ниже: он
-// понадобится следующему смежному случаю, для которого расчёта не окажется.
-const ENFORCEMENT_STUBS = [];
+// Типы исполнительного документа для короткого входа «Исполнительное
+// производство» (ст. 21 ФЗ № 229-ФЗ) — тот же приём, что и у REVIEW_GROUNDS
+// выше: список для dropdown в UI, а норма и якорь на карточке зависят от
+// выбранного типа. enforcementDocumentTypeById нужен интерфейсу, чтобы по
+// выбору узнать, какое поле даты показывать (anchor_field).
+export { ENFORCEMENT_DOCUMENT_TYPES, enforcementDocumentTypeById };
+
 import { computeDeadline } from '../core/engine/engine.js';
 import { toISODate } from '../core/calendar/calendar.js';
 import {
@@ -69,6 +79,23 @@ export const INTERRUPTION_TYPE_LABELS = {
     'Возврат документа взыскателю: взыскание невозможно (ч. 3 ст. 22, п. 3, 4 ч. 1 ст. 46)',
 };
 
+// Подписи оснований вычета (ч. 3.1 ст. 22) — в том же выпадающем списке, что и
+// основания перерыва выше: для пользователя это один вопрос «почему срок
+// изменился», разные у них только арифметика и число запрашиваемых дат.
+// Идентификаторы — из DEDUCTION_TYPES (chain.js).
+export const DEDUCTION_TYPE_LABELS = {
+  creditor_request: 'Окончание ИП по заявлению взыскателя (ч. 3.1 ст. 22)',
+  creditor_obstruction:
+    'Окончание ИП из-за действий взыскателя, препятствующих исполнению (ч. 3.1 ст. 22)',
+};
+
+// Подписи двух дат отрезка ч. 3.1. Обе обязательны: без любой из них отрезок не
+// измерить, и событие в расчёт не идёт.
+export const DEDUCTION_DATE_LABELS = {
+  from: 'Дата предъявления исполнительного документа к исполнению',
+  to: 'Дата окончания исполнительного производства по этому основанию',
+};
+
 // Почему событие не принято в расчёт. Молча выбрасывать нельзя: пользователь
 // должен видеть, что введённая им дата на срок не повлияла, и почему.
 export const INTERRUPTION_IGNORED_TEXT = {
@@ -79,9 +106,15 @@ export const INTERRUPTION_IGNORED_TEXT = {
     'не начавшийся срок нечем.',
 };
 
-// Заглушки (п. 4.4 SPEC.md) — статические карточки. Все раскрыты (см. 3.1–3.4),
-// список пуст: неподдерживаемых ветвей в модели больше нет.
-const STUBS = [];
+// То же для событий-вычетов: у них своя причина отказа (обратный порядок дат),
+// а «нет даты» означает, что не заполнена хотя бы одна из двух.
+export const DEDUCTION_IGNORED_TEXT = {
+  no_date: 'Указаны не обе даты периода — событие в расчёт не принято.',
+  unknown_type: 'Основание не распознано — событие в расчёт не принято.',
+  negative_period:
+    'Окончание производства раньше предъявления документа — период измерить ' +
+    'нельзя, событие в расчёт не принято.',
+};
 
 // --- Вспомогательные --------------------------------------------------------
 
@@ -189,6 +222,9 @@ function cassationCard(cassation) {
   if (cassation.boundary_warning) card.boundary_warning = cassation.boundary_warning;
   if (cassation.exhaustion_warning) card.exhaustion_warning = cassation.exhaustion_warning;
   if (cassation.restoration_norm) card.restoration_norm = cassation.restoration_norm;
+  if (cassation.restoration_one_year_cap) {
+    card.restoration_one_year_cap = cassation.restoration_one_year_cap;
+  }
   attachCalendarWarning(card);
   return card;
 }
@@ -219,27 +255,42 @@ function attachInterruptions(card, term) {
   card.details.interruption_logic = term.interruption_logic;
 }
 
-// Карточка срока предъявления ИЛ. Смежные случаи (card.stubs) сейчас пусты —
-// все раскрыты узлами; поле остаётся, чтобы следующий случай было куда класть.
-function enforcementCard(enf) {
-  const card = {
-    id: enf.id,
-    kind: 'term',
-    title: enf.title,
-    status: 'computed',
-    deadline: enf.deadline,
-    norm: enf.norm.primary,
-    details: {
-      collapsed: true,
-      logic: enf.logic,
-      calculation: enf.norm.calculation,
-      midnight_rule: enf.midnight_rule,
-    },
-    stubs: ENFORCEMENT_STUBS,
-  };
-  attachInterruptions(card, enf);
-  attachCalendarWarning(card);
-  return card;
+// История вычетов (ч. 3.1 ст. 22 ФЗ № 229-ФЗ) на карточке: список периодов с
+// подписями оснований, обеими датами и длиной в днях, суммарный вычет, дедлайн
+// до вычета, норма и логика в details, список допущений.
+//
+// Расчёт уже уменьшен в chain.js — здесь только показываем, из чего и сколько
+// вычтено. Отдельно от attachInterruptions: у перерыва и вычета разные поля и
+// разный смысл, и на одной карточке могут встретиться оба.
+function attachDeductions(card, term) {
+  if (!term.deductions || term.deductions.length === 0) return;
+  card.deductions = term.deductions.map((event) => {
+    const row = {
+      ...event,
+      label: DEDUCTION_TYPE_LABELS[event.type] ?? 'Основание не распознано',
+    };
+    if (event.ignored) row.ignored_text = DEDUCTION_IGNORED_TEXT[event.ignored_reason];
+    return row;
+  });
+  card.deducted_days = term.deducted_days;
+  // Дедлайн до вычета — иначе на карточке не видно, из чего вычитали: точка
+  // отсчёта не сдвигается, и по ней уменьшение срока не прочитать.
+  card.deadline_before_deduction = term.deadline_before_deduction;
+  // Срок выбран вычетом полностью: дальше уменьшать некуда (см. граничный
+  // случай в core/engine/deduction.js).
+  if (term.deduction_exhausts_term) card.deduction_exhausts_term = true;
+  card.deduction_assumption = term.deduction_assumption;
+  // Ошибка ввода (пересекающиеся периоды) — не свойство расчёта, поэтому
+  // отдельным полем, а не внутри deduction_assumption: допущения стоят всегда,
+  // это предупреждение — только когда есть что исправлять.
+  if (term.deduction_overlap_warning) {
+    card.deduction_overlap_warning = term.deduction_overlap_warning;
+  }
+  card.details.deduction_norm = term.deduction_norm;
+  card.details.deduction_logic = term.deduction_logic;
+  // Полный текст допущений — под «Подробнее»; короткий флажок (card.deduction_assumption.short)
+  // остаётся снаружи, на самой карточке.
+  card.details.deduction_assumption = term.deduction_assumption;
 }
 
 // workingDayCard — перенесена в core/view/cards.js (см. импорт выше).
@@ -253,10 +304,6 @@ function simplifiedCards(simplified) {
 
   if (simplified.reasoned_making) {
     const making = workingDayCard(simplified.reasoned_making, { informational: true });
-    making.note =
-      simplified.reasoned_making.trigger === 'appeal_filed'
-        ? 'Отсчёт от даты подачи апелляционной жалобы (ч. 4 ст. 232.4).'
-        : 'Отсчёт от даты поступления заявления о составлении мотивированного решения.';
     cards.push(making);
   }
 
@@ -324,9 +371,6 @@ function simplifiedCards(simplified) {
 
   // Кассация в КСОЮ — после вступления решения в силу (ст. 376.1).
   if (simplified.cassation) cards.push(cassationCard(simplified.cassation));
-
-  // Предъявление ИЛ — после вступления решения в силу (ч. 1 ст. 21 ФЗ № 229-ФЗ).
-  if (simplified.enforcement) cards.push(enforcementCard(simplified.enforcement));
 
   return cards;
 }
@@ -410,11 +454,6 @@ function defaultJudgmentCards(dj) {
   // Кассация в КСОЮ — после вступления заочного решения в силу (ст. 376.1).
   // Без exhaustion_warning (отложено, см. computeDefaultJudgment).
   if (dj.cassation) cards.push(cassationCard(dj.cassation));
-
-  // Предъявление ИЛ — после вступления заочного решения в силу (ч. 1 ст. 21
-  // ФЗ № 229-ФЗ). При удовлетворённом заявлении об отмене вступления в силу нет,
-  // и dj.enforcement === null — карточки нет.
-  if (dj.enforcement) cards.push(enforcementCard(dj.enforcement));
 
   return { cards, incomplete };
 }
@@ -500,19 +539,19 @@ function foreignStateDefaultJudgmentCards(dj) {
   // инкорпорирована ч. 1 ст. 417.10). Условие исчерпания — общее (3.7).
   if (dj.cassation) cards.push(cassationCard(dj.cassation));
 
-  // Предъявление ИЛ — после вступления заочного решения в силу (ч. 1 ст. 21
-  // ФЗ № 229-ФЗ, дополнительно подтверждено ст. 417.12).
-  if (dj.enforcement) cards.push(enforcementCard(dj.enforcement));
-
   return { cards, incomplete };
 }
 
 // Карточки ветки мирового судьи (ч. 3–5 ст. 199).
 function mirovoyCards(m) {
   const cards = [];
-  cards.push(workingDayCard(m.reasoned_request));
+  const request = workingDayCard(m.reasoned_request);
+  cards.push(request);
   if (m.reasoned_making) {
-    cards.push(workingDayCard(m.reasoned_making, { informational: true }));
+    const making = workingDayCard(m.reasoned_making, {
+      informational: true,
+    });
+    cards.push(making);
   }
   const appeal = {
     id: m.appeal.id,
@@ -549,6 +588,7 @@ function mirovoyCards(m) {
     branch: entry.branch,
     details: { collapsed: true, logic: entry.logic },
   };
+  if (entry.not_earlier_than) entryCard.not_earlier_than = entry.not_earlier_than;
   if (entry.message) entryCard.message = entry.message;
   if (entry.note) entryCard.note = entry.note;
   attachCalendarWarning(entryCard, entry.date);
@@ -565,9 +605,6 @@ function mirovoyCards(m) {
     cards.push(cass);
   }
 
-  // Предъявление ИЛ — после вступления решения в силу (ч. 1 ст. 21 ФЗ № 229-ФЗ).
-  if (m.enforcement) cards.push(enforcementCard(m.enforcement));
-
   return cards;
 }
 
@@ -578,7 +615,8 @@ function mirovoyCards(m) {
 // monthTermCard — перенесена в core/view/cards.js (см. импорт выше). Историю
 // перерывов (attachInterruptions) она больше не прикладывает сама — это
 // предметная надстройка, единственный узел, которому она нужна
-// (court_order_presentation), получает её от вызывающего кода отдельно.
+// (enforcement_document_presentation), получает её от вызывающего кода
+// отдельно.
 
 // Карточка пересмотра по вновь открывшимся/новым обстоятельствам: обычный
 // monthTermCard плюс, у практики ВС (vs_practice_change), обе промежуточные
@@ -599,12 +637,57 @@ function reviewNewCircumstancesCard(term) {
   return card;
 }
 
-// Карточка предъявления документов о взыскании периодических платежей
-// (ч. 4 ст. 21 ФЗ № 229-ФЗ). Обычный расчётный узел через monthTermCard, кроме
-// ветки бессрочного взыскания (periodic_payment_indefinite) — там дедлайна не
-// существует в принципе, и узел приходит уже в состоянии not_applicable (по
-// образцу default_judgment_appeal при отменённом заочном решении).
-function periodicPaymentsCard(term) {
+// Карточка кассационной жалобы на судебный приказ: обычный monthTermCard плюс
+// промежуточные данные о том, как вычислена дата вступления приказа в
+// законную силу — она не вводится напрямую (см. computeSudebnyPrikazCassation
+// в chain.js), и без этих данных карточка показывала бы только финальный
+// срок, не объясняя, откуда взялась точка отсчёта (десять дней на возражения
+// должника, ст. 128, а при вводе даты прибытия на почту — ещё и семидневный
+// срок хранения корреспонденции, п. 32 ПП ВС РФ от 27.12.2016 № 62, перед ним).
+//
+// Сами эти данные приходят с узла возражений: дата вступления в силу — его
+// дедлайн, почтовый шаг посчитан там же. Карточка их только показывает.
+function sudebnyPrikazCassationCard(term) {
+  const card = monthTermCard(term);
+  card.details.entry_into_force = {
+    date: term.entry_into_force,
+    computed: true, // не введена пользователем — вычислена, в отличие от двух других узлов той же группы
+    via_postal_storage: term.entry_into_force_via_postal_storage,
+    received_date: term.received_date,
+  };
+  if (term.entry_into_force_via_postal_storage) {
+    card.details.entry_into_force.postal_arrival_date = term.postal_arrival_date;
+    card.details.entry_into_force.postal_storage_start = term.postal_storage_start;
+  }
+  return card;
+}
+
+// Карточка заявления об отмене решения третейского суда (глава 46, ст. 418):
+// обычный monthTermCard плюс отметка о том, какой из двух вариантов субъекта
+// сработал — сторона третейского разбирательства (ч. 2) или лицо, не
+// являющееся стороной, в т.ч. прокурор (ч. 3) — иначе карточка не объясняла
+// бы, откуда взялась точка отсчёта, при заполнении сразу двух полей ввода
+// (см. resolveArbitrationAwardSetasideAnchor в chain.js — приоритет за ч. 2).
+function arbitrationAwardSetasideCard(term) {
+  const card = monthTermCard(term);
+  card.details.applicant_variant = term.applicant_variant;
+  return card;
+}
+
+// Карточка узла предъявления исполнительного документа (ст. 21 ФЗ № 229-ФЗ) —
+// один рендерер на все три типа документа, как и сам узел.
+//
+// Обычный расчётный узел через monthTermCard (он годится и для трёхлетнего
+// срока) плюс две ветки, каждая из которых нужна только части типов:
+//   * not_applicable — бессрочное взыскание периодических платежей
+//     (periodic_payment_indefinite): дедлайна не существует в принципе, узел
+//     приходит уже в этом состоянии (по образцу default_judgment_appeal при
+//     отменённом заочном решении). Вместо даты на карточке формулировка и
+//     причина;
+//   * истории перерывов и вычетов ст. 22 — только у типов, к которым ст. 22
+//     применяется; attachInterruptions/attachDeductions сами ничего не
+//     добавляют, если расчёт их не принёс, поэтому ветвления здесь не нужно.
+function enforcementDocumentCard(term) {
   if (term.status === 'not_applicable') {
     return {
       id: term.id,
@@ -617,25 +700,47 @@ function periodicPaymentsCard(term) {
       details: { collapsed: true, logic: term.reason },
     };
   }
-  return monthTermCard(term);
+  const card = monthTermCard(term);
+  attachInterruptions(card, term);
+  attachDeductions(card, term);
+  return card;
 }
 
 // Карточка возражений должника на судебный приказ (ст. 128 ГПК) — обычный срок
 // в рабочих днях плюс заметка о том, что происходит по истечении срока.
 //
-// Заметка связывает два узла одной ситуации логически, не задваивая расчёт:
-// срок предъявления приказа к исполнению считается своим узлом
-// (court_order_presentation) от своей даты — выдачи приказа взыскателю.
+// Заметка ведёт к соседнему узлу, не задваивая расчёт: срок предъявления
+// приказа к исполнению считается от своей даты (выдачи приказа взыскателю) и
+// живёт теперь в ситуации «Исполнительное производство» — вариант «судебный
+// приказ» узла enforcement_document_presentation. Прежде у приказного
+// производства был для этого собственный узел (court_order_presentation) —
+// тот же расчёт от того же поля, поэтому он убран, а не продублирован.
 const COURT_ORDER_OBJECTION_NOTE =
   'Если возражения не поступят в срок, взыскателю выдаётся судебный приказ для ' +
-  'предъявления к исполнению (ст. 130 ГПК РФ) — см. срок предъявления к исполнению.';
+  'предъявления к исполнению (ст. 130 ГПК РФ) — срок предъявления считается в ' +
+  'ситуации «Исполнительное производство».';
 
 function courtOrderObjectionCard(term) {
   const card = workingDayCard(term);
   card.note = COURT_ORDER_OBJECTION_NOTE;
-  // Ссылка на смежный узел — структурная, чтобы разбиение узлов по ситуациям
-  // проверялось, а не держалось на совпадении формулировок.
-  card.details.related_node = 'court_order_presentation';
+  // Ссылка на смежный узел — структурная, чтобы переход между ситуациями
+  // проверялся, а не держался на совпадении формулировок.
+  card.details.related_node = 'enforcement_document_presentation';
+  // Как получена точка отсчёта: введена пользователем или выведена по фикции
+  // п. 32 ПП ВС РФ № 62 из даты прибытия отправления на почту. Во втором
+  // случае якорь срока — вычисленная дата, которой в полях ввода нет вовсе, и
+  // без этого блока карточка не объяснила бы, откуда она взялась. Тот же
+  // набор полей, что и у соседней карточки кассации (entry_into_force там) —
+  // и данные те же, посчитанные один раз в computeCourtOrderTerms.
+  card.details.received = {
+    date: term.received_date,
+    computed: term.received_via_postal_storage,
+    via_postal_storage: term.received_via_postal_storage,
+  };
+  if (term.received_via_postal_storage) {
+    card.details.received.postal_arrival_date = term.postal_arrival_date;
+    card.details.received.postal_storage_start = term.postal_storage_start;
+  }
   return card;
 }
 
@@ -763,12 +868,6 @@ function buildDownstream(inputs, today) {
     }
   }
 
-  // Предъявление исполнительного листа — только когда вступление в силу
-  // разрешено (condition); в ветви pending узла нет.
-  if (chain.enforcement) {
-    cards.push(enforcementCard(chain.enforcement));
-  }
-
   const independent = independentNodes(chain, today);
   cards.push(...independent.cards);
   incomplete.push(...independent.incomplete);
@@ -805,14 +904,25 @@ function independentNodes(source, today = null) {
   }
   if (terms.supervision) cards.push(monthTermCard(terms.supervision));
   if (terms.court_order_objection) cards.push(courtOrderObjectionCard(terms.court_order_objection));
-  if (terms.court_order_presentation) {
-    const courtOrderPresentationCard = monthTermCard(terms.court_order_presentation);
-    // Прерываемый срок (ст. 22 ФЗ № 229-ФЗ) — история перерывов на карточке.
-    attachInterruptions(courtOrderPresentationCard, terms.court_order_presentation);
-    cards.push(courtOrderPresentationCard);
+  // Исполнительное производство (ст. 21 ФЗ № 229-ФЗ): один узел на три типа
+  // документа, включая периодические платежи с их веткой бессрочного взыскания
+  // (прежний отдельный узел periodic_payments_presentation перенесён сюда
+  // целиком). Норма, логика и применимость ст. 22 на карточке уже выбраны по
+  // типу документа внутри computeEnforcementDocumentPresentation.
+  if (terms.enforcement_document_presentation) {
+    cards.push(enforcementDocumentCard(terms.enforcement_document_presentation));
   }
-  if (terms.periodic_payments_presentation) {
-    cards.push(periodicPaymentsCard(terms.periodic_payments_presentation));
+  // Глава 45 (признание и исполнение решений иностранных судов): два
+  // независимых узла, каждый по своему input — обычный monthTermCard (годится
+  // и для трёхлетнего, и для месячного срока, как у
+  // cassation_return_ruling_appeal выше), без attachInterruptions — перерыв
+  // ст. 22 ФЗ № 229-ФЗ к узлу предъявления решения иностранного суда не
+  // подключён (см. комментарий в chain.js).
+  if (terms.foreign_judgment_enforcement_presentation) {
+    cards.push(monthTermCard(terms.foreign_judgment_enforcement_presentation));
+  }
+  if (terms.foreign_judgment_recognition_objection) {
+    cards.push(monthTermCard(terms.foreign_judgment_recognition_objection));
   }
   // Глава 22.2 (возвращение ребёнка / права доступа): оба срока — в рабочих
   // днях, каждый от своей даты, поэтому обычные workingDayCard.
@@ -835,6 +945,32 @@ function independentNodes(source, today = null) {
   // апелляцию.
   if (terms.settlement_approval_cassation_appeal) {
     cards.push(monthTermCard(terms.settlement_approval_cassation_appeal));
+  }
+  // Прямая кассация, минуя апелляцию, по общему трёхмесячному сроку
+  // (ч. 1 ст. 376.1): судебный приказ, определения по делам об оспаривании
+  // решений третейских судов и о выдаче/отказе в выдаче исполнительного листа
+  // на принудительное исполнение решения третейского суда. Судебный приказ —
+  // через sudebnyPrikazCassationCard (см. выше): дата вступления в силу
+  // вычислена, а не введена, карточке нужны промежуточные данные расчёта.
+  // Два других — обычный monthTermCard, тот же, что и у
+  // settlement_approval_cassation_appeal выше (он не привязан к конкретной
+  // длительности узла).
+  if (terms.sudebny_prikaz_cassation) {
+    cards.push(sudebnyPrikazCassationCard(terms.sudebny_prikaz_cassation));
+  }
+  if (terms.treteisky_osparivanie_cassation) {
+    cards.push(monthTermCard(terms.treteisky_osparivanie_cassation));
+  }
+  if (terms.treteisky_ispollist_cassation) {
+    cards.push(monthTermCard(terms.treteisky_ispollist_cassation));
+  }
+  // Заявление об отмене решения третейского суда (глава 46, ч. 2, 3 ст. 418):
+  // первая стадия того же процесса, что и treteisky_osparivanie_cassation
+  // выше, но независимый узел (см. комментарий в chain.js) — через
+  // arbitrationAwardSetasideCard, чтобы показать, какой вариант субъекта
+  // сработал.
+  if (terms.arbitration_award_setaside) {
+    cards.push(arbitrationAwardSetasideCard(terms.arbitration_award_setaside));
   }
   // Пересмотр по вновь открывшимся/новым обстоятельствам (глава 42 ГПК):
   // обычный месячный/трёхмесячный рендерер — норма и логика на карточке уже
@@ -898,51 +1034,50 @@ function independentNodes(source, today = null) {
 // подачи и она позже дедлайна — там установлен факт пропуска. Здесь факта нет,
 // известно только, что срок прошёл.
 //
-// Узел → input, которым подтверждается совершение действия. Если он введён,
-// срок по календарю больше не «висит»: подано вовремя или с пропуском —
-// разбирается по факту (статус 'missed'), а не по текущей дате. Узел, которого
-// в карте нет, подтвердить нечем — для него достаточно сравнения с датой.
-export const ACTION_FACT_INPUT = {
-  appeal_general: 'appeal_filed_date',
-  cassation_ksoyu: 'cassation_filed_date',
-  cassation_vs: 'vs_cassation_filed_date',
-  protocol_remarks: 'protocol_remarks_filed_date',
-  simplified_reasoned_request: 'simplified_reasoned_request_date',
-  simplified_reasoned_making: 'simplified_reasoned_date',
-  simplified_appeal: 'simplified_appeal_filed_date',
-  default_judgment_cancellation_request: 'default_judgment_cancellation_request_date',
-  default_judgment_appeal: 'default_judgment_appeal_filed_date',
-  foreign_state_default_judgment_cancellation_request:
-    'foreign_state_default_judgment_cancellation_request_date',
-  foreign_state_default_judgment_appeal: 'foreign_state_default_judgment_appeal_filed_date',
-  mirovoy_reasoned_request: 'mirovoy_request_date',
-  mirovoy_reasoned_making: 'mirovoy_reasoned_date',
-  mirovoy_appeal: 'mirovoy_appeal_ruling_reasoned_date',
-  mirovoy_cassation: 'cassation_filed_date',
-};
-
-// Узлы, у которых подтверждающий факт — это именно дата подачи заявителем.
-// Только для них поздняя дата означает пропуск срока со ст. 112 в подсказке.
+// Узел → input, которым подтверждается совершение действия (ACTION_FACT_INPUT)
+// и множество узлов, у которых подтверждающий факт — именно дата подачи
+// заявителем, а не что-то другое (MISSED_FROM_FILING). Если ACTION_FACT_INPUT
+// для узла введён, срок по календарю больше не «висит»: подано вовремя или с
+// пропуском — разбирается по факту (статус 'missed'), а не по текущей дате.
+// Узел, которого в карте нет, подтвердить нечем — для него достаточно
+// сравнения с датой. MISSED_FROM_FILING сужает это дальше: у сроков суда
+// (изготовление мотивированного решения) поздняя дата — нарушение судом, а не
+// пропуск заявителя, и восстановление по ст. 112 к ней неприменимо; у
+// апелляции по делу мирового судьи известна только дата апелляционного
+// определения, а не дата подачи жалобы, — такие узлы в ACTION_FACT_INPUT есть,
+// а в MISSED_FROM_FILING нет.
 //
-// Остальные подтверждаются датой другого рода: у сроков суда (изготовление
-// мотивированного решения) поздняя дата — нарушение судом, а не пропуск
-// заявителя, и восстановление по ст. 112 к ней неприменимо; у апелляции по делу
-// мирового судьи известна только дата апелляционного определения, а не дата
-// подачи жалобы.
-const MISSED_FROM_FILING = new Set([
-  'appeal_general',
-  'cassation_ksoyu',
-  'cassation_vs',
-  'protocol_remarks',
-  'simplified_reasoned_request',
-  'simplified_appeal',
-  'default_judgment_cancellation_request',
-  'default_judgment_appeal',
-  'foreign_state_default_judgment_cancellation_request',
-  'foreign_state_default_judgment_appeal',
-  'mirovoy_reasoned_request',
-  'mirovoy_cassation',
-]);
+// Обе карты собираются автоматически из полей fact_input/missed_from_filing на
+// самих term-определениях chain.js — по образцу TERM_REGISTRY в
+// term-registry.js (`import * as chainModule` + обход экспортов), а не
+// задаются здесь вручную. Раньше это были отдельные ручные карты — id узла в
+// них приходилось поддерживать в согласии с id в chain.js вручную, и
+// рассинхронизация (опечатка, забытая запись при добавлении узла) не ловилась
+// ни одним тестом (см. диагностику, docs/core-extraction-audit.md, §6
+// Вопрос 5). Теперь fact_input/missed_from_filing — часть самого узла,
+// наравне с restoration_norm и midnight_rule, поэтому вопрос «есть ли узел в
+// карте» больше не может разойтись с вопросом «есть ли узел в chain.js
+// вообще» — это один и тот же объект.
+//
+// collectFactInputMaps вынесена отдельно и экспортирована ради теста самого
+// механизма сборки — на синтетическом module-namespace-объекте, а не на
+// настоящих узлах ГПК (которые проверяются собственным regression-тестом).
+export function collectFactInputMaps(moduleExports) {
+  const terms = Object.values(moduleExports).filter(
+    (v) => v && typeof v === 'object' && typeof v.id === 'string',
+  );
+  const actionFactInput = Object.fromEntries(
+    terms.filter((term) => typeof term.fact_input === 'string').map((term) => [term.id, term.fact_input]),
+  );
+  const missedFromFiling = new Set(
+    terms.filter((term) => term.missed_from_filing === true).map((term) => term.id),
+  );
+  return { actionFactInput, missedFromFiling };
+}
+
+const { actionFactInput: ACTION_FACT_INPUT, missedFromFiling: MISSED_FROM_FILING } =
+  collectFactInputMaps(chainModule);
+export { ACTION_FACT_INPUT };
 
 // markExpired — тонкая обёртка над core/view/cards.js с ГПК-данными
 // (ACTION_FACT_INPUT, MISSED_FROM_FILING). Норма восстановления
@@ -963,18 +1098,12 @@ function markExpired(cards, inputs, today) {
  * Собирает структуру для отображения из входных данных.
  * @param {object} inputs — данные из п. 4.1 SPEC.md.
  * @param {{today?: Date|string}} [options] — текущая дата (передаётся явно).
- * @returns {{cards: object[], incomplete: object[], stubs: object[]}}
+ * @returns {{cards: object[], incomplete: object[]}}
  *   cards — видимые (рассчитанные) узлы; incomplete — узлы, которым не хватает
- *   данных, с причиной и списком недостающих input; stubs — заглушки (п. 4.4).
+ *   данных, с причиной и списком недостающих input.
  */
 export function buildView(inputs, options = {}) {
   const today = options.today != null ? toISO(options.today) : null;
-  const stubs = STUBS.map((s) => ({
-    id: s.id,
-    title: s.title,
-    explanation: s.explanation,
-    norm: s.norm,
-  }));
 
   if (inputs?.reasoned_decision_date == null) {
     // Цепочку обжалования без даты решения не построить, но независимые сроки в
@@ -992,7 +1121,6 @@ export function buildView(inputs, options = {}) {
         ),
         ...independent.incomplete,
       ],
-      stubs,
     };
   }
 
@@ -1001,5 +1129,5 @@ export function buildView(inputs, options = {}) {
   const { cards: downCards, incomplete } = buildDownstream(inputs, today);
   cards.push(...downCards);
 
-  return { cards: markExpired(cards, inputs, today), incomplete, stubs };
+  return { cards: markExpired(cards, inputs, today), incomplete };
 }
