@@ -1,5 +1,5 @@
 // Тест календарного модуля: 96/96 контрольных месяца (п. 5.3 SPEC.md) —
-// 2020–2026 (постановления приняты) + 2027 (draft, по проекту постановления).
+// 2020–2027 (постановления приняты).
 // Любое расхождение с checksums в calendar_data.json — ошибка алгоритма
 // или данных, релиз блокируется.
 
@@ -65,7 +65,7 @@ test('isWorkingDay принимает и Date, и строку', () => {
   assert.equal(isWorkingDay('2021-06-15'), true);
 });
 
-test('isWorkingDay: перенос 20.02→22.02 в 2027 (проект постановления)', () => {
+test('isWorkingDay: перенос 20.02→22.02 в 2027 (постановление № 1187)', () => {
   // 20.02.2027 — суббота, но её выходной статус перенесён на понедельник 22-е.
   assert.equal(isWorkingDay('2027-02-20'), true);
   assert.equal(isWorkingDay('2027-02-22'), false);
@@ -87,7 +87,7 @@ test('shiftIfNonWorking переносит на следующий рабочи�
 
 test('три уровня достоверности календаря (п. 5.4)', () => {
   assert.equal(getYearInfo(2025).level, 'final'); // постановление принято
-  assert.equal(getYearInfo(2027).level, 'draft'); // проект постановления
+  assert.equal(getYearInfo(2027).level, 'final'); // постановление № 1187 принято
   assert.equal(getYearInfo(2028).level, 'preliminary'); // данных нет
 });
 
@@ -96,19 +96,15 @@ test('calendarNote: окончательный год — примечания �
   assert.equal(calendarNote('2025-05-04'), null);
 });
 
-test('calendarNote draft (2027): зона включает янв./май + начало ноября и конец декабря', () => {
-  assert.equal(calendarNote('2027-01-10').level, 'draft'); // январские каникулы
-  assert.equal(calendarNote('2027-05-05').level, 'draft'); // майские
-  assert.equal(calendarNote('2027-11-05').level, 'draft'); // перенос 02.01 → 05.11
-  assert.equal(calendarNote('2027-12-22').level, 'draft'); // расширенная зона конца декабря
-  assert.equal(calendarNote('2027-12-31').level, 'draft'); // перенос 03.01 → 31.12
-  assert.match(calendarNote('2027-01-10').text, /проект/);
-  assert.equal(calendarNote('2027-07-15'), null); // вне зоны
-});
-
-test('calendarNote draft (2027): зона вокруг 23 февраля / 8 марта ловит перенос 20.02→22.02', () => {
-  assert.equal(calendarNote('2027-02-20').level, 'draft');
-  assert.equal(calendarNote('2027-02-22').level, 'draft');
+test('calendarNote: 2027 — окончательный год (постановление № 1187), примечания нет', () => {
+  assert.equal(calendarNote('2027-01-10'), null); // январские каникулы
+  assert.equal(calendarNote('2027-02-20'), null); // перенос 20.02 → 22.02
+  assert.equal(calendarNote('2027-02-22'), null);
+  assert.equal(calendarNote('2027-05-05'), null); // майские
+  assert.equal(calendarNote('2027-11-05'), null); // перенос 02.01 → 05.11
+  assert.equal(calendarNote('2027-12-22'), null); // вторая половина декабря
+  assert.equal(calendarNote('2027-12-31'), null); // перенос 03.01 → 31.12
+  assert.equal(calendarNote('2027-07-15'), null);
 });
 
 test('calendarNote preliminary (2028+): зона уже — без начала ноября и середины декабря', () => {
@@ -118,4 +114,16 @@ test('calendarNote preliminary (2028+): зона уже — без начала 
   // draft-специфичные окрестности (начало ноября, 20–24 декабря) — вне зоны:
   assert.equal(calendarNote('2028-11-05'), null);
   assert.equal(calendarNote('2028-12-22'), null);
+});
+
+test('isWorkingDay 2027: оба конца каждого переноса (постановление № 1187)', () => {
+  // 02.01 → 05.11: донор — праздник по ст. 112 ТК, остаётся нерабочим.
+  assert.equal(isWorkingDay('2027-01-02'), false);
+  assert.equal(isWorkingDay('2027-11-05'), false);
+  // 03.01 → 31.12: донор — праздник по ст. 112 ТК, остаётся нерабочим.
+  assert.equal(isWorkingDay('2027-01-03'), false);
+  assert.equal(isWorkingDay('2027-12-31'), false);
+  // 20.02 → 22.02: донор — обычная суббота, становится рабочей.
+  assert.equal(isWorkingDay('2027-02-20'), true);
+  assert.equal(isWorkingDay('2027-02-22'), false);
 });
