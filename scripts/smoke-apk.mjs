@@ -925,8 +925,8 @@ await neededFieldScenario({
 //
 // card.calendar_warning приходит из calendarNote() (core/) с уровнем 'draft' или
 // 'preliminary'; сводка бейджа зависит от уровня, тело — текст из ядра как есть.
-// Даты дедлайнов сверены с core/calendar.test.js: 05.05.2027 — draft,
-// 05.05.2028 — preliminary, 15.07.2027 — draft-год, но вне зоны риска.
+// Даты дедлайнов сверены с core/calendar.test.js: 05.05.2027 — окончательный
+// год, бейджа нет; 05.05.2028 — preliminary; 15.07.2027 — без бейджа.
 
 const { calendarNote } = await import('../core/calendar/calendar.js');
 
@@ -1057,10 +1057,10 @@ function isoToRuDate(iso) {
 }
 
 await calendarBadgeScenario({
-  tag: 'календарный бейдж АПК, draft',
+  tag: 'календарный бейдж АПК, окончательный год 2027',
   input: '05.04.2027',
   deadline: '2027-05-05',
-  summary: 'Проект переноса выходных',
+  summary: null,
 });
 await calendarBadgeScenario({
   tag: 'календарный бейдж АПК, preliminary',
@@ -1213,20 +1213,20 @@ async function openChainPage(tag) {
   });
   p.on('pageerror', (e) => problems.push(`${tag}: pageerror: ${e.message}`));
   await p.goto(`http://localhost:${port}/apk.html`, { waitUntil: 'networkidle' });
-  await p.fill('#in-decision_full_text_date', '15.10.2026');
+  await p.fill('#in-decision_full_text_date', '15.10.2027');
   await p.waitForTimeout(200);
   return p;
 }
 
-// Все пять шагов посчитаны: дедлайны кассаций уходят в 2027 год (draft) —
+// Все пять шагов посчитаны: дедлайны кассаций уходят в 2028 год (preliminary) —
 // на карточках есть календарные бейджи для сценария с раскрытием.
 async function fillFullChain(p) {
   const steps = [
     ['select', 'appeal_filed', 'yes'],
     ['select', 'appeal_outcome', 'affirmed'],
-    ['fill', 'appellate_ruling_date', '20.12.2026'],
+    ['fill', 'appellate_ruling_date', '20.12.2027'],
     ['select', 'cassation_filed', 'yes'],
-    ['fill', 'district_cassation_ruling_date', '15.03.2027'],
+    ['fill', 'district_cassation_ruling_date', '15.03.2028'],
     ['select', 'subject_category', 'participating_duly_notified'],
   ];
   for (const [action, id, value] of steps) {

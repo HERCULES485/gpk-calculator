@@ -2628,8 +2628,8 @@ await neededFieldScenario({
 //
 // card.calendar_warning приходит из calendarNote() (core/) с уровнем 'draft' или
 // 'preliminary'; сводка бейджа зависит от уровня, тело — текст из ядра как есть.
-// Даты дедлайнов сверены с core/calendar.test.js: 05.05.2027 — draft,
-// 05.05.2028 — preliminary, 15.07.2027 — draft-год, но вне зоны риска.
+// Даты дедлайнов сверены с core/calendar.test.js: 05.05.2027 — окончательный
+// год, бейджа нет; 05.05.2028 — preliminary; 15.07.2027 — без бейджа.
 
 const { calendarNote } = await import('../core/calendar/calendar.js');
 
@@ -2766,10 +2766,10 @@ function isoToRuDate(iso) {
 }
 
 await calendarBadgeScenario({
-  tag: 'календарный бейдж банкротства, draft',
+  tag: 'календарный бейдж банкротства, окончательный год 2027',
   input: '05.04.2027',
   deadline: '2027-05-05',
-  summary: 'Проект переноса выходных',
+  summary: null,
 });
 await calendarBadgeScenario({
   tag: 'календарный бейдж банкротства, preliminary',
