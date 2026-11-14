@@ -9,6 +9,8 @@ import {
   APPEAL_GENERAL_KAS,
   computePrivateComplaintGeneralKas,
   PRIVATE_COMPLAINT_GENERAL_KAS,
+  computePrivateComplaintAdminSupervisionKas,
+  PRIVATE_COMPLAINT_ADMIN_SUPERVISION_KAS,
 } from '../kas/chain.js';
 
 test('appeal_general_kas считается от decision_final_form_date_kas (обычная дата, без переноса)', () => {
@@ -122,4 +124,83 @@ test('private_complaint_general_kas: норма и объём задачи КА�
   assert.equal(PRIVATE_COMPLAINT_GENERAL_KAS.weekend_shift, undefined);
   assert.equal(PRIVATE_COMPLAINT_GENERAL_KAS.restoration_norm, undefined);
   assert.equal(PRIVATE_COMPLAINT_GENERAL_KAS.ics, undefined);
+});
+
+// --- Задача КАС-3: ч. 4 ст. 314 — срок подачи частной жалобы, представления
+// прокурора на определение суда по административному делу об административном
+// надзоре (10 рабочих дней) -----------------------------------------------------
+
+test('private_complaint_admin_supervision_kas считается от ruling_final_form_date_kas (обычная дата)', () => {
+  const term = computePrivateComplaintAdminSupervisionKas({
+    ruling_final_form_date_kas: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  // 11.03.2025 — вторник; отсчёт начинается со среды 12.03.2025, нерабочих
+  // праздничных дней внутри периода нет: 12–14.03 (3), 17–21.03 (8), 24.03 (9),
+  // 25.03 (10) — вторник 25.03.2025.
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-03-25');
+  assert.equal(term.deadline, '2025-03-25');
+  assert.equal(term.shifted, false);
+});
+
+test('private_complaint_admin_supervision_kas: майские нерабочие дни в счёт не входят', () => {
+  const term = computePrivateComplaintAdminSupervisionKas({
+    ruling_final_form_date_kas: '2025-04-29',
+  });
+  // Отсчёт со среды 30.04.2025 (1); 01–04.05 нерабочие; 05–07.05 (4); 08–11.05
+  // нерабочие; 12–16.05 (9); 19.05 (10) — понедельник 19.05.2025.
+  assert.equal(term.first_working_day, '2025-04-30');
+  assert.equal(term.deadline, '2025-05-19');
+  assert.equal(term.shifted, false);
+});
+
+test('private_complaint_admin_supervision_kas: июньские праздничные дни внутри периода', () => {
+  const term = computePrivateComplaintAdminSupervisionKas({
+    ruling_final_form_date_kas: '2025-06-10',
+  });
+  // Отсчёт со среды 11.06.2025 (1); 12–15.06.2025 нерабочие; 16–20.06 (6);
+  // 23–26.06 (10) — четверг 26.06.2025.
+  assert.equal(term.first_working_day, '2025-06-11');
+  assert.equal(term.deadline, '2025-06-26');
+});
+
+test('private_complaint_admin_supervision_kas: определение накануне новогодних каникул — отсчёт с 12.01', () => {
+  const term = computePrivateComplaintAdminSupervisionKas({
+    ruling_final_form_date_kas: '2025-12-30',
+  });
+  // 30.12.2025 — вторник; день, следующий за ним (31.12.2025), нерабочий, как и
+  // период до 11.01.2026 включительно, поэтому первый рабочий день — понедельник
+  // 12.01.2026. 12–16.01 (5), 19–23.01 (10) — пятница 23.01.2026.
+  assert.equal(term.first_working_day, '2026-01-12');
+  assert.equal(term.deadline, '2026-01-23');
+  assert.equal(term.shifted, false);
+});
+
+test('private_complaint_admin_supervision_kas: без ruling_final_form_date_kas — ошибка', () => {
+  assert.throws(
+    () => computePrivateComplaintAdminSupervisionKas({}),
+    /ruling_final_form_date_kas/,
+  );
+});
+
+test('private_complaint_admin_supervision_kas: норма и объём задачи КАС-3 — 10 рабочих дней, без weekend_shift, restoration_norm и ics', () => {
+  const inputs = { ruling_final_form_date_kas: '2025-03-11' };
+  const term = computePrivateComplaintAdminSupervisionKas(inputs);
+  assert.equal(term.id, 'private_complaint_admin_supervision_kas');
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 4 ст. 314 КАС РФ');
+  assert.deepEqual(term.norm.calculation, ['ч. 2, 3 ст. 92 КАС РФ']);
+  assert.equal(
+    term.norm.clarification,
+    'п. 6, 16 Постановления Пленума ВС РФ от 11.06.2020 № 5; ' +
+      'п. 63 Постановления Пленума ВС РФ от 27.09.2016 № 36',
+  );
+  assert.equal(PRIVATE_COMPLAINT_ADMIN_SUPERVISION_KAS.weekend_shift, undefined);
+  assert.equal(PRIVATE_COMPLAINT_ADMIN_SUPERVISION_KAS.restoration_norm, undefined);
+  assert.equal(PRIVATE_COMPLAINT_ADMIN_SUPERVISION_KAS.ics, undefined);
+  // Тот же день составления определения: срок по ч. 4 ст. 314 истекает раньше
+  // общего срока по ч. 1 ст. 314 (10 рабочих дней против 15).
+  assert.equal(computePrivateComplaintGeneralKas(inputs).deadline, '2025-04-01');
+  assert.equal(term.deadline, '2025-03-25');
 });
