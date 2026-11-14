@@ -4,7 +4,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { computeAppealGeneralKas, APPEAL_GENERAL_KAS } from '../kas/chain.js';
+import {
+  computeAppealGeneralKas,
+  APPEAL_GENERAL_KAS,
+  computePrivateComplaintGeneralKas,
+  PRIVATE_COMPLAINT_GENERAL_KAS,
+} from '../kas/chain.js';
 
 test('appeal_general_kas считается от decision_final_form_date_kas (обычная дата, без переноса)', () => {
   const term = computeAppealGeneralKas({ decision_final_form_date_kas: '2025-03-11' });
@@ -54,4 +59,67 @@ test('appeal_general_kas: норма и объём задачи КАС-1 — б�
   assert.equal(term.norm.clarification, 'п. 6 Постановления Пленума ВС РФ от 11.06.2020 № 5');
   assert.equal(APPEAL_GENERAL_KAS.restoration_norm, undefined);
   assert.equal(APPEAL_GENERAL_KAS.ics, undefined);
+});
+
+// --- Задача КАС-2: ст. 314 ч. 1 — общий срок подачи частной жалобы,
+// представления прокурора на определение суда первой инстанции (15 рабочих
+// дней) ------------------------------------------------------------------------
+
+test('private_complaint_general_kas считается от ruling_final_form_date_kas (обычная дата)', () => {
+  const term = computePrivateComplaintGeneralKas({ ruling_final_form_date_kas: '2025-03-11' });
+  assert.equal(term.anchor, '2025-03-11');
+  // 11.03.2025 — вторник; отсчёт начинается со среды 12.03.2025, нерабочих
+  // праздничных дней внутри периода нет, 15-й рабочий день — вторник 01.04.2025.
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-04-01');
+  assert.equal(term.deadline, '2025-04-01');
+  assert.equal(term.shifted, false);
+});
+
+test('private_complaint_general_kas: пятница — отсчёт с понедельника; майские нерабочие дни в счёт не входят', () => {
+  const term = computePrivateComplaintGeneralKas({ ruling_final_form_date_kas: '2025-04-18' });
+  // 18.04.2025 — пятница; 19–20.04 выходные, отсчёт начинается с понедельника
+  // 21.04.2025. Нерабочие 01–04.05 и 08–11.05.2025 в счёт не входят:
+  // 21–25.04 (5), 28–30.04 (8), 05–07.05 (11), 12–15.05 (15).
+  assert.equal(term.first_working_day, '2025-04-21');
+  assert.equal(term.deadline, '2025-05-15');
+  assert.equal(term.shifted, false);
+});
+
+test('private_complaint_general_kas: июньские праздничные дни внутри периода', () => {
+  const term = computePrivateComplaintGeneralKas({ ruling_final_form_date_kas: '2025-06-10' });
+  // Отсчёт со среды 11.06.2025; 12–15.06.2025 нерабочие. 11.06 (1), 16–20.06 (6),
+  // 23–27.06 (11), 30.06 (12), 01.07 (13), 02.07 (14), 03.07 (15).
+  assert.equal(term.first_working_day, '2025-06-11');
+  assert.equal(term.deadline, '2025-07-03');
+});
+
+test('private_complaint_general_kas: перенос через новогодние каникулы', () => {
+  const term = computePrivateComplaintGeneralKas({ ruling_final_form_date_kas: '2025-12-26' });
+  // 26.12.2025 — пятница; отсчёт с понедельника 29.12.2025. Рабочие 29.12 и
+  // 30.12 (2); 31.12.2025–11.01.2026 нерабочие; далее 12–16.01 (7), 19–23.01 (12),
+  // 26–28.01 (15).
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-28');
+  assert.equal(term.shifted, false);
+});
+
+test('private_complaint_general_kas: без ruling_final_form_date_kas — ошибка', () => {
+  assert.throws(() => computePrivateComplaintGeneralKas({}), /ruling_final_form_date_kas/);
+});
+
+test('private_complaint_general_kas: норма и объём задачи КАС-2 — 15 рабочих дней, без weekend_shift, restoration_norm и ics', () => {
+  const term = computePrivateComplaintGeneralKas({ ruling_final_form_date_kas: '2025-03-11' });
+  assert.equal(term.id, 'private_complaint_general_kas');
+  assert.deepEqual(term.duration, { value: 15, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 1 ст. 314 КАС РФ');
+  assert.deepEqual(term.norm.calculation, ['ч. 2, 3 ст. 92 КАС РФ']);
+  assert.equal(
+    term.norm.clarification,
+    'п. 6, 45 Постановления Пленума ВС РФ от 11.06.2020 № 5; ' +
+      'п. 63 Постановления Пленума ВС РФ от 27.09.2016 № 36',
+  );
+  assert.equal(PRIVATE_COMPLAINT_GENERAL_KAS.weekend_shift, undefined);
+  assert.equal(PRIVATE_COMPLAINT_GENERAL_KAS.restoration_norm, undefined);
+  assert.equal(PRIVATE_COMPLAINT_GENERAL_KAS.ics, undefined);
 });
