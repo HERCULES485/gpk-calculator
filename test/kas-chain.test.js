@@ -13,6 +13,8 @@ import {
   PRIVATE_COMPLAINT_ADMIN_SUPERVISION_KAS,
   computeAppealAdminSupervisionKas,
   APPEAL_ADMIN_SUPERVISION_KAS,
+  computeAppealMunicipalDissolutionKas,
+  APPEAL_MUNICIPAL_DISSOLUTION_KAS,
 } from '../kas/chain.js';
 
 test('appeal_general_kas считается от decision_final_form_date_kas (обычная дата, без переноса)', () => {
@@ -276,4 +278,76 @@ test('appeal_admin_supervision_kas: норма и объём задачи КАС
   // месячного срока по ч. 1 ст. 298 (10 рабочих дней против месяца).
   assert.equal(computeAppealGeneralKas(inputs).deadline, '2025-10-02');
   assert.equal(term.deadline, '2025-09-16');
+});
+
+// --- Задача КАС-5: ч. 2 ст. 298 — срок подачи апелляционных жалобы,
+// представления на решение суда по делу о роспуске представительного органа,
+// об отрешении или удалении в отставку главы муниципального образования
+// (10 рабочих дней) ----------------------------------------------------------------
+
+test('appeal_municipal_dissolution_kas считается от decision_final_form_date_kas (обычная дата)', () => {
+  const term = computeAppealMunicipalDissolutionKas({ decision_final_form_date_kas: '2025-03-18' });
+  assert.equal(term.anchor, '2025-03-18');
+  // 18.03.2025 — вторник; отсчёт начинается со среды 19.03.2025, нерабочих
+  // праздничных дней внутри периода нет: 19–21.03 (3), 24–28.03 (8), 31.03 (9),
+  // 01.04 (10) — вторник 01.04.2025.
+  assert.equal(term.first_working_day, '2025-03-19');
+  assert.equal(term.raw_deadline, '2025-04-01');
+  assert.equal(term.deadline, '2025-04-01');
+  assert.equal(term.shifted, false);
+});
+
+test('appeal_municipal_dissolution_kas: пятница — отсчёт с понедельника; майские нерабочие дни в счёт не входят', () => {
+  const term = computeAppealMunicipalDissolutionKas({ decision_final_form_date_kas: '2025-04-25' });
+  // 25.04.2025 — пятница; 26–27.04 выходные, отсчёт с понедельника 28.04.2025:
+  // 28–30.04 (3); 01–04.05 нерабочие; 05–07.05 (6); 08–11.05 нерабочие;
+  // 12–15.05 (10) — четверг 15.05.2025.
+  assert.equal(term.first_working_day, '2025-04-28');
+  assert.equal(term.deadline, '2025-05-15');
+  assert.equal(term.shifted, false);
+});
+
+test('appeal_municipal_dissolution_kas: июньские праздничные дни внутри периода', () => {
+  const term = computeAppealMunicipalDissolutionKas({ decision_final_form_date_kas: '2025-06-06' });
+  // 06.06.2025 — пятница; отсчёт с понедельника 09.06.2025: 09–11.06 (3);
+  // 12.06 — праздник, 13.06 перенесён на выходной, 14–15.06 выходные;
+  // 16–20.06 (8), 23–24.06 (10) — вторник 24.06.2025.
+  assert.equal(term.first_working_day, '2025-06-09');
+  assert.equal(term.deadline, '2025-06-24');
+});
+
+test('appeal_municipal_dissolution_kas: праздничный день 4 ноября внутри периода', () => {
+  const term = computeAppealMunicipalDissolutionKas({ decision_final_form_date_kas: '2026-10-30' });
+  // 30.10.2026 — пятница; отсчёт с понедельника 02.11.2026: 02–03.11 (2);
+  // 04.11 — праздник; 05–06.11 (4), 09–13.11 (9), 16.11 (10) — понедельник 16.11.2026.
+  assert.equal(term.first_working_day, '2026-11-02');
+  assert.equal(term.deadline, '2026-11-16');
+  assert.equal(term.shifted, false);
+});
+
+test('appeal_municipal_dissolution_kas: без decision_final_form_date_kas — ошибка', () => {
+  assert.throws(
+    () => computeAppealMunicipalDissolutionKas({}),
+    /decision_final_form_date_kas/,
+  );
+});
+
+test('appeal_municipal_dissolution_kas: норма и объём задачи КАС-5 — 10 рабочих дней, без weekend_shift, restoration_norm и ics', () => {
+  const inputs = { decision_final_form_date_kas: '2025-03-18' };
+  const term = computeAppealMunicipalDissolutionKas(inputs);
+  assert.equal(term.id, 'appeal_municipal_dissolution_kas');
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 2 ст. 298 КАС РФ');
+  assert.deepEqual(term.norm.calculation, ['ч. 2, 3 ст. 92 КАС РФ']);
+  assert.equal(
+    term.norm.clarification,
+    'п. 6, 16 Постановления Пленума ВС РФ от 11.06.2020 № 5',
+  );
+  assert.equal(APPEAL_MUNICIPAL_DISSOLUTION_KAS.weekend_shift, undefined);
+  assert.equal(APPEAL_MUNICIPAL_DISSOLUTION_KAS.restoration_norm, undefined);
+  assert.equal(APPEAL_MUNICIPAL_DISSOLUTION_KAS.ics, undefined);
+  // Тот же день составления решения: срок по ч. 2 ст. 298 истекает раньше общего
+  // месячного срока по ч. 1 ст. 298 (10 рабочих дней против месяца).
+  assert.equal(computeAppealGeneralKas(inputs).deadline, '2025-04-18');
+  assert.equal(term.deadline, '2025-04-01');
 });
