@@ -17,6 +17,8 @@ import {
   APPEAL_MUNICIPAL_DISSOLUTION_KAS,
   computeClaimFilingGeneralKas,
   CLAIM_FILING_GENERAL_KAS,
+  computeClaimFilingBailiffKas,
+  CLAIM_FILING_BAILIFF_KAS,
 } from '../kas/chain.js';
 
 test('appeal_general_kas считается от decision_final_form_date_kas (обычная дата, без переноса)', () => {
@@ -418,4 +420,70 @@ test('claim_filing_general_kas: норма и объём задачи КАС-6 �
   assert.equal(CLAIM_FILING_GENERAL_KAS.weekend_shift, true);
   assert.equal(CLAIM_FILING_GENERAL_KAS.restoration_norm, undefined);
   assert.equal(CLAIM_FILING_GENERAL_KAS.ics, undefined);
+});
+
+// --- Задача КАС-7: ч. 3 ст. 219 — срок обращения с административным исковым
+// заявлением о признании незаконными решений ФССП, решений, действий
+// (бездействия) судебного пристава-исполнителя (10 рабочих дней со дня, когда
+// лицу стало известно о нарушении его прав) ------------------------------------
+
+test('claim_filing_bailiff_kas считается от violation_awareness_date_kas (обычная дата)', () => {
+  const term = computeClaimFilingBailiffKas({ violation_awareness_date_kas: '2025-09-02' });
+  assert.equal(term.anchor, '2025-09-02');
+  // 02.09.2025 — вторник; отсчёт начинается со среды 03.09.2025, нерабочих
+  // праздничных дней внутри периода нет: 03–05.09 (3), 08–12.09 (8), 15.09 (9),
+  // 16.09 (10) — вторник 16.09.2025.
+  assert.equal(term.first_working_day, '2025-09-03');
+  assert.equal(term.raw_deadline, '2025-09-16');
+  assert.equal(term.deadline, '2025-09-16');
+  assert.equal(term.shifted, false);
+});
+
+test('claim_filing_bailiff_kas: стало известно в субботу — отсчёт с понедельника', () => {
+  const term = computeClaimFilingBailiffKas({ violation_awareness_date_kas: '2025-09-06' });
+  // 06.09.2025 — суббота; 07.09 — воскресенье, отсчёт начинается с понедельника
+  // 08.09.2025: 08–12.09 (5), 15–19.09 (10) — пятница 19.09.2025.
+  assert.equal(term.first_working_day, '2025-09-08');
+  assert.equal(term.deadline, '2025-09-19');
+  assert.equal(term.shifted, false);
+});
+
+test('claim_filing_bailiff_kas: майские нерабочие дни в счёт не входят', () => {
+  const term = computeClaimFilingBailiffKas({ violation_awareness_date_kas: '2025-04-29' });
+  // 29.04.2025 — вторник; отсчёт со среды 30.04.2025 (1); 01–04.05 нерабочие;
+  // 05–07.05 (4); 08–11.05 нерабочие; 12–16.05 (9); 19.05 (10) — понедельник
+  // 19.05.2025.
+  assert.equal(term.first_working_day, '2025-04-30');
+  assert.equal(term.deadline, '2025-05-19');
+});
+
+test('claim_filing_bailiff_kas: новогодние дни и перенесённый выходной 31.12.2025 внутри периода', () => {
+  const term = computeClaimFilingBailiffKas({ violation_awareness_date_kas: '2025-12-24' });
+  // 24.12.2025 — среда; отсчёт с 25.12.2025: 25–26.12 (2), 29–30.12 (4);
+  // 31.12.2025 — выходной (перенос), 01–11.01.2026 нерабочие; 12–16.01 (9),
+  // 19.01 (10) — понедельник 19.01.2026.
+  assert.equal(term.first_working_day, '2025-12-25');
+  assert.equal(term.deadline, '2026-01-19');
+  assert.equal(term.shifted, false);
+});
+
+test('claim_filing_bailiff_kas: без violation_awareness_date_kas — ошибка', () => {
+  assert.throws(() => computeClaimFilingBailiffKas({}), /violation_awareness_date_kas/);
+});
+
+test('claim_filing_bailiff_kas: норма и объём задачи КАС-7 — 10 рабочих дней, без weekend_shift, restoration_norm и ics', () => {
+  const inputs = { violation_awareness_date_kas: '2025-09-02' };
+  const term = computeClaimFilingBailiffKas(inputs);
+  assert.equal(term.id, 'claim_filing_bailiff_kas');
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 3 ст. 219 КАС РФ');
+  assert.deepEqual(term.norm.calculation, ['ч. 2, 3 ст. 92 КАС РФ']);
+  assert.equal(term.norm.clarification, 'п. 16 Постановления Пленума ВС РФ от 28.06.2022 № 21');
+  assert.equal(CLAIM_FILING_BAILIFF_KAS.weekend_shift, undefined);
+  assert.equal(CLAIM_FILING_BAILIFF_KAS.restoration_norm, undefined);
+  assert.equal(CLAIM_FILING_BAILIFF_KAS.ics, undefined);
+  // Тот же день, когда стало известно: срок по ч. 3 ст. 219 истекает раньше
+  // общего трёхмесячного срока по ч. 1 ст. 219 (10 рабочих дней против 3 месяцев).
+  assert.equal(computeClaimFilingGeneralKas(inputs).deadline, '2025-12-02');
+  assert.equal(term.deadline, '2025-09-16');
 });
