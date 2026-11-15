@@ -11,6 +11,8 @@ import {
   PRIVATE_COMPLAINT_GENERAL_KAS,
   computePrivateComplaintAdminSupervisionKas,
   PRIVATE_COMPLAINT_ADMIN_SUPERVISION_KAS,
+  computeAppealAdminSupervisionKas,
+  APPEAL_ADMIN_SUPERVISION_KAS,
 } from '../kas/chain.js';
 
 test('appeal_general_kas считается от decision_final_form_date_kas (обычная дата, без переноса)', () => {
@@ -203,4 +205,75 @@ test('private_complaint_admin_supervision_kas: норма и объём зада
   // общего срока по ч. 1 ст. 314 (10 рабочих дней против 15).
   assert.equal(computePrivateComplaintGeneralKas(inputs).deadline, '2025-04-01');
   assert.equal(term.deadline, '2025-03-25');
+});
+
+// --- Задача КАС-4: ч. 5 ст. 298 — срок подачи апелляционных жалобы,
+// представления на решение суда по административному делу об административном
+// надзоре (10 рабочих дней) ------------------------------------------------------
+
+test('appeal_admin_supervision_kas считается от decision_final_form_date_kas (обычная дата)', () => {
+  const term = computeAppealAdminSupervisionKas({ decision_final_form_date_kas: '2025-09-02' });
+  assert.equal(term.anchor, '2025-09-02');
+  // 02.09.2025 — вторник; отсчёт начинается со среды 03.09.2025, нерабочих
+  // праздничных дней внутри периода нет: 03–05.09 (3), 08–12.09 (8), 15.09 (9),
+  // 16.09 (10) — вторник 16.09.2025.
+  assert.equal(term.first_working_day, '2025-09-03');
+  assert.equal(term.raw_deadline, '2025-09-16');
+  assert.equal(term.deadline, '2025-09-16');
+  assert.equal(term.shifted, false);
+});
+
+test('appeal_admin_supervision_kas: рабочая суббота по переносу — первый день отсчёта', () => {
+  const term = computeAppealAdminSupervisionKas({ decision_final_form_date_kas: '2025-10-31' });
+  // 31.10.2025 — пятница; суббота 01.11.2025 рабочая по переносу с 03.11.2025,
+  // поэтому отсчёт начинается с неё (1). 03.11 перенесён на выходной, 04.11 —
+  // праздник; далее 05–07.11 (4), 10–14.11 (9), 17.11 (10) — понедельник 17.11.2025.
+  assert.equal(term.first_working_day, '2025-11-01');
+  assert.equal(term.deadline, '2025-11-17');
+  assert.equal(term.shifted, false);
+});
+
+test('appeal_admin_supervision_kas: июньский праздничный день внутри периода', () => {
+  const term = computeAppealAdminSupervisionKas({ decision_final_form_date_kas: '2026-06-09' });
+  // 09.06.2026 — вторник; отсчёт со среды 10.06.2026: 10–11.06 (2); 12.06 —
+  // праздник, 13–14.06 выходные; 15–19.06 (7), 22–24.06 (10) — среда 24.06.2026.
+  assert.equal(term.first_working_day, '2026-06-10');
+  assert.equal(term.deadline, '2026-06-24');
+});
+
+test('appeal_admin_supervision_kas: решение перед новогодними каникулами — счёт продолжается с 12.01', () => {
+  const term = computeAppealAdminSupervisionKas({ decision_final_form_date_kas: '2025-12-24' });
+  // 24.12.2025 — среда; отсчёт с четверга 25.12.2025: 25–26.12 (2), 29–30.12 (4);
+  // 31.12.2025 перенесён на выходной, 01–11.01.2026 нерабочие; 12–16.01 (9),
+  // 19.01 (10) — понедельник 19.01.2026.
+  assert.equal(term.first_working_day, '2025-12-25');
+  assert.equal(term.deadline, '2026-01-19');
+  assert.equal(term.shifted, false);
+});
+
+test('appeal_admin_supervision_kas: без decision_final_form_date_kas — ошибка', () => {
+  assert.throws(
+    () => computeAppealAdminSupervisionKas({}),
+    /decision_final_form_date_kas/,
+  );
+});
+
+test('appeal_admin_supervision_kas: норма и объём задачи КАС-4 — 10 рабочих дней, без weekend_shift, restoration_norm и ics', () => {
+  const inputs = { decision_final_form_date_kas: '2025-09-02' };
+  const term = computeAppealAdminSupervisionKas(inputs);
+  assert.equal(term.id, 'appeal_admin_supervision_kas');
+  assert.deepEqual(term.duration, { value: 10, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 5 ст. 298 КАС РФ');
+  assert.deepEqual(term.norm.calculation, ['ч. 2, 3 ст. 92 КАС РФ']);
+  assert.equal(
+    term.norm.clarification,
+    'п. 6, 16 Постановления Пленума ВС РФ от 11.06.2020 № 5',
+  );
+  assert.equal(APPEAL_ADMIN_SUPERVISION_KAS.weekend_shift, undefined);
+  assert.equal(APPEAL_ADMIN_SUPERVISION_KAS.restoration_norm, undefined);
+  assert.equal(APPEAL_ADMIN_SUPERVISION_KAS.ics, undefined);
+  // Тот же день принятия решения: срок по ч. 5 ст. 298 истекает раньше общего
+  // месячного срока по ч. 1 ст. 298 (10 рабочих дней против месяца).
+  assert.equal(computeAppealGeneralKas(inputs).deadline, '2025-10-02');
+  assert.equal(term.deadline, '2025-09-16');
 });
