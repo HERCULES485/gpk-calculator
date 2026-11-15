@@ -19,6 +19,8 @@ import {
   CLAIM_FILING_GENERAL_KAS,
   computeClaimFilingBailiffKas,
   CLAIM_FILING_BAILIFF_KAS,
+  computeCassationGeneralKas,
+  CASSATION_GENERAL_KAS,
 } from '../kas/chain.js';
 
 test('appeal_general_kas считается от decision_final_form_date_kas (обычная дата, без переноса)', () => {
@@ -486,4 +488,61 @@ test('claim_filing_bailiff_kas: норма и объём задачи КАС-7 �
   // общего трёхмесячного срока по ч. 1 ст. 219 (10 рабочих дней против 3 месяцев).
   assert.equal(computeClaimFilingGeneralKas(inputs).deadline, '2025-12-02');
   assert.equal(term.deadline, '2025-09-16');
+});
+
+// --- Задача КАС-8: ч. 2 ст. 318 — срок подачи кассационных жалобы, представления
+// (шесть месяцев со дня принятия определения суда апелляционной инстанции) ----------
+
+test('cassation_general_kas считается от appellate_ruling_date_kas (обычная дата, без переноса)', () => {
+  const term = computeCassationGeneralKas({ appellate_ruling_date_kas: '2025-03-11' });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-09-11');
+  assert.equal(term.deadline, '2025-09-11'); // 11.09.2025 — четверг, рабочий день
+  assert.equal(term.shifted, false);
+});
+
+test('cassation_general_kas: в последнем месяце нет соответствующего числа — последний день месяца (високосный февраль)', () => {
+  const term = computeCassationGeneralKas({ appellate_ruling_date_kas: '2023-08-31' });
+  // 31.08.2023 + 6 месяцев: в феврале 2024 года нет 31-го числа, срок истекает в
+  // последний день месяца — 29.02.2024 (четверг, рабочий день), переноса нет.
+  assert.equal(term.raw_deadline, '2024-02-29');
+  assert.equal(term.deadline, '2024-02-29');
+  assert.equal(term.shifted, false);
+});
+
+test('cassation_general_kas: последний день — праздник 12 июня, перенос на понедельник', () => {
+  const term = computeCassationGeneralKas({ appellate_ruling_date_kas: '2025-12-12' });
+  // 12.12.2025 + 6 месяцев = 12.06.2026 (пятница, День России — нерабочий);
+  // 13–14.06 — суббота и воскресенье -> перенос на 15.06.2026 (понедельник).
+  assert.equal(term.raw_deadline, '2026-06-12');
+  assert.equal(term.deadline, '2026-06-15');
+  assert.equal(term.shifted, true);
+});
+
+test('cassation_general_kas: последний день — воскресенье, перенос на понедельник', () => {
+  const term = computeCassationGeneralKas({ appellate_ruling_date_kas: '2025-07-18' });
+  // 18.07.2025 + 6 месяцев = 18.01.2026 — воскресенье -> перенос на 19.01.2026
+  // (понедельник, рабочий день).
+  assert.equal(term.raw_deadline, '2026-01-18');
+  assert.equal(term.deadline, '2026-01-19');
+  assert.equal(term.shifted, true);
+});
+
+test('cassation_general_kas: без appellate_ruling_date_kas — ошибка', () => {
+  assert.throws(() => computeCassationGeneralKas({}), /appellate_ruling_date_kas/);
+});
+
+test('cassation_general_kas: норма и объём задачи КАС-8 — шесть месяцев, weekend_shift, без restoration_norm и ics', () => {
+  const term = computeCassationGeneralKas({ appellate_ruling_date_kas: '2025-03-11' });
+  assert.equal(term.id, 'cassation_general_kas');
+  assert.deepEqual(term.duration, { value: 6, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 2 ст. 318 КАС РФ');
+  assert.deepEqual(term.norm.calculation, ['ч. 3 ст. 92', 'ч. 1, 2 ст. 93 КАС РФ']);
+  assert.equal(
+    term.norm.clarification,
+    'п. 8, 9 Постановления Пленума ВС РФ от 09.07.2020 № 17; ч. 5 ст. 311, ст. 317 КАС РФ',
+  );
+  assert.equal(CASSATION_GENERAL_KAS.weekend_shift, true);
+  assert.equal(CASSATION_GENERAL_KAS.restoration_norm, undefined);
+  assert.equal(CASSATION_GENERAL_KAS.ics, undefined);
 });
