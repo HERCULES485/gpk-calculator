@@ -15,6 +15,8 @@ import {
   APPEAL_ADMIN_SUPERVISION_KAS,
   computeAppealMunicipalDissolutionKas,
   APPEAL_MUNICIPAL_DISSOLUTION_KAS,
+  computeClaimFilingGeneralKas,
+  CLAIM_FILING_GENERAL_KAS,
 } from '../kas/chain.js';
 
 test('appeal_general_kas считается от decision_final_form_date_kas (обычная дата, без переноса)', () => {
@@ -350,4 +352,70 @@ test('appeal_municipal_dissolution_kas: норма и объём задачи К
   // месячного срока по ч. 1 ст. 298 (10 рабочих дней против месяца).
   assert.equal(computeAppealGeneralKas(inputs).deadline, '2025-04-18');
   assert.equal(term.deadline, '2025-04-01');
+});
+
+// --- Задача КАС-6: ч. 1 ст. 219 — общий срок обращения с административным
+// исковым заявлением в суд (три месяца со дня, когда лицу стало известно о
+// нарушении его прав) ----------------------------------------------------------
+
+test('claim_filing_general_kas считается от violation_awareness_date_kas (обычная дата, без переноса)', () => {
+  const term = computeClaimFilingGeneralKas({ violation_awareness_date_kas: '2025-03-11' });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-06-11');
+  assert.equal(term.deadline, '2025-06-11'); // 11.06.2025 — среда, рабочий день
+  assert.equal(term.shifted, false);
+});
+
+test('claim_filing_general_kas: нет соответствующего числа (ч. 1 ст. 93 КАС РФ) — 30 ноября -> последний день февраля', () => {
+  const term = computeClaimFilingGeneralKas({ violation_awareness_date_kas: '2024-11-30' });
+  // 30.11.2024 + 3 месяца: в феврале 2025 (невисокосный) нет 30-го числа — срок
+  // истекает в последний день месяца, 28.02.2025 (пятница, рабочий день).
+  assert.equal(term.raw_deadline, '2025-02-28');
+  assert.equal(term.deadline, '2025-02-28');
+  assert.equal(term.shifted, false);
+});
+
+test('claim_filing_general_kas: нет соответствующего числа и последний день нерабочий — перенос (ч. 1, 2 ст. 93 КАС РФ)', () => {
+  const term = computeClaimFilingGeneralKas({ violation_awareness_date_kas: '2025-11-30' });
+  // 30.11.2025 + 3 месяца: в феврале 2026 нет 30-го числа -> 28.02.2026 (суббота)
+  // -> перенос на 02.03.2026 (понедельник).
+  assert.equal(term.raw_deadline, '2026-02-28');
+  assert.equal(term.deadline, '2026-03-02');
+  assert.equal(term.shifted, true);
+});
+
+test('claim_filing_general_kas: перенос с выходного (ч. 2 ст. 93 КАС РФ); якорь — нерабочий день', () => {
+  const term = computeClaimFilingGeneralKas({ violation_awareness_date_kas: '2025-05-31' });
+  // 31.05.2025 (суббота) + 3 месяца = 31.08.2025 (воскресенье) -> перенос на
+  // 01.09.2025 (понедельник). Якорь может быть нерабочим днём: срок идёт со
+  // следующего дня.
+  assert.equal(term.raw_deadline, '2025-08-31');
+  assert.equal(term.deadline, '2025-09-01');
+  assert.equal(term.shifted, true);
+});
+
+test('claim_filing_general_kas: перенос через праздничный день и перенесённый выходной (ч. 2 ст. 93 КАС РФ)', () => {
+  const term = computeClaimFilingGeneralKas({ violation_awareness_date_kas: '2025-03-12' });
+  // 12.03.2025 + 3 месяца = 12.06.2025 (День России, нерабочий); 13.06.2025 —
+  // выходной по производственному календарю, 14–15.06 — суббота и воскресенье
+  // -> перенос на 16.06.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-06-12');
+  assert.equal(term.deadline, '2025-06-16');
+  assert.equal(term.shifted, true);
+});
+
+test('claim_filing_general_kas: без violation_awareness_date_kas — ошибка', () => {
+  assert.throws(() => computeClaimFilingGeneralKas({}), /violation_awareness_date_kas/);
+});
+
+test('claim_filing_general_kas: норма и объём задачи КАС-6 — три месяца, weekend_shift, без restoration_norm и ics', () => {
+  const term = computeClaimFilingGeneralKas({ violation_awareness_date_kas: '2025-03-11' });
+  assert.equal(term.id, 'claim_filing_general_kas');
+  assert.deepEqual(term.duration, { value: 3, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 1 ст. 219 КАС РФ');
+  assert.deepEqual(term.norm.calculation, ['ч. 3 ст. 92', 'ч. 1, 2 ст. 93 КАС РФ']);
+  assert.equal(term.norm.clarification, 'п. 16 Постановления Пленума ВС РФ от 28.06.2022 № 21');
+  assert.equal(CLAIM_FILING_GENERAL_KAS.weekend_shift, true);
+  assert.equal(CLAIM_FILING_GENERAL_KAS.restoration_norm, undefined);
+  assert.equal(CLAIM_FILING_GENERAL_KAS.ics, undefined);
 });
