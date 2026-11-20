@@ -21,6 +21,7 @@ import {
   CLAIM_FILING_BAILIFF_KAS,
   computeCassationGeneralKas,
   CASSATION_GENERAL_KAS,
+  computeCassationRestorationCapKas,
 } from '../kas/chain.js';
 
 test('appeal_general_kas считается от decision_final_form_date_kas (обычная дата, без переноса)', () => {
@@ -798,4 +799,163 @@ test('cassation_general_kas: cassation_consideration_periods_kas не масси
       }),
     /должен быть массивом периодов/,
   );
+});
+
+// --- Восстановление срока кассации: двенадцатимесячный потолок (ч. 3 ст. 318 КАС РФ) ---
+
+test('cassation_restoration_cap_kas: обстоятельство внутри двенадцати месяцев — within_cap true', () => {
+  const result = computeCassationRestorationCapKas({
+    appellate_ruling_date_kas: '2025-03-11',
+    cassation_restoration_circumstance_date_kas: '2025-12-01',
+  });
+  assert.equal(result.entry_into_force, '2025-03-11');
+  assert.equal(result.circumstance_date, '2025-12-01');
+  assert.equal(result.within_cap, true);
+  assert.equal(result.cap_deadline, '2026-03-11');
+  assert.equal(result.norm, 'ч. 3 ст. 318 КАС РФ');
+});
+
+test('cassation_restoration_cap_kas: обстоятельство в последний день периода — укладывается (включительно)', () => {
+  const result = computeCassationRestorationCapKas({
+    appellate_ruling_date_kas: '2025-03-11',
+    cassation_restoration_circumstance_date_kas: '2026-03-11',
+  });
+  assert.equal(result.within_cap, true); // 11.03.2026 — среда
+  assert.equal(result.cap_deadline, '2026-03-11');
+});
+
+test('cassation_restoration_cap_kas: обстоятельство на следующий день после периода — не укладывается', () => {
+  const result = computeCassationRestorationCapKas({
+    appellate_ruling_date_kas: '2025-03-11',
+    cassation_restoration_circumstance_date_kas: '2026-03-12',
+  });
+  assert.equal(result.within_cap, false);
+  assert.equal(result.cap_deadline, '2026-03-11');
+});
+
+test('cassation_restoration_cap_kas: последний день периода — суббота, на рабочий день не переносится', () => {
+  const base = { appellate_ruling_date_kas: '2025-03-14' };
+  const onSaturday = computeCassationRestorationCapKas({
+    ...base,
+    cassation_restoration_circumstance_date_kas: '2026-03-14',
+  });
+  assert.equal(onSaturday.cap_deadline, '2026-03-14'); // суббота, перенос на понедельник не применяется
+  assert.equal(onSaturday.within_cap, true);
+  const onSunday = computeCassationRestorationCapKas({
+    ...base,
+    cassation_restoration_circumstance_date_kas: '2026-03-15',
+  });
+  assert.equal(onSunday.within_cap, false);
+  const onMonday = computeCassationRestorationCapKas({
+    ...base,
+    cassation_restoration_circumstance_date_kas: '2026-03-16',
+  });
+  assert.equal(onMonday.within_cap, false);
+});
+
+test('cassation_restoration_cap_kas: нет соответствующего числа — последний день месяца (ч. 1 ст. 93 КАС РФ)', () => {
+  const base = { appellate_ruling_date_kas: '2024-02-29' };
+  const onLastDay = computeCassationRestorationCapKas({
+    ...base,
+    cassation_restoration_circumstance_date_kas: '2025-02-28',
+  });
+  assert.equal(onLastDay.cap_deadline, '2025-02-28');
+  assert.equal(onLastDay.within_cap, true);
+  const nextDay = computeCassationRestorationCapKas({
+    ...base,
+    cassation_restoration_circumstance_date_kas: '2025-03-01',
+  });
+  assert.equal(nextDay.within_cap, false);
+});
+
+test('cassation_restoration_cap_kas: дата составления мотивированного определения на потолок не влияет', () => {
+  const result = computeCassationRestorationCapKas({
+    appellate_ruling_date_kas: '2025-03-11',
+    appellate_ruling_final_form_date_kas: '2025-03-18',
+    cassation_restoration_circumstance_date_kas: '2026-03-11',
+  });
+  assert.equal(result.entry_into_force, '2025-03-11');
+  assert.equal(result.cap_deadline, '2026-03-11');
+  assert.equal(result.within_cap, true);
+});
+
+test('cassation_restoration_cap_kas: обстоятельство раньше вступления в силу верхнюю границу не нарушает', () => {
+  // Нижняя граница нормой не задана (решение архитектора): такая дата не отвергается.
+  const result = computeCassationRestorationCapKas({
+    appellate_ruling_date_kas: '2025-03-11',
+    cassation_restoration_circumstance_date_kas: '2025-01-01',
+  });
+  assert.equal(result.within_cap, true);
+  assert.equal(result.cap_deadline, '2026-03-11');
+});
+
+test('cassation_restoration_cap_kas: нет даты принятия апелляционного определения — ошибка', () => {
+  for (const value of [undefined, null, '']) {
+    assert.throws(
+      () =>
+        computeCassationRestorationCapKas({
+          appellate_ruling_date_kas: value,
+          cassation_restoration_circumstance_date_kas: '2025-12-01',
+        }),
+      /Обязательна дата принятия определения суда апелляционной инстанции \(appellate_ruling_date_kas\)/,
+    );
+  }
+  assert.throws(
+    () => computeCassationRestorationCapKas(undefined),
+    /Обязательна дата принятия определения суда апелляционной инстанции/,
+  );
+});
+
+test('cassation_restoration_cap_kas: некорректная дата принятия апелляционного определения — ошибка', () => {
+  assert.throws(
+    () =>
+      computeCassationRestorationCapKas({
+        appellate_ruling_date_kas: 'не дата',
+        cassation_restoration_circumstance_date_kas: '2025-12-01',
+      }),
+    /Некорректная дата принятия определения суда апелляционной инстанции \(appellate_ruling_date_kas\)/,
+  );
+});
+
+test('cassation_restoration_cap_kas: нет даты обстоятельства — ошибка', () => {
+  for (const value of [undefined, null, '']) {
+    assert.throws(
+      () =>
+        computeCassationRestorationCapKas({
+          appellate_ruling_date_kas: '2025-03-11',
+          cassation_restoration_circumstance_date_kas: value,
+        }),
+      /Обязательна дата обстоятельства, послужившего причиной пропуска срока \(cassation_restoration_circumstance_date_kas\)/,
+    );
+  }
+});
+
+test('cassation_restoration_cap_kas: некорректная дата обстоятельства — ошибка', () => {
+  assert.throws(
+    () =>
+      computeCassationRestorationCapKas({
+        appellate_ruling_date_kas: '2025-03-11',
+        cassation_restoration_circumstance_date_kas: 'не дата',
+      }),
+    /Некорректная дата обстоятельства, послужившего причиной пропуска срока \(cassation_restoration_circumstance_date_kas\)/,
+  );
+});
+
+test('cassation_restoration_cap_kas: состав результата и оговорка о втором основании ч. 3 ст. 318', () => {
+  const result = computeCassationRestorationCapKas({
+    appellate_ruling_date_kas: '2025-03-11',
+    cassation_restoration_circumstance_date_kas: '2025-12-01',
+  });
+  assert.deepEqual(Object.keys(result).sort(), [
+    'cap_deadline',
+    'circumstance_date',
+    'entry_into_force',
+    'logic',
+    'norm',
+    'within_cap',
+  ]);
+  assert.match(result.logic, /ч\. 3 ст\. 318 КАС РФ/);
+  assert.match(result.logic, /ч\. 5 ст\. 311 КАС РФ/);
+  assert.match(result.logic, /лица, не участвовавшего в деле/);
+  assert.match(result.logic, /не вычисляется/);
 });
