@@ -22,6 +22,9 @@ import {
   computeCassationGeneralKas,
   CASSATION_GENERAL_KAS,
   computeCassationRestorationCapKas,
+  computeSupervisionGeneralKas,
+  SUPERVISION_GENERAL_KAS,
+  computeSupervisionRestorationCapKas,
 } from '../kas/chain.js';
 
 test('appeal_general_kas считается от decision_final_form_date_kas (обычная дата, без переноса)', () => {
@@ -957,5 +960,219 @@ test('cassation_restoration_cap_kas: состав результата и ого
   assert.match(result.logic, /ч\. 3 ст\. 318 КАС РФ/);
   assert.match(result.logic, /ч\. 5 ст\. 311 КАС РФ/);
   assert.match(result.logic, /лица, не участвовавшего в деле/);
+  assert.match(result.logic, /не вычисляется/);
+});
+
+// --- Задача КАС-12: ч. 2 ст. 333 — срок подачи надзорных жалобы, представления
+// (три месяца со дня принятия (вынесения) обжалуемого определения) --------------------
+
+test('supervision_general_kas считается от supervised_ruling_date_kas (обычная дата, без переноса)', () => {
+  const term = computeSupervisionGeneralKas({ supervised_ruling_date_kas: '2025-03-11' });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-06-11');
+  assert.equal(term.deadline, '2025-06-11'); // 11.06.2025 — среда, рабочий день
+  assert.equal(term.shifted, false);
+});
+
+test('supervision_general_kas: в последнем месяце нет соответствующего числа — последний день месяца (високосный февраль)', () => {
+  const term = computeSupervisionGeneralKas({ supervised_ruling_date_kas: '2023-11-30' });
+  // 30.11.2023 + 3 месяца: в феврале 2024 года нет 30-го числа, срок истекает в
+  // последний день месяца — 29.02.2024 (четверг, рабочий день), переноса нет.
+  assert.equal(term.raw_deadline, '2024-02-29');
+  assert.equal(term.deadline, '2024-02-29');
+  assert.equal(term.shifted, false);
+});
+
+test('supervision_general_kas: нет соответствующего числа и последний день — суббота, перенос на понедельник', () => {
+  const term = computeSupervisionGeneralKas({ supervised_ruling_date_kas: '2025-11-30' });
+  // 30.11.2025 + 3 месяца: в феврале 2026 года нет 30-го числа, срок истекает 28.02.2026
+  // (суббота); 01.03 — воскресенье -> перенос на 02.03.2026 (понедельник).
+  assert.equal(term.raw_deadline, '2026-02-28');
+  assert.equal(term.deadline, '2026-03-02');
+  assert.equal(term.shifted, true);
+});
+
+test('supervision_general_kas: последний день — праздник 12 июня, перенос на понедельник', () => {
+  const term = computeSupervisionGeneralKas({ supervised_ruling_date_kas: '2026-03-12' });
+  // 12.03.2026 + 3 месяца = 12.06.2026 (пятница, День России — нерабочий);
+  // 13–14.06 — суббота и воскресенье -> перенос на 15.06.2026 (понедельник).
+  assert.equal(term.raw_deadline, '2026-06-12');
+  assert.equal(term.deadline, '2026-06-15');
+  assert.equal(term.shifted, true);
+});
+
+test('supervision_general_kas: последний день — воскресенье, перенос на понедельник', () => {
+  const term = computeSupervisionGeneralKas({ supervised_ruling_date_kas: '2025-09-14' });
+  // 14.09.2025 + 3 месяца = 14.12.2025 — воскресенье -> перенос на 15.12.2025
+  // (понедельник, рабочий день).
+  assert.equal(term.raw_deadline, '2025-12-14');
+  assert.equal(term.deadline, '2025-12-15');
+  assert.equal(term.shifted, true);
+});
+
+test('supervision_general_kas: без supervised_ruling_date_kas — ошибка', () => {
+  assert.throws(() => computeSupervisionGeneralKas({}), /supervised_ruling_date_kas/);
+});
+
+test('supervision_general_kas: норма и объём задачи КАС-12 — три месяца, weekend_shift, без restoration_norm и ics', () => {
+  const term = computeSupervisionGeneralKas({ supervised_ruling_date_kas: '2025-03-11' });
+  assert.equal(term.id, 'supervision_general_kas');
+  assert.deepEqual(term.duration, { value: 3, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 2 ст. 333 КАС РФ');
+  assert.deepEqual(term.norm.calculation, ['ч. 3 ст. 92', 'ч. 1, 2 ст. 93 КАС РФ']);
+  assert.equal(
+    term.norm.clarification,
+    'п. 4, 6 ч. 2 ст. 332; ч. 5 ст. 311, ст. 317, 331 КАС РФ',
+  );
+  assert.equal(SUPERVISION_GENERAL_KAS.weekend_shift, true);
+  assert.equal(SUPERVISION_GENERAL_KAS.restoration_norm, undefined);
+  assert.equal(SUPERVISION_GENERAL_KAS.ics, undefined);
+});
+
+// --- Восстановление срока надзора: двенадцатимесячный потолок (ч. 3 ст. 333 КАС РФ) ---
+
+test('supervision_restoration_cap_kas: обстоятельство внутри двенадцати месяцев — within_cap true', () => {
+  const result = computeSupervisionRestorationCapKas({
+    supervised_ruling_date_kas: '2025-03-11',
+    supervision_restoration_circumstance_date_kas: '2025-12-01',
+  });
+  assert.equal(result.entry_into_force, '2025-03-11');
+  assert.equal(result.circumstance_date, '2025-12-01');
+  assert.equal(result.within_cap, true);
+  assert.equal(result.cap_deadline, '2026-03-11');
+  assert.equal(result.norm, 'ч. 3 ст. 333 КАС РФ');
+});
+
+test('supervision_restoration_cap_kas: обстоятельство в последний день периода — укладывается (включительно)', () => {
+  const result = computeSupervisionRestorationCapKas({
+    supervised_ruling_date_kas: '2025-03-11',
+    supervision_restoration_circumstance_date_kas: '2026-03-11',
+  });
+  assert.equal(result.within_cap, true); // 11.03.2026 — среда
+  assert.equal(result.cap_deadline, '2026-03-11');
+});
+
+test('supervision_restoration_cap_kas: обстоятельство на следующий день после периода — не укладывается', () => {
+  const result = computeSupervisionRestorationCapKas({
+    supervised_ruling_date_kas: '2025-03-11',
+    supervision_restoration_circumstance_date_kas: '2026-03-12',
+  });
+  assert.equal(result.within_cap, false);
+  assert.equal(result.cap_deadline, '2026-03-11');
+});
+
+test('supervision_restoration_cap_kas: последний день периода — суббота, на рабочий день не переносится', () => {
+  const base = { supervised_ruling_date_kas: '2025-03-14' };
+  const onSaturday = computeSupervisionRestorationCapKas({
+    ...base,
+    supervision_restoration_circumstance_date_kas: '2026-03-14',
+  });
+  assert.equal(onSaturday.cap_deadline, '2026-03-14'); // суббота, перенос на понедельник не применяется
+  assert.equal(onSaturday.within_cap, true);
+  const onSunday = computeSupervisionRestorationCapKas({
+    ...base,
+    supervision_restoration_circumstance_date_kas: '2026-03-15',
+  });
+  assert.equal(onSunday.within_cap, false);
+  const onMonday = computeSupervisionRestorationCapKas({
+    ...base,
+    supervision_restoration_circumstance_date_kas: '2026-03-16',
+  });
+  assert.equal(onMonday.within_cap, false);
+});
+
+test('supervision_restoration_cap_kas: нет соответствующего числа — последний день месяца (ч. 1 ст. 93 КАС РФ)', () => {
+  const base = { supervised_ruling_date_kas: '2024-02-29' };
+  const onLastDay = computeSupervisionRestorationCapKas({
+    ...base,
+    supervision_restoration_circumstance_date_kas: '2025-02-28',
+  });
+  assert.equal(onLastDay.cap_deadline, '2025-02-28');
+  assert.equal(onLastDay.within_cap, true);
+  const nextDay = computeSupervisionRestorationCapKas({
+    ...base,
+    supervision_restoration_circumstance_date_kas: '2025-03-01',
+  });
+  assert.equal(nextDay.within_cap, false);
+});
+
+test('supervision_restoration_cap_kas: обстоятельство раньше вступления в силу верхнюю границу не нарушает', () => {
+  // Нижняя граница нормой не задана (решение архитектора): такая дата не отвергается.
+  const result = computeSupervisionRestorationCapKas({
+    supervised_ruling_date_kas: '2025-03-11',
+    supervision_restoration_circumstance_date_kas: '2025-01-01',
+  });
+  assert.equal(result.within_cap, true);
+  assert.equal(result.cap_deadline, '2026-03-11');
+});
+
+test('supervision_restoration_cap_kas: нет даты определения, обжалуемого в порядке надзора — ошибка', () => {
+  for (const value of [undefined, null, '']) {
+    assert.throws(
+      () =>
+        computeSupervisionRestorationCapKas({
+          supervised_ruling_date_kas: value,
+          supervision_restoration_circumstance_date_kas: '2025-12-01',
+        }),
+      /Обязательна дата принятия \(вынесения\) определения, обжалуемого в порядке надзора \(supervised_ruling_date_kas\)/,
+    );
+  }
+  assert.throws(
+    () => computeSupervisionRestorationCapKas(undefined),
+    /Обязательна дата принятия \(вынесения\) определения, обжалуемого в порядке надзора/,
+  );
+});
+
+test('supervision_restoration_cap_kas: некорректная дата определения, обжалуемого в порядке надзора — ошибка', () => {
+  assert.throws(
+    () =>
+      computeSupervisionRestorationCapKas({
+        supervised_ruling_date_kas: 'не дата',
+        supervision_restoration_circumstance_date_kas: '2025-12-01',
+      }),
+    /Некорректная дата принятия \(вынесения\) определения, обжалуемого в порядке надзора \(supervised_ruling_date_kas\)/,
+  );
+});
+
+test('supervision_restoration_cap_kas: нет даты обстоятельства — ошибка', () => {
+  for (const value of [undefined, null, '']) {
+    assert.throws(
+      () =>
+        computeSupervisionRestorationCapKas({
+          supervised_ruling_date_kas: '2025-03-11',
+          supervision_restoration_circumstance_date_kas: value,
+        }),
+      /Обязательна дата обстоятельства, послужившего причиной пропуска срока \(supervision_restoration_circumstance_date_kas\)/,
+    );
+  }
+});
+
+test('supervision_restoration_cap_kas: некорректная дата обстоятельства — ошибка', () => {
+  assert.throws(
+    () =>
+      computeSupervisionRestorationCapKas({
+        supervised_ruling_date_kas: '2025-03-11',
+        supervision_restoration_circumstance_date_kas: 'не дата',
+      }),
+    /Некорректная дата обстоятельства, послужившего причиной пропуска срока \(supervision_restoration_circumstance_date_kas\)/,
+  );
+});
+
+test('supervision_restoration_cap_kas: состав результата и оговорка о втором основании ч. 3 ст. 333', () => {
+  const result = computeSupervisionRestorationCapKas({
+    supervised_ruling_date_kas: '2025-03-11',
+    supervision_restoration_circumstance_date_kas: '2025-12-01',
+  });
+  assert.deepEqual(Object.keys(result).sort(), [
+    'cap_deadline',
+    'circumstance_date',
+    'entry_into_force',
+    'logic',
+    'norm',
+    'within_cap',
+  ]);
+  assert.match(result.logic, /ч\. 3 ст\. 333 КАС РФ/);
+  assert.match(result.logic, /ст\. 331 КАС РФ/);
+  assert.match(result.logic, /лица, не участвовавшего в административном деле/);
   assert.match(result.logic, /не вычисляется/);
 });
