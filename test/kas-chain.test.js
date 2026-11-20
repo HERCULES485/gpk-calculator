@@ -25,6 +25,10 @@ import {
   computeSupervisionGeneralKas,
   SUPERVISION_GENERAL_KAS,
   computeSupervisionRestorationCapKas,
+  computeCostsFilingKas,
+  COSTS_FILING_KAS,
+  computeCompensationReasonableTermFilingKas,
+  COMPENSATION_REASONABLE_TERM_FILING_KAS,
 } from '../kas/chain.js';
 
 test('appeal_general_kas считается от decision_final_form_date_kas (обычная дата, без переноса)', () => {
@@ -1175,4 +1179,134 @@ test('supervision_restoration_cap_kas: состав результата и ог
   assert.match(result.logic, /ст\. 331 КАС РФ/);
   assert.match(result.logic, /лица, не участвовавшего в административном деле/);
   assert.match(result.logic, /не вычисляется/);
+});
+
+// --- Задача КАС-13: ч. 1 ст. 114.1 — срок подачи заявления о судебных расходах
+// (три месяца со дня вступления в силу последнего судебного акта) ---------------------
+
+test('costs_filing_kas считается от last_act_entry_into_force_date_kas (обычная дата, без переноса)', () => {
+  const term = computeCostsFilingKas({ last_act_entry_into_force_date_kas: '2025-03-11' });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-06-11');
+  assert.equal(term.deadline, '2025-06-11'); // 11.06.2025 — среда, рабочий день
+  assert.equal(term.shifted, false);
+});
+
+test('costs_filing_kas: в последнем месяце нет соответствующего числа — последний день месяца (високосный февраль)', () => {
+  const term = computeCostsFilingKas({ last_act_entry_into_force_date_kas: '2023-11-30' });
+  // 30.11.2023 + 3 месяца: в феврале 2024 года нет 30-го числа, срок истекает в
+  // последний день месяца — 29.02.2024 (четверг, рабочий день), переноса нет.
+  assert.equal(term.raw_deadline, '2024-02-29');
+  assert.equal(term.deadline, '2024-02-29');
+  assert.equal(term.shifted, false);
+});
+
+test('costs_filing_kas: нет соответствующего числа и последний день — суббота, перенос на понедельник', () => {
+  const term = computeCostsFilingKas({ last_act_entry_into_force_date_kas: '2025-11-30' });
+  // 30.11.2025 + 3 месяца: в феврале 2026 года нет 30-го числа, срок истекает 28.02.2026
+  // (суббота); 01.03 — воскресенье -> перенос на 02.03.2026 (понедельник).
+  assert.equal(term.raw_deadline, '2026-02-28');
+  assert.equal(term.deadline, '2026-03-02');
+  assert.equal(term.shifted, true);
+});
+
+test('costs_filing_kas: последний день — праздник 12 июня, перенос на понедельник', () => {
+  const term = computeCostsFilingKas({ last_act_entry_into_force_date_kas: '2026-03-12' });
+  // 12.03.2026 + 3 месяца = 12.06.2026 (пятница, День России — нерабочий);
+  // 13–14.06 — суббота и воскресенье -> перенос на 15.06.2026 (понедельник).
+  assert.equal(term.raw_deadline, '2026-06-12');
+  assert.equal(term.deadline, '2026-06-15');
+  assert.equal(term.shifted, true);
+});
+
+test('costs_filing_kas: последний день — воскресенье, перенос на понедельник', () => {
+  const term = computeCostsFilingKas({ last_act_entry_into_force_date_kas: '2025-09-14' });
+  // 14.09.2025 + 3 месяца = 14.12.2025 — воскресенье -> перенос на 15.12.2025
+  // (понедельник, рабочий день).
+  assert.equal(term.raw_deadline, '2025-12-14');
+  assert.equal(term.deadline, '2025-12-15');
+  assert.equal(term.shifted, true);
+});
+
+test('costs_filing_kas: без last_act_entry_into_force_date_kas — ошибка', () => {
+  assert.throws(() => computeCostsFilingKas({}), /last_act_entry_into_force_date_kas/);
+});
+
+test('costs_filing_kas: норма и объём задачи КАС-13 — три месяца, weekend_shift, без restoration_norm и ics', () => {
+  const term = computeCostsFilingKas({ last_act_entry_into_force_date_kas: '2025-03-11' });
+  assert.equal(term.id, 'costs_filing_kas');
+  assert.deepEqual(term.duration, { value: 3, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 1 ст. 114.1 КАС РФ');
+  assert.deepEqual(term.norm.calculation, ['ч. 3 ст. 92', 'ч. 1, 2 ст. 93 КАС РФ']);
+  assert.equal(term.norm.clarification, 'ч. 2 ст. 114.1 КАС РФ');
+  assert.equal(COSTS_FILING_KAS.weekend_shift, true);
+  assert.equal(COSTS_FILING_KAS.restoration_norm, undefined);
+  assert.equal(COSTS_FILING_KAS.ics, undefined);
+});
+
+// --- Задача КАС-13: ч. 2 ст. 250 — срок обращения за компенсацией за нарушение права на
+// судопроизводство в разумный срок (шесть месяцев со дня вступления в силу последнего акта) ---
+
+test('compensation_reasonable_term_filing_kas считается от compensation_last_act_entry_into_force_date_kas (обычная дата, без переноса)', () => {
+  const term = computeCompensationReasonableTermFilingKas({
+    compensation_last_act_entry_into_force_date_kas: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-09-11');
+  assert.equal(term.deadline, '2025-09-11'); // 11.09.2025 — четверг, рабочий день
+  assert.equal(term.shifted, false);
+});
+
+test('compensation_reasonable_term_filing_kas: в последнем месяце нет соответствующего числа — последний день месяца (високосный февраль)', () => {
+  const term = computeCompensationReasonableTermFilingKas({
+    compensation_last_act_entry_into_force_date_kas: '2023-08-31',
+  });
+  // 31.08.2023 + 6 месяцев: в феврале 2024 года нет 31-го числа, срок истекает в
+  // последний день месяца — 29.02.2024 (четверг, рабочий день), переноса нет.
+  assert.equal(term.raw_deadline, '2024-02-29');
+  assert.equal(term.deadline, '2024-02-29');
+  assert.equal(term.shifted, false);
+});
+
+test('compensation_reasonable_term_filing_kas: последний день — праздник 12 июня, перенос на понедельник', () => {
+  const term = computeCompensationReasonableTermFilingKas({
+    compensation_last_act_entry_into_force_date_kas: '2025-12-12',
+  });
+  // 12.12.2025 + 6 месяцев = 12.06.2026 (пятница, День России — нерабочий);
+  // 13–14.06 — суббота и воскресенье -> перенос на 15.06.2026 (понедельник).
+  assert.equal(term.raw_deadline, '2026-06-12');
+  assert.equal(term.deadline, '2026-06-15');
+  assert.equal(term.shifted, true);
+});
+
+test('compensation_reasonable_term_filing_kas: последний день — воскресенье, перенос на понедельник', () => {
+  const term = computeCompensationReasonableTermFilingKas({
+    compensation_last_act_entry_into_force_date_kas: '2025-07-18',
+  });
+  // 18.07.2025 + 6 месяцев = 18.01.2026 — воскресенье -> перенос на 19.01.2026
+  // (понедельник, рабочий день).
+  assert.equal(term.raw_deadline, '2026-01-18');
+  assert.equal(term.deadline, '2026-01-19');
+  assert.equal(term.shifted, true);
+});
+
+test('compensation_reasonable_term_filing_kas: без compensation_last_act_entry_into_force_date_kas — ошибка', () => {
+  assert.throws(
+    () => computeCompensationReasonableTermFilingKas({}),
+    /compensation_last_act_entry_into_force_date_kas/,
+  );
+});
+
+test('compensation_reasonable_term_filing_kas: норма и объём задачи КАС-13 — шесть месяцев, weekend_shift, без restoration_norm и ics', () => {
+  const term = computeCompensationReasonableTermFilingKas({
+    compensation_last_act_entry_into_force_date_kas: '2025-03-11',
+  });
+  assert.equal(term.id, 'compensation_reasonable_term_filing_kas');
+  assert.deepEqual(term.duration, { value: 6, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 2 ст. 250 КАС РФ');
+  assert.deepEqual(term.norm.calculation, ['ч. 3 ст. 92', 'ч. 1, 2 ст. 93 КАС РФ']);
+  assert.equal(term.norm.clarification, 'п. 14 Постановления Пленума ВС РФ от 29.03.2016 № 11');
+  assert.equal(COMPENSATION_REASONABLE_TERM_FILING_KAS.weekend_shift, true);
+  assert.equal(COMPENSATION_REASONABLE_TERM_FILING_KAS.restoration_norm, undefined);
+  assert.equal(COMPENSATION_REASONABLE_TERM_FILING_KAS.ics, undefined);
 });
