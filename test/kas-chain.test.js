@@ -29,6 +29,12 @@ import {
   COSTS_FILING_KAS,
   computeCompensationReasonableTermFilingKas,
   COMPENSATION_REASONABLE_TERM_FILING_KAS,
+  computeClaimFilingMandatoryPaymentsKas,
+  CLAIM_FILING_MANDATORY_PAYMENTS_KAS,
+  computeAppealSimplifiedKas,
+  APPEAL_SIMPLIFIED_KAS,
+  computePrivateComplaintSimplifiedKas,
+  PRIVATE_COMPLAINT_SIMPLIFIED_KAS,
 } from '../kas/chain.js';
 
 test('appeal_general_kas считается от decision_final_form_date_kas (обычная дата, без переноса)', () => {
@@ -1309,4 +1315,205 @@ test('compensation_reasonable_term_filing_kas: норма и объём зада
   assert.equal(COMPENSATION_REASONABLE_TERM_FILING_KAS.weekend_shift, true);
   assert.equal(COMPENSATION_REASONABLE_TERM_FILING_KAS.restoration_norm, undefined);
   assert.equal(COMPENSATION_REASONABLE_TERM_FILING_KAS.ics, undefined);
+});
+
+// --- Задача КАС-14: ч. 2 ст. 286 — срок обращения с иском о взыскании обязательных платежей
+// и санкций (шесть месяцев со дня истечения срока исполнения требования) ---------------------
+
+test('claim_filing_mandatory_payments_kas считается от payment_demand_expiry_date_kas (обычная дата, без переноса)', () => {
+  const term = computeClaimFilingMandatoryPaymentsKas({
+    payment_demand_expiry_date_kas: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-09-11');
+  assert.equal(term.deadline, '2025-09-11'); // 11.09.2025 — четверг, рабочий день
+  assert.equal(term.shifted, false);
+});
+
+test('claim_filing_mandatory_payments_kas: нет соответствующего числа, последний день — суббота, перенос на понедельник', () => {
+  const term = computeClaimFilingMandatoryPaymentsKas({
+    payment_demand_expiry_date_kas: '2025-08-31',
+  });
+  // 31.08.2025 + 6 месяцев: в феврале 2026 года нет 31-го числа, срок истекает 28.02.2026
+  // (суббота); 01.03 — воскресенье -> перенос на 02.03.2026 (понедельник).
+  assert.equal(term.raw_deadline, '2026-02-28');
+  assert.equal(term.deadline, '2026-03-02');
+  assert.equal(term.shifted, true);
+});
+
+test('claim_filing_mandatory_payments_kas: в июне нет 31-го числа — 30 июня, рабочий день, без переноса', () => {
+  const term = computeClaimFilingMandatoryPaymentsKas({
+    payment_demand_expiry_date_kas: '2025-12-31',
+  });
+  // 31.12.2025 + 6 месяцев: в июне 2026 года нет 31-го числа, срок истекает 30.06.2026
+  // (вторник, рабочий день), переноса нет.
+  assert.equal(term.raw_deadline, '2026-06-30');
+  assert.equal(term.deadline, '2026-06-30');
+  assert.equal(term.shifted, false);
+});
+
+test('claim_filing_mandatory_payments_kas: последний день — праздник 12 июня, перенос на понедельник', () => {
+  const term = computeClaimFilingMandatoryPaymentsKas({
+    payment_demand_expiry_date_kas: '2025-12-12',
+  });
+  // 12.12.2025 + 6 месяцев = 12.06.2026 (пятница, День России — нерабочий);
+  // 13–14.06 — суббота и воскресенье -> перенос на 15.06.2026 (понедельник).
+  assert.equal(term.raw_deadline, '2026-06-12');
+  assert.equal(term.deadline, '2026-06-15');
+  assert.equal(term.shifted, true);
+});
+
+test('claim_filing_mandatory_payments_kas: последний день — воскресенье, перенос на понедельник', () => {
+  const term = computeClaimFilingMandatoryPaymentsKas({
+    payment_demand_expiry_date_kas: '2025-04-05',
+  });
+  // 05.04.2025 + 6 месяцев = 05.10.2025 — воскресенье -> перенос на 06.10.2025
+  // (понедельник, рабочий день).
+  assert.equal(term.raw_deadline, '2025-10-05');
+  assert.equal(term.deadline, '2025-10-06');
+  assert.equal(term.shifted, true);
+});
+
+test('claim_filing_mandatory_payments_kas: без payment_demand_expiry_date_kas — ошибка; поле другого узла не подходит', () => {
+  assert.throws(() => computeClaimFilingMandatoryPaymentsKas({}), /payment_demand_expiry_date_kas/);
+  assert.throws(
+    () => computeClaimFilingMandatoryPaymentsKas({ last_act_entry_into_force_date_kas: '2025-03-11' }),
+    /payment_demand_expiry_date_kas/,
+  );
+});
+
+test('claim_filing_mandatory_payments_kas: норма и объём задачи КАС-14 — шесть месяцев, weekend_shift, без restoration_norm и ics', () => {
+  const term = computeClaimFilingMandatoryPaymentsKas({
+    payment_demand_expiry_date_kas: '2025-03-11',
+  });
+  assert.equal(term.id, 'claim_filing_mandatory_payments_kas');
+  assert.deepEqual(term.duration, { value: 6, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 2 ст. 286 КАС РФ');
+  assert.deepEqual(term.norm.calculation, ['ч. 3 ст. 92', 'ч. 1, 2 ст. 93 КАС РФ']);
+  assert.equal(term.norm.clarification, 'ч. 1 ст. 286 КАС РФ');
+  assert.equal(CLAIM_FILING_MANDATORY_PAYMENTS_KAS.weekend_shift, true);
+  assert.equal(CLAIM_FILING_MANDATORY_PAYMENTS_KAS.restoration_norm, undefined);
+  assert.equal(CLAIM_FILING_MANDATORY_PAYMENTS_KAS.ics, undefined);
+});
+
+// --- Задача КАС-14: ст. 294 — апелляционная жалоба на решение упрощённого (письменного)
+// производства (пятнадцать рабочих дней со дня получения копии решения) ----------------------
+
+test('appeal_simplified_kas считается от simplified_decision_copy_receipt_date_kas (обычная дата)', () => {
+  const term = computeAppealSimplifiedKas({
+    simplified_decision_copy_receipt_date_kas: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  // 11.03.2025 — вторник; отсчёт начинается со среды 12.03.2025, нерабочих
+  // праздничных дней внутри периода нет, 15-й рабочий день — вторник 01.04.2025.
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-04-01');
+  assert.equal(term.deadline, '2025-04-01');
+  assert.equal(term.shifted, false);
+});
+
+test('appeal_simplified_kas: копия получена в субботу — отсчёт с понедельника', () => {
+  const term = computeAppealSimplifiedKas({
+    simplified_decision_copy_receipt_date_kas: '2025-03-15',
+  });
+  // 15.03.2025 — суббота; отсчёт начинается с понедельника 17.03.2025.
+  // 17–21.03 (5), 24–28.03 (10), 31.03–04.04 (15) -> пятница 04.04.2025.
+  assert.equal(term.first_working_day, '2025-03-17');
+  assert.equal(term.deadline, '2025-04-04');
+  assert.equal(term.shifted, false);
+});
+
+test('appeal_simplified_kas: майские нерабочие дни в счёт не входят', () => {
+  const term = computeAppealSimplifiedKas({
+    simplified_decision_copy_receipt_date_kas: '2025-04-18',
+  });
+  // 18.04.2025 — пятница; 19–20.04 выходные, отсчёт начинается с понедельника
+  // 21.04.2025. Нерабочие 01–04.05 и 08–11.05.2025 в счёт не входят:
+  // 21–25.04 (5), 28–30.04 (8), 05–07.05 (11), 12–15.05 (15).
+  assert.equal(term.first_working_day, '2025-04-21');
+  assert.equal(term.deadline, '2025-05-15');
+  assert.equal(term.shifted, false);
+});
+
+test('appeal_simplified_kas: перенос через новогодние каникулы', () => {
+  const term = computeAppealSimplifiedKas({
+    simplified_decision_copy_receipt_date_kas: '2025-12-26',
+  });
+  // 26.12.2025 — пятница; отсчёт с понедельника 29.12.2025. Рабочие 29.12 и
+  // 30.12 (2); 31.12.2025–11.01.2026 нерабочие; далее 12–16.01 (7), 19–23.01 (12),
+  // 26–28.01 (15).
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-01-28');
+  assert.equal(term.shifted, false);
+});
+
+test('appeal_simplified_kas: без simplified_decision_copy_receipt_date_kas — ошибка; поле другого узла не подходит', () => {
+  assert.throws(() => computeAppealSimplifiedKas({}), /simplified_decision_copy_receipt_date_kas/);
+  assert.throws(
+    () => computeAppealSimplifiedKas({ simplified_ruling_copy_receipt_date_kas: '2025-03-11' }),
+    /simplified_decision_copy_receipt_date_kas/,
+  );
+});
+
+test('appeal_simplified_kas: норма и объём задачи КАС-14 — 15 рабочих дней, без weekend_shift, restoration_norm и ics', () => {
+  const term = computeAppealSimplifiedKas({
+    simplified_decision_copy_receipt_date_kas: '2025-03-11',
+  });
+  assert.equal(term.id, 'appeal_simplified_kas');
+  assert.deepEqual(term.duration, { value: 15, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ст. 294 КАС РФ');
+  assert.deepEqual(term.norm.calculation, ['ч. 2, 3 ст. 92 КАС РФ']);
+  assert.equal(term.norm.clarification, 'п. 76 Постановления Пленума ВС РФ от 27.09.2016 № 36');
+  assert.equal(APPEAL_SIMPLIFIED_KAS.weekend_shift, undefined);
+  assert.equal(APPEAL_SIMPLIFIED_KAS.restoration_norm, undefined);
+  assert.equal(APPEAL_SIMPLIFIED_KAS.ics, undefined);
+});
+
+// --- Задача КАС-14: ст. 294, ч. 1 ст. 314 — частная жалоба на определение упрощённого
+// (письменного) производства (пятнадцать рабочих дней со дня получения копии определения) ------
+
+test('private_complaint_simplified_kas считается от simplified_ruling_copy_receipt_date_kas (обычная дата)', () => {
+  const term = computePrivateComplaintSimplifiedKas({
+    simplified_ruling_copy_receipt_date_kas: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-04-01');
+  assert.equal(term.deadline, '2025-04-01');
+  assert.equal(term.shifted, false);
+});
+
+test('private_complaint_simplified_kas: июньские праздничные дни внутри периода', () => {
+  const term = computePrivateComplaintSimplifiedKas({
+    simplified_ruling_copy_receipt_date_kas: '2025-06-10',
+  });
+  // Отсчёт со среды 11.06.2025; 12–15.06.2025 нерабочие. 11.06 (1), 16–20.06 (6),
+  // 23–27.06 (11), 30.06 (12), 01.07 (13), 02.07 (14), 03.07 (15).
+  assert.equal(term.first_working_day, '2025-06-11');
+  assert.equal(term.deadline, '2025-07-03');
+});
+
+test('private_complaint_simplified_kas: без simplified_ruling_copy_receipt_date_kas — ошибка; поле другого узла не подходит', () => {
+  assert.throws(
+    () => computePrivateComplaintSimplifiedKas({}),
+    /simplified_ruling_copy_receipt_date_kas/,
+  );
+  assert.throws(
+    () => computePrivateComplaintSimplifiedKas({ simplified_decision_copy_receipt_date_kas: '2025-03-11' }),
+    /simplified_ruling_copy_receipt_date_kas/,
+  );
+});
+
+test('private_complaint_simplified_kas: норма и объём задачи КАС-14 — 15 рабочих дней, без weekend_shift, restoration_norm и ics', () => {
+  const term = computePrivateComplaintSimplifiedKas({
+    simplified_ruling_copy_receipt_date_kas: '2025-03-11',
+  });
+  assert.equal(term.id, 'private_complaint_simplified_kas');
+  assert.deepEqual(term.duration, { value: 15, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ст. 294, ч. 1 ст. 314 КАС РФ');
+  assert.deepEqual(term.norm.calculation, ['ч. 2, 3 ст. 92 КАС РФ']);
+  assert.equal(term.norm.clarification, 'п. 76 Постановления Пленума ВС РФ от 27.09.2016 № 36');
+  assert.equal(PRIVATE_COMPLAINT_SIMPLIFIED_KAS.weekend_shift, undefined);
+  assert.equal(PRIVATE_COMPLAINT_SIMPLIFIED_KAS.restoration_norm, undefined);
+  assert.equal(PRIVATE_COMPLAINT_SIMPLIFIED_KAS.ics, undefined);
 });
