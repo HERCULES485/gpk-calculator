@@ -35,6 +35,10 @@ import {
   APPEAL_SIMPLIFIED_KAS,
   computePrivateComplaintSimplifiedKas,
   PRIVATE_COMPLAINT_SIMPLIFIED_KAS,
+  computeObjectionCourtOrderKas,
+  OBJECTION_COURT_ORDER_KAS,
+  computeCassationCourtOrderKas,
+  CASSATION_COURT_ORDER_KAS,
 } from '../kas/chain.js';
 
 test('appeal_general_kas считается от decision_final_form_date_kas (обычная дата, без переноса)', () => {
@@ -1516,4 +1520,150 @@ test('private_complaint_simplified_kas: норма и объём задачи К
   assert.equal(PRIVATE_COMPLAINT_SIMPLIFIED_KAS.weekend_shift, undefined);
   assert.equal(PRIVATE_COMPLAINT_SIMPLIFIED_KAS.restoration_norm, undefined);
   assert.equal(PRIVATE_COMPLAINT_SIMPLIFIED_KAS.ics, undefined);
+});
+
+// --- Задача КАС-15: ч. 3 ст. 123.5 — возражения должника относительно исполнения судебного
+// приказа (двадцать рабочих дней со дня направления копии судебного приказа) -----------------
+
+test('objection_court_order_kas считается от court_order_copy_sent_date_kas (обычная дата)', () => {
+  const term = computeObjectionCourtOrderKas({ court_order_copy_sent_date_kas: '2025-03-11' });
+  assert.equal(term.anchor, '2025-03-11');
+  // 11.03.2025 — вторник; отсчёт начинается со среды 12.03.2025, нерабочих праздничных
+  // дней внутри периода нет: 12–14.03 (3), 17–21.03 (8), 24–28.03 (13), 31.03–04.04 (18),
+  // 07.04 (19), 08.04 (20) -> вторник 08.04.2025.
+  assert.equal(term.first_working_day, '2025-03-12');
+  assert.equal(term.raw_deadline, '2025-04-08');
+  assert.equal(term.deadline, '2025-04-08');
+  assert.equal(term.shifted, false);
+});
+
+test('objection_court_order_kas: копия направлена в субботу — отсчёт с понедельника', () => {
+  const term = computeObjectionCourtOrderKas({ court_order_copy_sent_date_kas: '2025-03-15' });
+  // 15.03.2025 — суббота; отсчёт начинается с понедельника 17.03.2025.
+  // 17–21.03 (5), 24–28.03 (10), 31.03–04.04 (15), 07–11.04 (20) -> пятница 11.04.2025.
+  assert.equal(term.first_working_day, '2025-03-17');
+  assert.equal(term.deadline, '2025-04-11');
+  assert.equal(term.shifted, false);
+});
+
+test('objection_court_order_kas: майские нерабочие дни в счёт не входят', () => {
+  const term = computeObjectionCourtOrderKas({ court_order_copy_sent_date_kas: '2025-04-18' });
+  // 18.04.2025 — пятница; отсчёт начинается с понедельника 21.04.2025. Нерабочие
+  // 01–04.05 и 08–11.05.2025 в счёт не входят: 21–25.04 (5), 28–30.04 (8), 05–07.05 (11),
+  // 12–16.05 (16), 19–22.05 (20) -> четверг 22.05.2025.
+  assert.equal(term.first_working_day, '2025-04-21');
+  assert.equal(term.deadline, '2025-05-22');
+  assert.equal(term.shifted, false);
+});
+
+test('objection_court_order_kas: июньские праздничные дни внутри периода', () => {
+  const term = computeObjectionCourtOrderKas({ court_order_copy_sent_date_kas: '2025-06-10' });
+  // Отсчёт со среды 11.06.2025; 12–15.06.2025 нерабочие. 11.06 (1), 16–20.06 (6),
+  // 23–27.06 (11), 30.06 (12), 01–04.07 (16), 07–10.07 (20) -> четверг 10.07.2025.
+  assert.equal(term.first_working_day, '2025-06-11');
+  assert.equal(term.deadline, '2025-07-10');
+  assert.equal(term.shifted, false);
+});
+
+test('objection_court_order_kas: перенос через новогодние каникулы', () => {
+  const term = computeObjectionCourtOrderKas({ court_order_copy_sent_date_kas: '2025-12-26' });
+  // 26.12.2025 — пятница; отсчёт с понедельника 29.12.2025. Рабочие 29.12 и 30.12 (2);
+  // 31.12.2025–11.01.2026 нерабочие; далее 12–16.01 (7), 19–23.01 (12), 26–30.01 (17),
+  // 02–04.02 (20) -> среда 04.02.2026.
+  assert.equal(term.first_working_day, '2025-12-29');
+  assert.equal(term.deadline, '2026-02-04');
+  assert.equal(term.shifted, false);
+});
+
+test('objection_court_order_kas: без court_order_copy_sent_date_kas — ошибка; поле другого узла не подходит', () => {
+  assert.throws(() => computeObjectionCourtOrderKas({}), /court_order_copy_sent_date_kas/);
+  assert.throws(
+    () => computeObjectionCourtOrderKas({ court_order_date_kas: '2025-03-11' }),
+    /court_order_copy_sent_date_kas/,
+  );
+});
+
+test('objection_court_order_kas: норма и объём задачи КАС-15 — 20 рабочих дней, без weekend_shift, restoration_norm и ics', () => {
+  const term = computeObjectionCourtOrderKas({ court_order_copy_sent_date_kas: '2025-03-11' });
+  assert.equal(term.id, 'objection_court_order_kas');
+  assert.deepEqual(term.duration, { value: 20, unit: 'working_day' });
+  assert.equal(term.norm.primary, 'ч. 3 ст. 123.5 КАС РФ');
+  assert.deepEqual(term.norm.calculation, ['ч. 2, 3 ст. 92 КАС РФ']);
+  assert.equal(
+    term.norm.clarification,
+    'ч. 1, 4 ст. 123.7 КАС РФ; п. 51 Постановления Пленума ВС РФ от 27.09.2016 № 36',
+  );
+  assert.equal(OBJECTION_COURT_ORDER_KAS.weekend_shift, undefined);
+  assert.equal(OBJECTION_COURT_ORDER_KAS.restoration_norm, undefined);
+  assert.equal(OBJECTION_COURT_ORDER_KAS.ics, undefined);
+});
+
+// --- Задача КАС-15: ч. 2 ст. 318, ч. 3 ст. 123.8 — срок кассационного обжалования судебного
+// приказа (шесть месяцев со дня вынесения судебного приказа) ---------------------------------
+
+test('cassation_court_order_kas считается от court_order_date_kas (обычная дата, без переноса)', () => {
+  const term = computeCassationCourtOrderKas({ court_order_date_kas: '2025-03-11' });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-09-11');
+  assert.equal(term.deadline, '2025-09-11'); // 11.09.2025 — четверг, рабочий день
+  assert.equal(term.shifted, false);
+});
+
+test('cassation_court_order_kas: нет соответствующего числа, последний день — суббота, перенос на понедельник', () => {
+  const term = computeCassationCourtOrderKas({ court_order_date_kas: '2025-08-31' });
+  // 31.08.2025 + 6 месяцев: в феврале 2026 года нет 31-го числа, срок истекает 28.02.2026
+  // (суббота); 01.03 — воскресенье -> перенос на 02.03.2026 (понедельник).
+  assert.equal(term.raw_deadline, '2026-02-28');
+  assert.equal(term.deadline, '2026-03-02');
+  assert.equal(term.shifted, true);
+});
+
+test('cassation_court_order_kas: в июне нет 31-го числа — 30 июня, рабочий день, без переноса', () => {
+  const term = computeCassationCourtOrderKas({ court_order_date_kas: '2025-12-31' });
+  // 31.12.2025 + 6 месяцев: в июне 2026 года нет 31-го числа, срок истекает 30.06.2026
+  // (вторник, рабочий день), переноса нет.
+  assert.equal(term.raw_deadline, '2026-06-30');
+  assert.equal(term.deadline, '2026-06-30');
+  assert.equal(term.shifted, false);
+});
+
+test('cassation_court_order_kas: последний день — праздник 12 июня, перенос на понедельник', () => {
+  const term = computeCassationCourtOrderKas({ court_order_date_kas: '2025-12-12' });
+  // 12.12.2025 + 6 месяцев = 12.06.2026 (пятница, День России — нерабочий);
+  // 13–14.06 — суббота и воскресенье -> перенос на 15.06.2026 (понедельник).
+  assert.equal(term.raw_deadline, '2026-06-12');
+  assert.equal(term.deadline, '2026-06-15');
+  assert.equal(term.shifted, true);
+});
+
+test('cassation_court_order_kas: последний день — воскресенье, перенос на понедельник', () => {
+  const term = computeCassationCourtOrderKas({ court_order_date_kas: '2025-04-05' });
+  // 05.04.2025 + 6 месяцев = 05.10.2025 — воскресенье -> перенос на 06.10.2025
+  // (понедельник, рабочий день).
+  assert.equal(term.raw_deadline, '2025-10-05');
+  assert.equal(term.deadline, '2025-10-06');
+  assert.equal(term.shifted, true);
+});
+
+test('cassation_court_order_kas: без court_order_date_kas — ошибка; поле другого узла не подходит', () => {
+  assert.throws(() => computeCassationCourtOrderKas({}), /court_order_date_kas/);
+  assert.throws(
+    () => computeCassationCourtOrderKas({ appellate_ruling_date_kas: '2025-03-11' }),
+    /court_order_date_kas/,
+  );
+});
+
+test('cassation_court_order_kas: норма и объём задачи КАС-15 — шесть месяцев, weekend_shift, без restoration_norm и ics', () => {
+  const term = computeCassationCourtOrderKas({ court_order_date_kas: '2025-03-11' });
+  assert.equal(term.id, 'cassation_court_order_kas');
+  assert.deepEqual(term.duration, { value: 6, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 2 ст. 318 КАС РФ');
+  assert.deepEqual(term.norm.calculation, ['ч. 3 ст. 92', 'ч. 1, 2 ст. 93 КАС РФ']);
+  assert.equal(
+    term.norm.clarification,
+    'ч. 3 ст. 123.8 КАС РФ; п. 8 Постановления Пленума ВС РФ от 09.07.2020 № 17',
+  );
+  assert.equal(CASSATION_COURT_ORDER_KAS.weekend_shift, true);
+  assert.equal(CASSATION_COURT_ORDER_KAS.restoration_norm, undefined);
+  assert.equal(CASSATION_COURT_ORDER_KAS.ics, undefined);
 });
