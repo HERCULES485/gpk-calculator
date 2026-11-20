@@ -546,3 +546,256 @@ test('cassation_general_kas: норма и объём задачи КАС-8 — 
   assert.equal(CASSATION_GENERAL_KAS.restoration_norm, undefined);
   assert.equal(CASSATION_GENERAL_KAS.ics, undefined);
 });
+
+// --- Задача КАС-10: п. 9 Постановления Пленума ВС РФ от 09.07.2020 № 17 — периоды,
+// исключаемые из шестимесячного срока кассационного обжалования -------------------
+
+test('cassation_general_kas: срок составления мотивированного определения продлевает срок на 7 дней', () => {
+  const term = computeCassationGeneralKas({
+    appellate_ruling_date_kas: '2025-03-11',
+    appellate_ruling_final_form_date_kas: '2025-03-18',
+  });
+  assert.equal(term.pre_exclusion_deadline, '2025-09-11');
+  assert.equal(term.raw_deadline, '2025-09-18');
+  assert.equal(term.deadline, '2025-09-18'); // четверг, рабочий день
+  assert.equal(term.shifted, false);
+  assert.equal(term.excluded_days, 7);
+  assert.deepEqual(term.excluded_periods, [
+    { type: 'appellate_ruling_drafting', start: '2025-03-11', end: '2025-03-18', days: 7 },
+  ]);
+  assert.equal(term.exclusion_norm, 'п. 9 Постановления Пленума ВС РФ от 09.07.2020 № 17');
+  assert.match(term.exclusion_logic, /время составления мотивированного апелляционного определения/);
+  assert.doesNotMatch(term.exclusion_logic, /время рассмотрения кассационных/);
+});
+
+test('cassation_general_kas: время рассмотрения кассационной жалобы продлевает срок на 43 дня', () => {
+  const term = computeCassationGeneralKas({
+    appellate_ruling_date_kas: '2025-03-11',
+    cassation_consideration_periods_kas: [{ start: '2025-05-20', end: '2025-07-02' }],
+  });
+  assert.equal(term.pre_exclusion_deadline, '2025-09-11');
+  assert.equal(term.raw_deadline, '2025-10-24');
+  assert.equal(term.deadline, '2025-10-24'); // пятница, рабочий день
+  assert.equal(term.shifted, false);
+  assert.equal(term.excluded_days, 43);
+  assert.deepEqual(term.excluded_periods, [
+    { type: 'cassation_consideration', start: '2025-05-20', end: '2025-07-02', days: 43 },
+  ]);
+  assert.match(term.exclusion_logic, /время рассмотрения кассационных жалобы, представления/);
+  assert.doesNotMatch(term.exclusion_logic, /время составления/);
+});
+
+test('cassation_general_kas: составление определения и два кассационных периода складываются, итог переносится', () => {
+  const term = computeCassationGeneralKas({
+    appellate_ruling_date_kas: '2025-03-11',
+    appellate_ruling_final_form_date_kas: '2025-03-14',
+    cassation_consideration_periods_kas: [
+      { start: '2025-07-01', end: '2025-07-21' },
+      { start: '2025-04-01', end: '2025-05-06' },
+    ],
+  });
+  // 3 + 35 + 20 = 58 дней; 11.09.2025 + 58 = 08.11.2025 — суббота, перенос на 10.11.2025.
+  assert.equal(term.pre_exclusion_deadline, '2025-09-11');
+  assert.equal(term.raw_deadline, '2025-11-08');
+  assert.equal(term.deadline, '2025-11-10');
+  assert.equal(term.shifted, true);
+  assert.equal(term.excluded_days, 58);
+  assert.deepEqual(
+    term.excluded_periods.map((e) => [e.type, e.start, e.end, e.days]),
+    [
+      ['appellate_ruling_drafting', '2025-03-11', '2025-03-14', 3],
+      ['cassation_consideration', '2025-04-01', '2025-05-06', 35],
+      ['cassation_consideration', '2025-07-01', '2025-07-21', 20],
+    ],
+  );
+  assert.match(term.exclusion_logic, /время составления мотивированного апелляционного определения/);
+  assert.match(term.exclusion_logic, /время рассмотрения кассационных жалобы, представления/);
+});
+
+test('cassation_general_kas: срок продлевается от последнего дня до переноса, а не от перенесённого', () => {
+  const base = computeCassationGeneralKas({ appellate_ruling_date_kas: '2025-07-18' });
+  assert.equal(base.raw_deadline, '2026-01-18'); // воскресенье
+  assert.equal(base.deadline, '2026-01-19'); // перенос на понедельник
+  const term = computeCassationGeneralKas({
+    appellate_ruling_date_kas: '2025-07-18',
+    appellate_ruling_final_form_date_kas: '2025-07-23',
+  });
+  // 18.01.2026 + 5 дней = 23.01.2026 (пятница). От перенесённого 19.01.2026 вышло бы
+  // 24.01.2026 -> 26.01.2026, то есть на три дня позже верного.
+  assert.equal(term.pre_exclusion_deadline, '2026-01-19');
+  assert.equal(term.raw_deadline, '2026-01-23');
+  assert.equal(term.deadline, '2026-01-23');
+  assert.equal(term.shifted, false);
+});
+
+test('cassation_general_kas: без исключаемых дней результат тот же, что без полей периодов', () => {
+  const base = computeCassationGeneralKas({ appellate_ruling_date_kas: '2025-03-11' });
+  const sameDay = computeCassationGeneralKas({
+    appellate_ruling_date_kas: '2025-03-11',
+    appellate_ruling_final_form_date_kas: '2025-03-11',
+  });
+  const emptyList = computeCassationGeneralKas({
+    appellate_ruling_date_kas: '2025-03-11',
+    cassation_consideration_periods_kas: [],
+  });
+  const zeroPeriod = computeCassationGeneralKas({
+    appellate_ruling_date_kas: '2025-03-11',
+    cassation_consideration_periods_kas: [{ start: '2025-05-20', end: '2025-05-20' }],
+  });
+  for (const term of [sameDay, emptyList, zeroPeriod]) {
+    assert.deepEqual(term, base);
+  }
+  assert.equal(base.excluded_days, undefined);
+  assert.equal(base.excluded_periods, undefined);
+});
+
+test('cassation_general_kas: период рассмотрения может начаться в последний день срока', () => {
+  const term = computeCassationGeneralKas({
+    appellate_ruling_date_kas: '2025-03-11',
+    cassation_consideration_periods_kas: [{ start: '2025-09-11', end: '2025-09-20' }],
+  });
+  // Последний день срока — 11.09.2025; 11.09.2025 + 9 дней = 20.09.2025 (суббота),
+  // перенос на понедельник 22.09.2025.
+  assert.equal(term.raw_deadline, '2025-09-20');
+  assert.equal(term.deadline, '2025-09-22');
+  assert.equal(term.shifted, true);
+  assert.equal(term.excluded_days, 9);
+});
+
+test('cassation_general_kas: период рассмотрения не может начаться после последнего дня срока', () => {
+  assert.throws(
+    () =>
+      computeCassationGeneralKas({
+        appellate_ruling_date_kas: '2025-03-11',
+        cassation_consideration_periods_kas: [{ start: '2025-09-12', end: '2025-09-20' }],
+      }),
+    /начинается после окончания шестимесячного срока \(2025-09-11\)/,
+  );
+});
+
+test('cassation_general_kas: продление предыдущим периодом сдвигает допустимое начало следующего', () => {
+  const term = computeCassationGeneralKas({
+    appellate_ruling_date_kas: '2025-03-11',
+    appellate_ruling_final_form_date_kas: '2025-03-18',
+    cassation_consideration_periods_kas: [{ start: '2025-09-15', end: '2025-09-25' }],
+  });
+  // После 7 дней составления последний день срока — 18.09.2025, поэтому период с
+  // 15.09.2025 (позже исходных 11.09.2025) допустим. 7 + 10 = 17 дней;
+  // 11.09.2025 + 17 = 28.09.2025 — воскресенье, перенос на 29.09.2025.
+  assert.equal(term.raw_deadline, '2025-09-28');
+  assert.equal(term.deadline, '2025-09-29');
+  assert.equal(term.shifted, true);
+  assert.equal(term.excluded_days, 17);
+});
+
+test('cassation_general_kas: периоды встык (end одного = start другого) допустимы', () => {
+  const term = computeCassationGeneralKas({
+    appellate_ruling_date_kas: '2025-03-11',
+    cassation_consideration_periods_kas: [
+      { start: '2025-04-01', end: '2025-05-06' },
+      { start: '2025-05-06', end: '2025-06-03' },
+    ],
+  });
+  // 35 + 28 = 63 дня; 11.09.2025 + 63 = 13.11.2025 (четверг, рабочий день).
+  assert.equal(term.excluded_days, 63);
+  assert.equal(term.raw_deadline, '2025-11-13');
+  assert.equal(term.deadline, '2025-11-13');
+  assert.equal(term.shifted, false);
+});
+
+test('cassation_general_kas: пересекающиеся периоды — ошибка', () => {
+  assert.throws(
+    () =>
+      computeCassationGeneralKas({
+        appellate_ruling_date_kas: '2025-03-11',
+        cassation_consideration_periods_kas: [
+          { start: '2025-04-01', end: '2025-05-06' },
+          { start: '2025-05-01', end: '2025-06-01' },
+        ],
+      }),
+    /пересекаются/,
+  );
+});
+
+test('cassation_general_kas: составление определения отложено ровно на десять дней — допустимо', () => {
+  const term = computeCassationGeneralKas({
+    appellate_ruling_date_kas: '2025-03-11',
+    appellate_ruling_final_form_date_kas: '2025-03-21',
+  });
+  // 11.09.2025 + 10 дней = 21.09.2025 (воскресенье), перенос на 22.09.2025.
+  assert.equal(term.excluded_days, 10);
+  assert.equal(term.raw_deadline, '2025-09-21');
+  assert.equal(term.deadline, '2025-09-22');
+  assert.equal(term.shifted, true);
+});
+
+test('cassation_general_kas: составление определения отложено больше чем на десять дней — ошибка', () => {
+  assert.throws(
+    () =>
+      computeCassationGeneralKas({
+        appellate_ruling_date_kas: '2025-03-11',
+        appellate_ruling_final_form_date_kas: '2025-03-22',
+      }),
+    /не более чем на десять дней.*не позже 2025-03-21/,
+  );
+});
+
+test('cassation_general_kas: дата составления определения раньше даты принятия или некорректна — ошибка', () => {
+  assert.throws(
+    () =>
+      computeCassationGeneralKas({
+        appellate_ruling_date_kas: '2025-03-11',
+        appellate_ruling_final_form_date_kas: '2025-03-10',
+      }),
+    /раньше даты его принятия/,
+  );
+  assert.throws(
+    () =>
+      computeCassationGeneralKas({
+        appellate_ruling_date_kas: '2025-03-11',
+        appellate_ruling_final_form_date_kas: 'не дата',
+      }),
+    /Некорректная дата составления мотивированного апелляционного определения/,
+  );
+});
+
+test('cassation_general_kas: неполный или перевёрнутый период рассмотрения — ошибка', () => {
+  const inputs = (period) => ({
+    appellate_ruling_date_kas: '2025-03-11',
+    cassation_consideration_periods_kas: [period],
+  });
+  assert.throws(
+    () => computeCassationGeneralKas(inputs({ start: '2025-05-20' })),
+    /не указана дата изготовления определения в полном объёме/,
+  );
+  assert.throws(
+    () => computeCassationGeneralKas(inputs({ end: '2025-07-02' })),
+    /не указана дата поступления жалобы, представления в суд/,
+  );
+  assert.throws(
+    () => computeCassationGeneralKas(inputs({ start: '2025-05-10', end: '2025-05-01' })),
+    /раньше даты поступления жалобы, представления/,
+  );
+});
+
+test('cassation_general_kas: период рассмотрения раньше принятия апелляционного определения — ошибка', () => {
+  assert.throws(
+    () =>
+      computeCassationGeneralKas({
+        appellate_ruling_date_kas: '2025-03-11',
+        cassation_consideration_periods_kas: [{ start: '2025-03-01', end: '2025-03-20' }],
+      }),
+    /начинается раньше даты принятия апелляционного определения 2025-03-11/,
+  );
+});
+
+test('cassation_general_kas: cassation_consideration_periods_kas не массив — ошибка', () => {
+  assert.throws(
+    () =>
+      computeCassationGeneralKas({
+        appellate_ruling_date_kas: '2025-03-11',
+        cassation_consideration_periods_kas: { start: '2025-05-20', end: '2025-07-02' },
+      }),
+    /должен быть массивом периодов/,
+  );
+});
