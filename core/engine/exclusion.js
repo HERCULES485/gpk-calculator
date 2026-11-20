@@ -136,21 +136,41 @@ export function totalExcludedDays(eventLists) {
  * гл. 10 АПК; статья не описывает явно взаимодействие механики перерыва и
  * механики исключения периода, когда обе применимы к одному сроку.
  *
+ * От какой даты отодвигается дедлайн, выбирает предметный модуль через
+ * config.extendFromRaw. По умолчанию (флаг не задан) — от result.deadline, то
+ * есть от последнего дня срока УЖЕ с учётом переноса на рабочий день: так
+ * исторически работает АПК, и это поведение не меняется. При
+ * extendFromRaw === true — от result.raw_deadline, то есть от последнего дня
+ * срока ДО переноса: если срок продлевается исключаемым периодом, он ещё не
+ * истёк в день, на который его последний день был бы перенесён, а перенос на
+ * рабочий день применяется один раз — к итоговому последнему дню. Без флага
+ * дедлайн срока, чей последний день пришёлся на нерабочий день, получается
+ * позже на разницу между raw_deadline и deadline.
+ *
  * Исключённых дней нет — результат не трогается и новых полей в нём не
  * появляется (как у перерыва, где полей нет при отсутствии событий).
  *
  * @param {object|null} result — результат computeSimpleTerm/computeInterruptibleTerm.
  * @param {Array<Array<object>>} eventLists
- * @param {{norm:string, logic:string}} config — норма и логика, которыми
- *   помечается результат; предметный модуль решает, что туда положить
- *   (в частности, какие части статьи реально сработали).
+ * @param {{norm:string, logic:string, extendFromRaw?:boolean}} config — норма и
+ *   логика, которыми помечается результат; предметный модуль решает, что туда
+ *   положить (в частности, какие части статьи реально сработали);
+ *   extendFromRaw — от какой даты отодвигать дедлайн (см. выше).
  * @returns {object|null}
+ * @throws {Error} при extendFromRaw === true, если в result нет raw_deadline.
  */
 export function withExclusions(result, eventLists, config) {
   if (result == null) return result;
   const days = totalExcludedDays(eventLists);
   if (days === 0) return result;
-  const raw = toISODate(addDays(result.deadline, days));
+  let base = result.deadline;
+  if (config.extendFromRaw === true) {
+    if (result.raw_deadline == null) {
+      throw new Error('extendFromRaw требует raw_deadline в результате срока');
+    }
+    base = result.raw_deadline;
+  }
+  const raw = toISODate(addDays(base, days));
   const deadline = shiftIfNonWorking(raw);
   return {
     ...result,
