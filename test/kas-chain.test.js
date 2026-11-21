@@ -39,6 +39,10 @@ import {
   OBJECTION_COURT_ORDER_KAS,
   computeCassationCourtOrderKas,
   CASSATION_COURT_ORDER_KAS,
+  computeSimplifiedDecisionCancellationKas,
+  SIMPLIFIED_DECISION_CANCELLATION_KAS,
+  computeSupervisionChairmanKas,
+  SUPERVISION_CHAIRMAN_KAS,
 } from '../kas/chain.js';
 
 test('appeal_general_kas считается от decision_final_form_date_kas (обычная дата, без переноса)', () => {
@@ -1666,4 +1670,167 @@ test('cassation_court_order_kas: норма и объём задачи КАС-15
   assert.equal(CASSATION_COURT_ORDER_KAS.weekend_shift, true);
   assert.equal(CASSATION_COURT_ORDER_KAS.restoration_norm, undefined);
   assert.equal(CASSATION_COURT_ORDER_KAS.ics, undefined);
+});
+
+// --- Задача КАС-16: ст. 294.1 — заявление лица, не привлечённого к участию в деле, об отмене
+// решения, принятого в порядке упрощённого (письменного) производства (два месяца после принятия
+// решения) ---------------------------------------------------------------------------------------
+
+test('simplified_decision_cancellation_kas считается от simplified_decision_date_kas (обычная дата, без переноса)', () => {
+  const term = computeSimplifiedDecisionCancellationKas({ simplified_decision_date_kas: '2025-03-14' });
+  assert.equal(term.anchor, '2025-03-14');
+  assert.equal(term.raw_deadline, '2025-05-14');
+  assert.equal(term.deadline, '2025-05-14'); // 14.05.2025 — среда, рабочий день
+  assert.equal(term.shifted, false);
+});
+
+test('simplified_decision_cancellation_kas: последний день — воскресенье в майских нерабочих днях, перенос на понедельник', () => {
+  const term = computeSimplifiedDecisionCancellationKas({ simplified_decision_date_kas: '2025-03-11' });
+  // 11.03.2025 + 2 месяца = 11.05.2025 (воскресенье); 08–11.05.2025 нерабочие -> перенос на
+  // 12.05.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-05-11');
+  assert.equal(term.deadline, '2025-05-12');
+  assert.equal(term.shifted, true);
+});
+
+test('simplified_decision_cancellation_kas: нет соответствующего числа, последний день месяца — рабочий, без переноса', () => {
+  const term = computeSimplifiedDecisionCancellationKas({ simplified_decision_date_kas: '2024-12-31' });
+  // 31.12.2024 + 2 месяца: в феврале 2025 года нет 31-го числа, срок истекает 28.02.2025
+  // (пятница, рабочий день), переноса нет.
+  assert.equal(term.raw_deadline, '2025-02-28');
+  assert.equal(term.deadline, '2025-02-28');
+  assert.equal(term.shifted, false);
+});
+
+test('simplified_decision_cancellation_kas: нет соответствующего числа, последний день месяца — суббота, перенос на понедельник', () => {
+  const term = computeSimplifiedDecisionCancellationKas({ simplified_decision_date_kas: '2025-12-31' });
+  // 31.12.2025 + 2 месяца: в феврале 2026 года нет 31-го числа, срок истекает 28.02.2026
+  // (суббота); 01.03 — воскресенье -> перенос на 02.03.2026 (понедельник).
+  assert.equal(term.raw_deadline, '2026-02-28');
+  assert.equal(term.deadline, '2026-03-02');
+  assert.equal(term.shifted, true);
+});
+
+test('simplified_decision_cancellation_kas: последний день — праздник 12 июня, перенос на понедельник', () => {
+  const term = computeSimplifiedDecisionCancellationKas({ simplified_decision_date_kas: '2025-04-12' });
+  // 12.04.2025 + 2 месяца = 12.06.2025 (четверг, День России — нерабочий); 13.06.2025 —
+  // перенесённый выходной, 14–15.06 — суббота и воскресенье -> перенос на 16.06.2025 (понедельник).
+  assert.equal(term.raw_deadline, '2025-06-12');
+  assert.equal(term.deadline, '2025-06-16');
+  assert.equal(term.shifted, true);
+});
+
+test('simplified_decision_cancellation_kas: последний день — 1 января, перенос через новогодние каникулы', () => {
+  const term = computeSimplifiedDecisionCancellationKas({ simplified_decision_date_kas: '2025-11-01' });
+  // 01.11.2025 + 2 месяца = 01.01.2026; 01–11.01.2026 нерабочие -> перенос на 12.01.2026
+  // (понедельник).
+  assert.equal(term.raw_deadline, '2026-01-01');
+  assert.equal(term.deadline, '2026-01-12');
+  assert.equal(term.shifted, true);
+});
+
+test('simplified_decision_cancellation_kas: без simplified_decision_date_kas — ошибка; поле другого узла не подходит', () => {
+  assert.throws(() => computeSimplifiedDecisionCancellationKas({}), /simplified_decision_date_kas/);
+  assert.throws(
+    () =>
+      computeSimplifiedDecisionCancellationKas({
+        simplified_decision_copy_receipt_date_kas: '2025-03-14',
+      }),
+    /simplified_decision_date_kas/,
+  );
+});
+
+test('simplified_decision_cancellation_kas: норма и объём задачи КАС-16 — два месяца, weekend_shift, без restoration_norm и ics', () => {
+  const term = computeSimplifiedDecisionCancellationKas({ simplified_decision_date_kas: '2025-03-14' });
+  assert.equal(term.id, 'simplified_decision_cancellation_kas');
+  assert.deepEqual(term.duration, { value: 2, unit: 'month' });
+  assert.equal(term.norm.primary, 'ст. 294.1 КАС РФ');
+  assert.deepEqual(term.norm.calculation, ['ч. 3 ст. 92', 'ч. 1, 2 ст. 93 КАС РФ']);
+  assert.equal(
+    term.norm.clarification,
+    'п. 4 ч. 1 ст. 310 КАС РФ; п. 9 Постановления Пленума ВС РФ от 17.12.2020 № 42',
+  );
+  assert.equal(SIMPLIFIED_DECISION_CANCELLATION_KAS.weekend_shift, true);
+  assert.equal(SIMPLIFIED_DECISION_CANCELLATION_KAS.restoration_norm, undefined);
+  assert.equal(SIMPLIFIED_DECISION_CANCELLATION_KAS.ics, undefined);
+});
+
+// --- Задача КАС-16: ч. 2 ст. 339.1 — жалоба, представление прокурора для пересмотра в порядке
+// надзора по представлению Председателя Верховного Суда РФ (шесть месяцев со дня вступления
+// обжалуемых судебных актов в законную силу) --------------------------------------------------------
+
+test('supervision_chairman_kas считается от chairman_review_act_entry_into_force_date_kas (обычная дата, без переноса)', () => {
+  const term = computeSupervisionChairmanKas({
+    chairman_review_act_entry_into_force_date_kas: '2025-03-11',
+  });
+  assert.equal(term.anchor, '2025-03-11');
+  assert.equal(term.raw_deadline, '2025-09-11');
+  assert.equal(term.deadline, '2025-09-11'); // 11.09.2025 — четверг, рабочий день
+  assert.equal(term.shifted, false);
+});
+
+test('supervision_chairman_kas: нет соответствующего числа, последний день — суббота, перенос на понедельник', () => {
+  const term = computeSupervisionChairmanKas({
+    chairman_review_act_entry_into_force_date_kas: '2025-08-29',
+  });
+  // 29.08.2025 + 6 месяцев: в феврале 2026 года нет 29-го числа, срок истекает 28.02.2026
+  // (суббота); 01.03 — воскресенье -> перенос на 02.03.2026 (понедельник).
+  assert.equal(term.raw_deadline, '2026-02-28');
+  assert.equal(term.deadline, '2026-03-02');
+  assert.equal(term.shifted, true);
+});
+
+test('supervision_chairman_kas: в июне нет 31-го числа — 30 июня, рабочий день, без переноса', () => {
+  const term = computeSupervisionChairmanKas({
+    chairman_review_act_entry_into_force_date_kas: '2025-12-31',
+  });
+  // 31.12.2025 + 6 месяцев: в июне 2026 года нет 31-го числа, срок истекает 30.06.2026
+  // (вторник, рабочий день), переноса нет.
+  assert.equal(term.raw_deadline, '2026-06-30');
+  assert.equal(term.deadline, '2026-06-30');
+  assert.equal(term.shifted, false);
+});
+
+test('supervision_chairman_kas: последний день — 1 мая, перенос через майские нерабочие дни', () => {
+  const term = computeSupervisionChairmanKas({
+    chairman_review_act_entry_into_force_date_kas: '2025-11-01',
+  });
+  // 01.11.2025 + 6 месяцев = 01.05.2026 (пятница, Праздник Весны и Труда — нерабочий);
+  // 02–03.05 — суббота и воскресенье -> перенос на 04.05.2026 (понедельник, рабочий день).
+  assert.equal(term.raw_deadline, '2026-05-01');
+  assert.equal(term.deadline, '2026-05-04');
+  assert.equal(term.shifted, true);
+});
+
+test('supervision_chairman_kas: последний день — воскресенье, перенос на понедельник', () => {
+  const term = computeSupervisionChairmanKas({
+    chairman_review_act_entry_into_force_date_kas: '2025-10-05',
+  });
+  // 05.10.2025 + 6 месяцев = 05.04.2026 — воскресенье -> перенос на 06.04.2026
+  // (понедельник, рабочий день).
+  assert.equal(term.raw_deadline, '2026-04-05');
+  assert.equal(term.deadline, '2026-04-06');
+  assert.equal(term.shifted, true);
+});
+
+test('supervision_chairman_kas: без chairman_review_act_entry_into_force_date_kas — ошибка; поле другого узла не подходит', () => {
+  assert.throws(() => computeSupervisionChairmanKas({}), /chairman_review_act_entry_into_force_date_kas/);
+  assert.throws(
+    () => computeSupervisionChairmanKas({ supervised_ruling_date_kas: '2025-03-11' }),
+    /chairman_review_act_entry_into_force_date_kas/,
+  );
+});
+
+test('supervision_chairman_kas: норма и объём задачи КАС-16 — шесть месяцев, weekend_shift, без restoration_norm и ics', () => {
+  const term = computeSupervisionChairmanKas({
+    chairman_review_act_entry_into_force_date_kas: '2025-03-11',
+  });
+  assert.equal(term.id, 'supervision_chairman_kas');
+  assert.deepEqual(term.duration, { value: 6, unit: 'month' });
+  assert.equal(term.norm.primary, 'ч. 2 ст. 339.1 КАС РФ');
+  assert.deepEqual(term.norm.calculation, ['ч. 3 ст. 92', 'ч. 1, 2 ст. 93 КАС РФ']);
+  assert.equal(term.norm.clarification, 'ч. 1, 3 ст. 339.1 КАС РФ');
+  assert.equal(SUPERVISION_CHAIRMAN_KAS.weekend_shift, true);
+  assert.equal(SUPERVISION_CHAIRMAN_KAS.restoration_norm, undefined);
+  assert.equal(SUPERVISION_CHAIRMAN_KAS.ics, undefined);
 });
